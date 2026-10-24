@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+android/
+ios/
+.husky/_/
+package-lock.json
+next-env.d.ts
+*.tsbuildinfo
