@@ -17,6 +17,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run lint && npm run typecheck && npm run format:check",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
+    "rag:dev": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/dev/dev-server.ts",
     "prepare": "husky",
     "cap:add:android": "npm run build && cap add android",
     "cap:add:ios": "npm run build && cap add ios",

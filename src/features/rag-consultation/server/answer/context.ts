@@ -1,0 +1,157 @@
+import type { RagAnswerStatus, RagPublicReasonCode } from '../../contract.ts';
+import type { RagConfig } from '../config.ts';
+import type {
+  ApprovedFactsPort,
+  Clock,
+  GenerationPort,
+  RagDocumentsPort,
+} from '../ports.ts';
+import type { QueryFrame } from '../query/parse-query.ts';
+import { isSameKstDay, kstStartOfDay, toKstDate } from '../text/time.ts';
+import type {
+  AcademyCatalog,
+  ApprovedFact,
+  ConversationState,
+  RagAccessScope,
+  RagChunk,
+  RagInternalErrorType,
+  RagTrace,
+} from '../types.ts';
+
+export interface AnswerContext {
+  access: RagAccessScope;
+  catalog: AcademyCatalog;
+  frame: QueryFrame;
+  question: string;
+  asOf: number;
+  state: ConversationState | null;
+  config: RagConfig;
+  facts: ApprovedFactsPort;
+  documents: RagDocumentsPort;
+  generation: GenerationPort;
+  clock: Clock;
+  trace: RagTrace;
+}
+
+export type CitationRequest =
+  | {
+      kind: 'fact';
+      fact: ApprovedFact;
+      effectiveAt?: number;
+      includeHistory?: boolean;
+    }
+  | { kind: 'chunk'; chunk: RagChunk };
+
+export interface AnswerDraft {
+  status: RagAnswerStatus;
+  text: string;
+  citations: CitationRequest[];
+  usedFacts: ApprovedFact[];
+  missingFields?: string[];
+  reasonCode?: RagPublicReasonCode;
+  clarifyOptionStudentIds?: string[];
+  /** 코드에서 계산한 파생 수치(차이 등) — 사후 숫자 검사 허용 목록 */
+  derivedNumbers?: number[];
+  /** 답변이 언급하는 기준 시각들(사후 숫자 검사 허용 목록) */
+  instants?: number[];
+  /** 생성 모델 출력이 포함되었는지(질문 숫자 재인용 허용 여부 판단) */
+  generated?: boolean;
+  internalErrors?: RagInternalErrorType[];
+  conversationUpdate?: Partial<ConversationState>;
+}
+
+export function abstain(
+  text: string,
+  reasonCode: RagPublicReasonCode,
+  missingFields?: string[],
+  internalErrors?: RagInternalErrorType[],
+): AnswerDraft {
+  return {
+    status: 'abstained',
+    text,
+    citations: [],
+    usedFacts: [],
+    reasonCode,
+    missingFields,
+    internalErrors,
+  };
+}
+
+export function deny(internalError: RagInternalErrorType): AnswerDraft {
+  return {
+    status: 'denied',
+    text: '요청하신 정보는 현재 계정으로 조회할 수 있는 범위가 아니어서 안내해 드릴 수 없습니다. 필요하시면 학원 담당자에게 문의해 주세요.',
+    citations: [],
+    usedFacts: [],
+    reasonCode: 'OUT_OF_SCOPE',
+    internalErrors: [internalError],
+  };
+}
+
+export function handoff(
+  text: string,
+  reasonCode: RagPublicReasonCode,
+  internalErrors?: RagInternalErrorType[],
+): AnswerDraft {
+  return {
+    status: 'handoff',
+    text,
+    citations: [],
+    usedFacts: [],
+    reasonCode,
+    internalErrors,
+  };
+}
+
+export interface EffectiveTime {
+  /** 정형 정보를 조회할 시점 */
+  at: number;
+  /** 질문에 명시된 날짜가 있으면 그 날짜의 KST 0시 */
+  explicitDay: number | null;
+}
+
+/** 질문의 "11월 4일 기준/이후" 를 조회 시점으로 바꾼다(연도 미기재 시 기준 시각의 연도). */
+export function resolveEffectiveTime(
+  frame: QueryFrame,
+  asOf: number,
+): EffectiveTime {
+  const date = frame.explicitDates[0];
+  if (!date) return { at: asOf, explicitDay: null };
+  const year = Number.isNaN(date.year) ? toKstDate(asOf).year : date.year;
+  const start = kstStartOfDay({ year, month: date.month, day: date.day });
+  if (date.operator === 'before') return { at: start - 1, explicitDay: start };
+  if (date.operator === 'at' && isSameKstDay(start, asOf))
+    return { at: asOf, explicitDay: start };
+  return { at: start, explicitDay: start };
+}
+
+export function studentLabel(
+  access: RagAccessScope,
+  studentId: string,
+): string {
+  return (
+    access.studentRefs.find((ref) => ref.studentId === studentId)
+      ?.displayLabel ?? '대상'
+  );
+}
+
+export function className(catalog: AcademyCatalog, classId: string): string {
+  return (
+    catalog.classes.find((klass) => klass.classId === classId)?.name ??
+    '해당 반'
+  );
+}
+
+export function recordFacts(trace: RagTrace, facts: readonly ApprovedFact[]) {
+  for (const fact of facts) {
+    if (!trace.retrievedFactIds.includes(fact.factId))
+      trace.retrievedFactIds.push(fact.factId);
+  }
+}
+
+export function recordChunks(trace: RagTrace, chunks: readonly RagChunk[]) {
+  for (const chunk of chunks) {
+    if (!trace.retrievedChunkIds.includes(chunk.chunkId))
+      trace.retrievedChunkIds.push(chunk.chunkId);
+  }
+}
