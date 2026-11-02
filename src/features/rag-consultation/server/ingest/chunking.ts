@@ -8,6 +8,7 @@ import { tokenize } from '../text/normalize.ts';
 import { formatValidity } from '../text/time.ts';
 import type {
   ChunkLocation,
+  DocumentExtraction,
   RagChunk,
   StoredDocumentRevision,
 } from '../types.ts';
@@ -30,6 +31,8 @@ function splitCells(line: string): string[] {
 }
 
 const HEADING = /^\s*(#{1,6})\s+(.+?)\s*#*\s*$/;
+/** 정규화 Markdown 의 쪽 표시(ingest/parsers) */
+const PAGE_MARK = /^\s*<!--\s*page\s+(\d+)\s*-->\s*$/;
 const LIST_ITEM = /^\s*([-*•]|\d+[.)])\s+/;
 const RULE = /^\s*([-*_]\s*){3,}$/;
 
@@ -44,7 +47,9 @@ export function splitIntoBlocks(text: string): RawBlock[] {
   let paragraphIndex = 0;
   let tableIndex = 0;
   let section: string | undefined;
-  const label = (base: string) => (section ? `${section} · ${base}` : base);
+  let page: number | undefined;
+  const label = (base: string) =>
+    [page ? `${page}쪽` : null, section, base].filter(Boolean).join(' · ');
 
   const flushParagraph = () => {
     const joined = paragraph
@@ -61,6 +66,7 @@ export function splitIntoBlocks(text: string): RawBlock[] {
           label: label(`문단 ${paragraphIndex}`),
           paragraphIndex,
           section,
+          ...(page ? { page } : {}),
         },
         text: joined,
       });
@@ -71,6 +77,13 @@ export function splitIntoBlocks(text: string): RawBlock[] {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
+    const pageMark = line.match(PAGE_MARK);
+    if (pageMark) {
+      flushParagraph();
+      page = Number(pageMark[1]);
+      i += 1;
+      continue;
+    }
     const heading = line.match(HEADING);
     if (heading) {
       flushParagraph();
@@ -80,30 +93,44 @@ export function splitIntoBlocks(text: string): RawBlock[] {
     }
     if (TABLE_LINE.test(line)) {
       flushParagraph();
-      const tableLines: string[] = [];
-      while (i < lines.length && TABLE_LINE.test(lines[i])) {
-        if (!TABLE_SEPARATOR.test(lines[i])) {
-          tableLines.push(lines[i]);
+      // 여러 페이지에 걸친 표: 표 줄 사이의 쪽 표시는 행마다 쪽 번호로 남긴다.
+      const tableLines: Array<{ line: string; page: number | undefined }> = [];
+      while (
+        i < lines.length &&
+        (TABLE_LINE.test(lines[i]) || PAGE_MARK.test(lines[i]))
+      ) {
+        const mark = lines[i].match(PAGE_MARK);
+        if (mark) page = Number(mark[1]);
+        else if (!TABLE_SEPARATOR.test(lines[i])) {
+          tableLines.push({ line: lines[i], page });
         }
         i += 1;
       }
       tableIndex += 1;
       const [headerLine, ...rows] = tableLines;
-      const header = headerLine ? splitCells(headerLine) : [];
-      rows.forEach((row, rowOffset) => {
+      const header = headerLine ? splitCells(headerLine.line) : [];
+      rows.forEach(({ line: row, page: rowPage }, rowOffset) => {
         const cells = splitCells(row);
+        const rowLabel = [
+          rowPage ? `${rowPage}쪽` : null,
+          section,
+          `표 ${tableIndex} · ${rowOffset + 1}행`,
+        ]
+          .filter(Boolean)
+          .join(' · ');
         const pairs = header.map(
           (name, column) => `${name}: ${cells[column] ?? ''}`,
         );
         blocks.push({
           location: {
             kind: 'table_row',
-            label: label(`표 ${tableIndex} · ${rowOffset + 1}행`),
+            label: rowLabel,
             tableIndex,
             rowIndex: rowOffset + 1,
             header,
             cells,
             section,
+            ...(rowPage ? { page: rowPage } : {}),
           },
           text: pairs.join(' / '),
         });
@@ -121,12 +148,35 @@ export function splitIntoBlocks(text: string): RawBlock[] {
   return blocks;
 }
 
+/** 청크가 속한 쪽의 OCR 품질 → 청크 판독 정보(청크 본문에 실제로 든 불확실 토큰만). */
+function chunkExtraction(
+  extraction: DocumentExtraction | undefined,
+  page: number | undefined,
+  text: string,
+): RagChunk['extraction'] {
+  const info = extraction?.pages.find((p) => p.page === (page ?? 1));
+  if (!info || info.method === 'text') return undefined;
+  return {
+    method: info.method,
+    confidence: info.confidence,
+    uncertainTokens: (info.uncertainTokens ?? []).filter((token) =>
+      text.includes(token),
+    ),
+    needsReview: Boolean(info.needsReview),
+  };
+}
+
 export function buildChunks(
   revision: StoredDocumentRevision,
   text: string,
   isSuspicious: (text: string) => boolean,
 ): RagChunk[] {
   return splitIntoBlocks(text).map((block, index) => {
+    const extraction = chunkExtraction(
+      revision.extraction,
+      block.location.page,
+      block.text,
+    );
     const context = [
       `문서: ${revision.title}`,
       block.location.section ? `절: ${block.location.section}` : null,
@@ -154,6 +204,7 @@ export function buildChunks(
       contextualText,
       tokens: tokenize(contextualText),
       suspicious: isSuspicious(block.text),
+      ...(extraction ? { extraction } : {}),
     };
   });
 }

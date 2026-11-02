@@ -75,11 +75,37 @@ export interface SourceDocumentInput {
   approvedAt?: string | null;
   sourceUpdatedAt?: string | null;
   aclPolicyId?: string | null;
+  /** 원본 파일 파싱 결과(PDF·스캔·DOCX·HWPX 등). Markdown 원문을 직접 넣을 때는 생략 */
+  extraction?: DocumentExtraction;
   /** 지정하지 않으면 `${documentId}:r${revision}:body` */
   sourceId?: string;
 }
 
-export type DocumentFlag = 'prompt_injection_suspected' | 'empty_text';
+export type DocumentFlag =
+  | 'prompt_injection_suspected'
+  | 'empty_text'
+  /** 스캔(OCR) 페이지의 판독 신뢰도가 낮아 사람이 검수해야 함 */
+  | 'ocr_needs_review'
+  /** 색인 전 개인정보(주민번호·개인 휴대폰)를 가림 */
+  | 'pii_masked'
+  /** 같은 학원의 다른 활성 문서와 본문이 같음(중복 업로드) — 검색에서 제외 */
+  | 'duplicate_content';
+
+/** 원본 파일 파싱 결과 요약(ingest/parsers 가 만든다). 페이지 품질은 청크의 판독 신뢰도 판단에 쓴다. */
+export interface DocumentExtraction {
+  fileName?: string;
+  format: string;
+  status: 'ok' | 'needs_review' | 'partial';
+  pages: Array<{
+    page: number;
+    method: 'text' | 'ocr' | 'empty';
+    confidence?: number;
+    rotation?: number;
+    uncertainTokens?: string[];
+    needsReview?: boolean;
+  }>;
+  warnings?: string[];
+}
 
 export interface StoredDocumentRevision {
   academyId: string;
@@ -101,6 +127,9 @@ export interface StoredDocumentRevision {
   flags: DocumentFlag[];
   chunkIds: string[];
   indexGeneration: number;
+  extraction?: DocumentExtraction;
+  /** duplicate_content 인 경우 같은 본문을 가진 원본 문서 ID */
+  duplicateOf?: string;
 }
 
 export interface ChunkLocation {
@@ -115,6 +144,8 @@ export interface ChunkLocation {
   section?: string;
   /** 표 행의 셀 값(헤더와 같은 순서) — 질문한 칸만 골라 인용할 때 사용 */
   cells?: string[];
+  /** 원본 파일의 쪽 번호(PDF 등). 정규화 Markdown 의 `<!-- page N -->` 에서 온다 */
+  page?: number;
 }
 
 export interface RagChunk {
@@ -137,6 +168,13 @@ export interface RagChunk {
   contextualText: string;
   tokens: string[];
   suspicious: boolean;
+  /** 원본이 OCR 인 청크의 판독 품질. uncertainTokens 에 든 값(금액·날짜 등)은 답변 근거로 쓰지 않는다 */
+  extraction?: {
+    method: 'text' | 'ocr' | 'empty';
+    confidence?: number;
+    uncertainTokens: string[];
+    needsReview: boolean;
+  };
 }
 
 export type FactType =
@@ -301,6 +339,8 @@ export type RagInternalErrorType =
   | 'SHARE_OR_PERMISSION_CHANGE'
   | 'CITATION_FORGERY'
   | 'PROMPT_INJECTION_DIRECTIVE'
+  /** 스캔(OCR) 문서의 판독이 불확실한 수치를 답에 쓰려 함 → 검수 필요 */
+  | 'OCR_UNCERTAIN'
   | 'UNEXPECTED_ERROR'
   | 'HANDOFF_DRAFT_FAILED';
 

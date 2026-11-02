@@ -12,10 +12,11 @@
 import { z } from 'zod';
 
 import { ragQueryRequestSchema, type RagErrorBody } from '../../contract.ts';
+import { prepareFileDocument } from '../ingest/ingest-file.ts';
 import type { AccessScopePort, Clock, RagLogger } from '../ports.ts';
 import type { RagConsultationService } from '../service.ts';
 import type { IndexJobQueue } from '../store/index-jobs.ts';
-import type { RagAccessScope } from '../types.ts';
+import type { RagAccessScope, SourceDocumentInput } from '../types.ts';
 import type { RateLimiter } from './rate-limit.ts';
 
 export interface RagHttpOptions<TSession> {
@@ -98,8 +99,17 @@ const factValueSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+const MAX_UPLOAD_BASE64 = 28_000_000; // 원본 20MB 의 base64
+
 const indexRequestSchema = z.object({
   approve: z.boolean(),
+  /** 원본 파일(PDF·DOCX·HWPX·TXT·MD). 있으면 서버가 파싱해 text 를 만든다. */
+  file: z
+    .object({
+      fileName: z.string().min(1).max(255),
+      contentBase64: z.string().min(1).max(MAX_UPLOAD_BASE64),
+    })
+    .optional(),
   document: z.object({
     academyId: idString,
     documentId: idString,
@@ -116,7 +126,7 @@ const indexRequestSchema = z.object({
       'guidance',
     ]),
     title: z.string().min(1).max(300),
-    text: z.string().min(1).max(200_000),
+    text: z.string().min(1).max(200_000).optional(),
     visibility: z.enum([
       'academy_public',
       'class_members',
@@ -302,7 +312,7 @@ export function createRagHttpHandler<TSession>(
     if (access.role !== 'admin' || !options.indexQueue) {
       return error(403, 'FORBIDDEN', '권한이 없습니다.', requestId);
     }
-    const body = await readJsonBody(request, 512_000);
+    const body = await readJsonBody(request, MAX_UPLOAD_BASE64 + 600_000);
     if (!body.ok)
       return error(
         body.status === 413 ? 413 : 400,
@@ -318,12 +328,40 @@ export function createRagHttpHandler<TSession>(
         '요청 형식이 올바르지 않습니다.',
         requestId,
       );
-    const { document, facts, approve } = parsed.data;
+    const { document: meta, facts, approve, file } = parsed.data;
     if (
-      document.academyId !== access.academyId ||
+      meta.academyId !== access.academyId ||
       (facts ?? []).some((fact) => fact.academyId !== access.academyId)
     ) {
       return error(403, 'FORBIDDEN', '권한이 없습니다.', requestId);
+    }
+    let document: SourceDocumentInput;
+    let parse: Record<string, unknown> | undefined;
+    if (file) {
+      const prepared = await prepareFileDocument(meta, {
+        bytes: new Uint8Array(Buffer.from(file.contentBase64, 'base64')),
+        fileName: file.fileName,
+      });
+      parse = {
+        format: prepared.parsed.format,
+        status: prepared.parsed.status,
+        error: prepared.parsed.error,
+        pages: prepared.parsed.pages,
+        warnings: prepared.parsed.warnings.map((w) => w.code),
+      };
+      if (!prepared.document) {
+        return json(422, { error: 'PARSE_FAILED', parse, requestId });
+      }
+      document = prepared.document;
+    } else if (meta.text) {
+      document = { ...meta, text: meta.text };
+    } else {
+      return error(
+        400,
+        'INVALID_REQUEST',
+        '요청 형식이 올바르지 않습니다.',
+        requestId,
+      );
     }
     const job = options.indexQueue.enqueue({
       jobType: 'upsert',
@@ -337,8 +375,10 @@ export function createRagHttpHandler<TSession>(
       jobId: current.jobId,
       status: current.status,
       attempts: current.attempts,
-      reviewRequired: current.reviewRequired,
+      reviewRequired:
+        current.reviewRequired || parse?.status === 'needs_review',
       errorCode: current.errorCode,
+      ...(parse ? { parse } : {}),
       requestId,
     });
   }

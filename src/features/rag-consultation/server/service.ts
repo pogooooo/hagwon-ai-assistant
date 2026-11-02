@@ -272,6 +272,31 @@ export function createRagConsultationService(
       }
     }
 
+    // 스캔(OCR) 청크의 수치: 판독이 불확실한 값(검수 필요 페이지는 모든 수치)을 답에 쓰면 보류한다.
+    // 같은 값이 승인된 정형 사실로 확인되면 허용한다(외부 기능이 사람이 입력한 값).
+    const answerNumbers = new Set(extractNumbers(draft.text));
+    const factNumbers = new Set(
+      allowedNumbersFor({ facts: draft.usedFacts, instants: [] }),
+    );
+    for (const request of draft.citations) {
+      if (request.kind !== 'chunk' || !request.chunk.extraction) continue;
+      const extraction = request.chunk.extraction;
+      const risky = extraction.needsReview
+        ? extractNumbers(request.chunk.text)
+        : extractNumbers(extraction.uncertainTokens.join(' '));
+      if (risky.some((n) => answerNumbers.has(n) && !factNumbers.has(n))) {
+        return {
+          ...abstain(
+            '스캔된 문서에서 읽은 내용의 판독이 확실하지 않아 바로 안내해 드리기 어렵습니다. 담당자가 원본을 확인한 뒤 안내해 드릴 수 있도록 연결해 드리겠습니다.',
+            'INSUFFICIENT_EVIDENCE',
+            ['스캔 문서 판독 확인'],
+            ['OCR_UNCERTAIN'],
+          ),
+          resolvedCitations: [] as RagCitation[],
+        };
+      }
+    }
+
     const allowed = allowedNumbersFor({
       facts: draft.usedFacts,
       instants: draft.instants ?? [ctx.asOf],

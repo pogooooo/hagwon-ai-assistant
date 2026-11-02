@@ -13,6 +13,8 @@
  * 7. 조회 시각(asOf)에는 "그 시각까지 효력이 생긴 가장 높은 revision" 하나만 쓴다.
  *    (실서비스의 asOf 는 현재 시각이므로 항상 최신 revision 만 보인다. 과거 시각 재현은 감사·테스트용.)
  */
+import { createHash } from 'node:crypto';
+
 import { DEFAULT_RAG_CONFIG } from '../config.ts';
 import { buildChunks } from '../ingest/chunking.ts';
 import {
@@ -34,6 +36,7 @@ import {
   restrictToAllowedStudents,
 } from '../retrieval/access-filter.ts';
 import { Bm25Ranker, type ChunkRanker } from '../retrieval/rankers.ts';
+import { normalizeText } from '../text/normalize.ts';
 import { isValidAt, parseInstant, parseOptionalInstant } from '../text/time.ts';
 import type {
   ApprovedFact,
@@ -70,6 +73,8 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   private readonly logger: RagLogger | undefined;
   private readonly maxDocumentChars: number;
   private readonly ranker: ChunkRanker;
+  /** revision 키 → 정규화 본문 해시(중복 업로드 감지) */
+  private readonly textHashes = new Map<string, string>();
   private readonly failIndexing:
     ((document: SourceDocumentInput) => boolean) | undefined;
   private generation = 0;
@@ -190,8 +195,33 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       flags: [],
       chunkIds: [],
       indexGeneration: this.generation,
+      ...(document.extraction ? { extraction: document.extraction } : {}),
     };
     this.revisions.set(key, stored);
+    // 같은 학원에 본문이 같은 다른 문서가 이미 있으면 중복 업로드로 표시한다(원본이 살아 있는 동안 검색 제외).
+    const textHash = createHash('sha256')
+      .update(normalizeText(document.text).replace(/\s+/g, ''))
+      .digest('hex');
+    this.textHashes.set(key, textHash);
+    const original = [...this.revisions.values()].find(
+      (other) =>
+        other !== stored &&
+        other.academyId === stored.academyId &&
+        other.documentId !== stored.documentId &&
+        (other.status === 'approved_active' ||
+          other.status === 'indexed_verified') &&
+        !other.flags.includes('duplicate_content') &&
+        this.textHashes.get(keyOf(other.documentId, other.revision)) ===
+          textHash,
+    );
+    if (original) {
+      stored.flags.push('duplicate_content');
+      stored.duplicateOf = original.documentId;
+    }
+    if (document.extraction?.status === 'needs_review')
+      stored.flags.push('ocr_needs_review');
+    if (document.extraction?.warnings?.some((w) => w.startsWith('pii_masked')))
+      stored.flags.push('pii_masked');
 
     if (this.failIndexing?.(document)) {
       stored.status = 'index_failed';
@@ -411,9 +441,13 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   async searchApprovedChunks(query: ChunkSearchQuery): Promise<ScoredChunk[]> {
     const targets = restrictToAllowedStudents(query.access, query.studentIds);
     const candidates: RagChunk[] = [];
-    for (const stored of this.activeRevisions(query.asOf)) {
+    const active = this.activeRevisions(query.asOf);
+    const activeDocuments = new Set(active.map((stored) => stored.documentId));
+    for (const stored of active) {
       if (!canReadRecord(query.access, stored, targets)) continue;
       if (!isValidAt(stored.validFrom, stored.validTo, query.asOf)) continue;
+      if (stored.duplicateOf && activeDocuments.has(stored.duplicateOf))
+        continue;
       if (
         query.documentTypes &&
         !query.documentTypes.includes(stored.documentType)

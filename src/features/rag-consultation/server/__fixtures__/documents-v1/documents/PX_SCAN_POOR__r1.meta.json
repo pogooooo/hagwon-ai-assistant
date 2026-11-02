@@ -1,0 +1,20 @@
+{
+  "document_id": "PX_SCAN_POOR",
+  "revision": 1,
+  "document_type": "announcement",
+  "title": "실험 재료비 변경 안내(스캔 불량)",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-11-01T00:00:00+09:00",
+  "valid_to": null,
+  "approved_at": "2026-10-28T10:00:00+09:00",
+  "file_name": "재료비변경_흐림.pdf",
+  "render": {
+    "format": "pdf_scan",
+    "layout": "single",
+    "rotate": 0,
+    "scan_quality": "poor"
+  }
+}

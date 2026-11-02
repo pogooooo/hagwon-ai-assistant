@@ -1,0 +1,20 @@
+{
+  "document_id": "PX_LONG_TABLE",
+  "revision": 1,
+  "document_type": "schedule",
+  "title": "파싱테스트학원 2학기 차시별 커리큘럼",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-11-01T00:00:00+09:00",
+  "valid_to": null,
+  "approved_at": "2026-10-28T10:00:00+09:00",
+  "file_name": "2학기_커리큘럼.pdf",
+  "render": {
+    "format": "pdf_text",
+    "layout": "single",
+    "rotate": 0,
+    "scan_quality": null
+  }
+}
