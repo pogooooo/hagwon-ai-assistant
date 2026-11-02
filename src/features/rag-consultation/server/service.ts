@@ -373,8 +373,30 @@ export function createRagConsultationService(
    */
   function carryOverFollowUp(ctx: AnswerContext) {
     const previous = ctx.state?.previousFrame;
-    if (previous?.domain !== 'info') return;
     const frame = ctx.frame;
+    if (previous?.domain === 'analysis') {
+      // 직전이 취약 영역 답이고 "그거/같은 거야?"처럼 이어 묻으면 취약 영역을 기간 비교로 다시 본다.
+      if (
+        previous.weak &&
+        frame.topics.length === 0 &&
+        (frame.flags.elliptical || frame.anaphora) &&
+        !frame.flags.weakUnit
+      ) {
+        const compare = /같|똑같|달라|다른|다르|비교|바뀌|변했/.test(
+          frame.normalized,
+        );
+        ctx.frame = {
+          ...frame,
+          flags: {
+            ...frame.flags,
+            weakUnit: true,
+            compare: frame.flags.compare || compare,
+          },
+        };
+      }
+      return;
+    }
+    if (previous?.domain !== 'info') return;
     const followUp =
       frame.flags.elliptical ||
       /(은|는)요\s*\??$|도요|그럼|그러면|그건|그거|거기/.test(
@@ -391,8 +413,10 @@ export function createRagConsultationService(
       ...ctx.catalog.classes.flatMap((klass) => [klass.name, ...klass.aliases]),
     ].map((word) => word.replace(/\s/g, ''));
     const previousWords = keywordsOf(previous.question ?? '');
+    // 바뀌다·같다처럼 변화·비교를 묻는 동사는 새 주제가 아니다.
     const fresh = keywordsOf(ctx.question).filter(
       (word) =>
+        !/^(바뀌|바꾸|바뀐|변경|달라|다르|다른|같|똑같|변했)/.test(word) &&
         !previousWords.some((p) => p.startsWith(word.slice(0, 2))) &&
         !entityWords.some(
           (entity) => entity.includes(word) || word.includes(entity),

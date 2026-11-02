@@ -315,6 +315,8 @@ export interface ConversationState {
     topicIds?: string[];
     classIds?: string[];
     question?: string;
+    /** 직전 답이 취약 영역 답이었는지(“그거 9월이랑 같아?” 후속 질문) */
+    weak?: boolean;
   };
 }
 

@@ -180,6 +180,7 @@ function draft(
     periods: string[];
     units: string[];
     targets: string[];
+    weak?: boolean;
   },
 ): AnswerDraft {
   const assignmentCounts = [
@@ -213,6 +214,7 @@ function draft(
         domain: 'analysis',
         units: extras.units,
         periods: extras.periods,
+        ...(extras.weak ? { weak: true } : {}),
       },
     },
   };
@@ -328,6 +330,17 @@ export async function answerAnalysis(
   }
   const unitComparison =
     frame.flags.unitDimension && periods.length <= 1 && !frame.flags.cumulative;
+  if (frame.flags.weakUnit && periods.length >= 2) {
+    ctx.trace.intent = 'weak_area_compare';
+    return weakAreaAnswer(
+      ctx,
+      targets,
+      periods,
+      allAccuracy.filter((fact) => periods.includes(fact.period ?? '')),
+      weakAreas.filter((fact) => periods.includes(fact.period ?? '')),
+      () => undefined,
+    );
+  }
   if (wantsComparison && !unitComparison) {
     ctx.trace.intent = frame.flags.cumulative
       ? 'accuracy_cumulative'
@@ -594,7 +607,7 @@ function weakAreaAnswer(
   for (const target of targets) {
     const name = studentLabel(ctx.access, target);
     const ownWeak = weakAreas.filter((fact) => fact.subjectId === target);
-    const period =
+    const single =
       periods.length > 0
         ? periods[periods.length - 1]
         : latestPeriod(
@@ -602,62 +615,65 @@ function weakAreaAnswer(
               ? ownWeak
               : accuracy.filter((fact) => fact.subjectId === target),
           );
-    if (!period) {
+    if (!single) {
       missing.push(`${name} 학생 분석 자료`);
       continue;
     }
-    const reported = ownWeak.filter((fact) => fact.period === period);
-    // 그 달 전체 정답률이 있으면 함께 보여 준다("성적이랑 약한 단원" 질문).
-    const overall = accuracy.find(
-      (fact) =>
-        fact.subjectId === target &&
-        fact.period === period &&
-        dimensionOf(fact) === 'overall',
-    );
-    if (overall) {
-      lines.push(line(ctx, overall));
-      used.push(overall);
-    }
-    if (reported.length > 0) {
-      // 3번 기능이 판정한 취약 영역을 그대로 전달하고, 해당 단원의 확정 수치를 함께 보여 준다.
-      for (const weak of reported) {
-        lines.push(
-          `${name} 학생 ${formatPeriod(period)} 리포트의 취약 영역: ${weak.value.unit} — ${weak.value.text}`,
-        );
-        used.push(weak);
-        const numbers = accuracy.find(
-          (fact) =>
-            fact.subjectId === target &&
-            fact.period === period &&
-            fact.value.unit === weak.value.unit,
-        );
-        if (numbers) {
-          lines.push(line(ctx, numbers));
-          used.push(numbers);
-        }
-      }
-      continue;
-    }
-    // 리포트에 취약 영역 판정이 없으면 확정 단원 정답률 중 가장 낮은 값을 관찰값으로만 안내한다.
-    const units = accuracy.filter(
-      (fact) =>
-        fact.subjectId === target &&
-        fact.period === period &&
-        dimensionOf(fact) === 'unit',
-    );
-    if (units.length === 0) {
-      missing.push(`${name} 학생 ${formatPeriod(period)} 분석 자료`);
-      continue;
-    }
-    const sortedUnits = [...units].sort((a, b) => percent(a) - percent(b));
-    lines.push(...sortFacts(units).map((fact) => line(ctx, fact)));
-    if (sortedUnits.length >= 2) {
-      const lowest = sortedUnits[0];
-      lines.push(
-        `확정 자료 중 정답률이 가장 낮은 단원은 ${lowest.value.unit}(${percent(lowest)}%)입니다. 숙제 결과 기준의 관찰값이며 원인을 뜻하지는 않습니다.`,
+    // 두 기간을 함께 물으면(“그거 9월이랑 같은 거야?”) 기간마다 취약 영역을 보여 준다.
+    for (const period of periods.length >= 2 ? periods : [single]) {
+      const reported = ownWeak.filter((fact) => fact.period === period);
+      // 그 달 전체 정답률이 있으면 함께 보여 준다("성적이랑 약한 단원" 질문).
+      const overall = accuracy.find(
+        (fact) =>
+          fact.subjectId === target &&
+          fact.period === period &&
+          dimensionOf(fact) === 'overall',
       );
+      if (overall) {
+        lines.push(line(ctx, overall));
+        used.push(overall);
+      }
+      if (reported.length > 0) {
+        // 3번 기능이 판정한 취약 영역을 그대로 전달하고, 해당 단원의 확정 수치를 함께 보여 준다.
+        for (const weak of reported) {
+          lines.push(
+            `${name} 학생 ${formatPeriod(period)} 리포트의 취약 영역: ${weak.value.unit} — ${weak.value.text}`,
+          );
+          used.push(weak);
+          const numbers = accuracy.find(
+            (fact) =>
+              fact.subjectId === target &&
+              fact.period === period &&
+              fact.value.unit === weak.value.unit,
+          );
+          if (numbers) {
+            lines.push(line(ctx, numbers));
+            used.push(numbers);
+          }
+        }
+        continue;
+      }
+      // 리포트에 취약 영역 판정이 없으면 확정 단원 정답률 중 가장 낮은 값을 관찰값으로만 안내한다.
+      const units = accuracy.filter(
+        (fact) =>
+          fact.subjectId === target &&
+          fact.period === period &&
+          dimensionOf(fact) === 'unit',
+      );
+      if (units.length === 0) {
+        missing.push(`${name} 학생 ${formatPeriod(period)} 분석 자료`);
+        continue;
+      }
+      const sortedUnits = [...units].sort((a, b) => percent(a) - percent(b));
+      lines.push(...sortFacts(units).map((fact) => line(ctx, fact)));
+      if (sortedUnits.length >= 2) {
+        const lowest = sortedUnits[0];
+        lines.push(
+          `확정 자료 중 정답률이 가장 낮은 단원은 ${lowest.value.unit}(${percent(lowest)}%)입니다. 숙제 결과 기준의 관찰값이며 원인을 뜻하지는 않습니다.`,
+        );
+      }
+      used.push(...units);
     }
-    used.push(...units);
   }
   if (used.length === 0)
     return missingAbstain(
@@ -675,6 +691,7 @@ function weakAreaAnswer(
       periods: [...new Set(used.map((fact) => fact.period ?? ''))],
       units: [],
       targets,
+      weak: true,
     },
   );
 }
