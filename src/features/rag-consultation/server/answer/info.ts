@@ -54,6 +54,97 @@ const emptyPart = (outcome: Part['outcome'], missing: string[] = []): Part => ({
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 질문이 주제 안에서 "무엇"을 묻는지(비용·하원·등원 등). 같은 주제의 여러 문장·행 중 그 측면을 다루는 쪽을 고른다.
+ * (dev 실패에서 보강: "자습하는 방 돈 따로 내야 됨?", "학원 버스 한 달에 얼마?", "수업 끝나고 봉고 몇 시 출발?")
+ */
+interface Aspect {
+  /** 표 행·열 선택에 더할 단어 */
+  words: string[];
+  /** 근거 문장이 이 측면을 다루는지 */
+  matches: (text: string) => boolean;
+}
+
+const ASPECTS: ReadonlyArray<{ question: RegExp; aspect: Aspect }> = [
+  {
+    question: /돈|비용|얼마|유료|무료|요금|이용료|따로\s*내/,
+    aspect: {
+      words: ['비용', '이용료', '요금'],
+      matches: (text) => /\d[\d,]*\s*원|비용|무료|유료|요금|이용료/.test(text),
+    },
+  },
+  {
+    question: /끝나고|끝나면|마치고|마치면|끝날\s*때|집에\s*갈|하원/,
+    aspect: { words: ['하원'], matches: (text) => /하원/.test(text) },
+  },
+  {
+    question: /출발/,
+    aspect: { words: ['출발'], matches: (text) => /출발/.test(text) },
+  },
+];
+
+function aspectsOf(question: string): Aspect[] {
+  const normalized = normalizeText(question);
+  return ASPECTS.filter((entry) => entry.question.test(normalized)).map(
+    (entry) => entry.aspect,
+  );
+}
+
+/** "문가람쌤", "다니엘 선생님"처럼 이름으로 특정 강사를 가리키는지(역할·과목·반 표현은 제외). */
+const NON_NAME_WORDS = new Set([
+  '담당',
+  '담임',
+  '우리',
+  '저희',
+  '원장',
+  '부원장',
+  '원어민',
+  '영어',
+  '수학',
+  '국어',
+  '과학',
+  '사회',
+  '논술',
+  '학원',
+  '학교',
+  '과외',
+  '다른',
+  '어떤',
+  '무슨',
+  '어느',
+  '새로',
+  '새로운',
+  '남자',
+  '여자',
+  '외국인',
+  '스피킹',
+  '문법',
+  '독해',
+  '리딩',
+  '회화',
+  '실장',
+  '상담',
+  '조교',
+  '보조',
+  '전임',
+  '전담',
+]);
+
+function namedTeacher(normalized: string): string | null {
+  for (const match of normalized.matchAll(
+    /(?:^|[^가-힣a-z])([가-힣]{2,4}|[a-z]{3,})\s*(?:쌤|샘|선생님|강사님|강사)/g,
+  )) {
+    const word = match[1];
+    if (NON_NAME_WORDS.has(word) || /반$|[0-9]/.test(word)) continue;
+    return word;
+  }
+  return null;
+}
+
+/** 강사 "누구/담당/어느 반" 질문인지(이름·담당 반 외 속성 질문과 구분). */
+const TEACHER_WHO =
+  /누구|누가|담당|담임|이름|성함|맡|무슨\s*반|어느\s*반|어떤\s*반|바뀌|바뀐|교체/;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 async function loadFacts(
@@ -398,7 +489,7 @@ async function answerScheduleChange(
   const types: Array<'cancel' | 'makeup'> =
     flags.makeupSchedule && !flags.cancelSchedule
       ? ['makeup']
-      : flags.cancelSchedule && !ctx.frame.compact.includes('보강')
+      : flags.cancelSchedule && !/보강|보충/.test(ctx.frame.compact)
         ? ['cancel']
         : ['cancel', 'makeup'];
   const classIds = explicitClassIds(ctx);
@@ -436,15 +527,54 @@ async function answerScheduleChange(
         .filter((fact) => fact.subjectType === 'class')
         .map((fact) => fact.subjectId),
     );
-    const makeups = candidates.filter(
+    const later = candidates.filter(
       (fact) =>
         fact.value.kind === 'schedule_change' &&
         fact.value.changeType === 'makeup' &&
         dayOf(fact.value.date) >= day &&
-        dayOf(fact.value.date) < day + 31 * DAY_MS &&
-        (compactText(fact.value.text).includes(mention) ||
-          (fact.subjectType === 'class' && cancelClasses.has(fact.subjectId))),
+        dayOf(fact.value.date) < day + 31 * DAY_MS,
     );
+    // 공지에 그 휴강 날짜("11월 10일 휴강분")가 적힌 보강을 우선하고, 없을 때만 같은 반의 이후 보강을 쓴다
+    // (같은 반의 다른 휴강분 보강이 섞이지 않게).
+    const mentioned = later.filter(
+      (fact) =>
+        fact.value.kind === 'schedule_change' &&
+        compactText(fact.value.text).includes(mention),
+    );
+    // 공지에 휴강 날짜가 없으면, 각 보강을 "그 반에 적용되는 가장 가까운 이전 휴강(반 휴강 또는 학원 전체 휴강)"의 보강으로 본다.
+    const appliesTo = (cancel: ApprovedFact, classId: string) =>
+      cancel.subjectType !== 'class' || cancel.subjectId === classId;
+    const allCancels = facts.filter(
+      (fact) =>
+        fact.value.kind === 'schedule_change' &&
+        fact.value.changeType === 'cancel',
+    );
+    const ownerDay = (makeup: ApprovedFact): number | null => {
+      if (makeup.value.kind !== 'schedule_change') return null;
+      const makeupDay = dayOf(makeup.value.date);
+      const prior = allCancels
+        .filter(
+          (cancel) =>
+            cancel.value.kind === 'schedule_change' &&
+            appliesTo(cancel, makeup.subjectId) &&
+            dayOf(cancel.value.date) <= makeupDay,
+        )
+        .map((cancel) =>
+          cancel.value.kind === 'schedule_change'
+            ? dayOf(cancel.value.date)
+            : 0,
+        );
+      return prior.length > 0 ? Math.max(...prior) : null;
+    };
+    const makeups =
+      mentioned.length > 0
+        ? mentioned
+        : later.filter(
+            (fact) =>
+              fact.subjectType === 'class' &&
+              cancelClasses.has(fact.subjectId) &&
+              ownerDay(fact) === day,
+          );
     candidates = [...cancels, ...makeups];
   } else if (range) {
     candidates = candidates.filter((fact) => {
@@ -534,6 +664,61 @@ async function answerMakeupPolicy(
     part.citations.push({ kind: 'fact', fact, effectiveAt: effective.at });
     part.usedFacts.push(fact);
   }
+  // 정형 사실로 뽑히지 않은 세부 조항(당일 질병 결석, 원어민 수업 결석 등)은 질문 단어가 들어간 규정 문장을 덧붙인다.
+  // (dev 실패에서 보강: "어제 아파서 못 갔는데 보충 받을 수 있어요?", "원어민 수업 빠졌는데 보충 해줘요?")
+  const clauseWords = [
+    ...contentWords(ctx.question).filter(
+      (word) =>
+        !/^(보강|보충|학원|수업|결석|이것|이거|따로|오늘|어제|받을|해줘|빠지|빠졌|못|갔는데)/.test(
+          word,
+        ),
+    ),
+    ...(/아파|아프|병원|감기|질병|다쳐/.test(ctx.frame.normalized)
+      ? ['질병', '진료']
+      : []),
+    ...(/갑자기|당일|오늘|어제/.test(ctx.frame.normalized)
+      ? ['당일', '갑작스러운']
+      : []),
+  ];
+  if (clauseWords.length > 0) {
+    const results = await ctx.documents.searchApprovedChunks({
+      access: ctx.access,
+      studentIds: [],
+      asOf: ctx.asOf,
+      query: ['보강', '결석', ...clauseWords].join(' '),
+      limit: ctx.config.searchLimit,
+    });
+    recordChunks(
+      ctx.trace,
+      results.map((result) => result.chunk),
+    );
+    const known = facts.map((fact) => compactText(textOf(fact)));
+    const extra: Array<{ chunk: RagChunk; sentence: string }> = [];
+    for (const { chunk } of results) {
+      if (
+        chunk.documentType !== 'policy' &&
+        chunk.documentType !== 'academy_info'
+      )
+        continue;
+      for (const sentence of splitSentences(chunk.text)) {
+        const compact = compactText(sentence);
+        if (
+          /보강|결석/.test(sentence) &&
+          clauseWords.some((word) => compact.includes(compactText(word))) &&
+          !known.some(
+            (text) => text.includes(compact) || compact.includes(text),
+          ) &&
+          !isDataAbsenceStatement(sentence) &&
+          !extra.some((entry) => entry.sentence === sentence)
+        )
+          extra.push({ chunk, sentence });
+      }
+    }
+    for (const { chunk, sentence } of extra.slice(0, 2)) {
+      part.lines.push(`관련 규정: "${sentence.replace(/^\d+\.\s*/, '')}"`);
+      part.citations.push({ kind: 'chunk', chunk });
+    }
+  }
   if (ctx.frame.flags.unconditional) {
     part.lines.push(
       '규정에 무조건(자동) 승인한다는 내용은 없으므로, 구체적인 가능 여부는 담당자에게 확인해 주세요.',
@@ -591,11 +776,56 @@ async function answerAttribute(
 ): Promise<Part> {
   const evidenceTerms = topic.evidenceTerms ?? topic.terms;
   const facts = await loadFacts(ctx, [...topic.factTypes], effective.at);
-  const matchingFact = facts.find((fact) => {
+  const matchingFacts = facts.filter((fact) => {
     const text = textOf(fact);
     return containsAny(text, evidenceTerms) && !isDataAbsenceStatement(text);
   });
   const part = emptyPart('ok');
+  const aspects = aspectsOf(ctx.question);
+  if (aspects.length > 0) {
+    // 질문이 묻는 측면(예: 비용)을 다루는 사실 → 같은 절(근거어가 제목·절·문장에 있는 청크)의 문장 순으로 찾는다.
+    const covers = (text: string) => aspects.every((a) => a.matches(text));
+    const aspectFact = matchingFacts.find((fact) => covers(textOf(fact)));
+    if (aspectFact) {
+      part.lines.push(`등록된 안내 자료에 따르면: ${textOf(aspectFact)}`);
+      part.citations.push({
+        kind: 'fact',
+        fact: aspectFact,
+        effectiveAt: effective.at,
+      });
+      part.usedFacts.push(aspectFact);
+      return part;
+    }
+    const results = await ctx.documents.searchApprovedChunks({
+      access: ctx.access,
+      studentIds: [],
+      asOf: ctx.asOf,
+      query: [...evidenceTerms, ...aspects.flatMap((a) => a.words)].join(' '),
+      limit: ctx.config.searchLimit,
+    });
+    recordChunks(
+      ctx.trace,
+      results.map((result) => result.chunk),
+    );
+    for (const { chunk } of results) {
+      const inTopic =
+        containsAny(chunk.location.section ?? '', evidenceTerms) ||
+        containsAny(chunk.text, evidenceTerms);
+      if (!inTopic) continue;
+      const sentence = splitSentences(chunk.text).find(
+        (candidate) => !isDataAbsenceStatement(candidate) && covers(candidate),
+      );
+      if (sentence) {
+        part.lines.push(`등록된 안내 자료에 따르면: "${sentence}"`);
+        part.citations.push({ kind: 'chunk', chunk });
+        part.usedFacts.push(
+          ...facts.filter((fact) => fact.sourceId === chunk.sourceId),
+        );
+        return part;
+      }
+    }
+  }
+  const matchingFact = matchingFacts[0];
   if (matchingFact) {
     part.lines.push(`등록된 안내 자료에 따르면: ${textOf(matchingFact)}`);
     part.citations.push({
@@ -676,6 +906,9 @@ interface SectionCandidate {
   score: number;
   wordHits: number;
   sectionMatch: boolean;
+  aspectMatch: boolean;
+  /** "우리 반 교실"처럼 대상 반이 정해졌을 때 그 반 이름이 들어간 행/문장 */
+  classMatch: boolean;
 }
 
 /**
@@ -732,7 +965,9 @@ function renderTableRows(
       : rows.filter((chunk) => rowScore(chunk) === bestRow)
   ).slice(0, 8);
   const header = selectedRows[0]?.location.header ?? [];
-  const headerScores = header.map((name) => has(name));
+  const headerScores = header.map(
+    (name) => has(name) + (containsAny(name, evidenceTerms) ? 1 : 0),
+  );
   const best = Math.max(0, ...headerScores.slice(1));
   const keep = header.map(
     (_, index) => index === 0 || best === 0 || headerScores[index] === best,
@@ -780,9 +1015,23 @@ async function answerSection(
   topic: TopicDefinition,
 ): Promise<Part> {
   const evidenceTerms = topic.evidenceTerms ?? topic.terms;
-  const words = contentWords(ctx.question).filter(
-    (word) => !topic.terms.some((term) => compactText(term) === word),
-  );
+  const aspects = aspectsOf(ctx.question);
+  const targetNames = explicitClassIds(ctx).flatMap((classId) => {
+    const klass = ctx.catalog.classes.find((c) => c.classId === classId);
+    return klass
+      ? [klass.name, ...klass.aliases]
+          .map(compactText)
+          .filter((n) => n.length >= 3)
+      : [];
+  });
+  const mentionsTargetClass = (text: string) =>
+    targetNames.some((name) => compactText(text).includes(name));
+  const words = [
+    ...contentWords(ctx.question).filter(
+      (word) => !topic.terms.some((term) => compactText(term) === word),
+    ),
+    ...aspects.flatMap((aspect) => aspect.words),
+  ].filter((word, index, list) => list.indexOf(word) === index);
   const results = await ctx.documents.searchApprovedChunks({
     access: ctx.access,
     studentIds: [],
@@ -816,6 +1065,10 @@ async function answerSection(
         compactText(chunk.contextualText).includes(compactText(word)),
       ).length,
       sectionMatch: containsAny(chunk.location.section ?? '', evidenceTerms),
+      aspectMatch:
+        aspects.length > 0 &&
+        aspects.every((aspect) => aspect.matches(chunk.contextualText)),
+      classMatch: mentionsTargetClass(chunk.text),
     }));
   if (candidates.length === 0) return emptyPart('missing', [topic.label]);
 
@@ -823,7 +1076,9 @@ async function answerSection(
   const rank = (entry: SectionCandidate) =>
     entry.score / maxScore +
     entry.wordHits * 0.15 +
-    (entry.sectionMatch ? 0.3 : 0);
+    (entry.sectionMatch ? 0.3 : 0) +
+    (entry.aspectMatch ? 0.5 : 0) +
+    (entry.classMatch ? 0.4 : 0);
   candidates.sort((a, b) => rank(b) - rank(a));
 
   const groupKey = (chunk: RagChunk) =>
@@ -940,9 +1195,36 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
     );
   }
 
+  // 이름으로 특정 강사를 가리키는 질문(dev 실패에서 보강)
+  // - 개인 연락처(카톡·번호)는 안내하지 않는다.
+  // - "누구/담당 반"이 아닌 속성(국적·학력 등)은 정형 "담당 강사" 사실로 답할 수 없으므로 문장 근거가 있을 때만 답한다.
+  const teacherName = namedTeacher(ctx.frame.normalized);
+  if (teacherName && topics.some((topic) => topic.id === 'contact')) {
+    return abstain(
+      '강사 개인 연락처는 안내해 드리지 않습니다. 학원 대표 연락처로 문의해 주시면 전달해 드립니다.',
+      'INSUFFICIENT_EVIDENCE',
+      ['강사 개인 연락처'],
+      ['INSUFFICIENT_EVIDENCE'],
+    );
+  }
+  if (
+    teacherName &&
+    topics.length === 1 &&
+    topics[0].id === 'teacher' &&
+    !TEACHER_WHO.test(ctx.frame.normalized)
+  ) {
+    return answerGeneric(ctx);
+  }
+
   let selectedTopics: TopicDefinition[] = [...topics];
   if (selectedTopics.length === 0) {
-    if (explicitClassIds(ctx).length === 0) return answerGeneric(ctx);
+    // 주제어 없이 반만 말한 경우("중2 심화반은요?", "우리 반 알려줘")에만 반 요약을 준다.
+    // 원생 계정이라도 반을 말하지 않은 질문(예: "매점 있어?")은 반 요약으로 대신하지 않는다.
+    const namesClass =
+      ctx.frame.classIds.length > 0 ||
+      /반(?=$|[\s은는이가에의도요?])/.test(ctx.frame.normalized);
+    if (!namesClass || explicitClassIds(ctx).length === 0)
+      return answerGeneric(ctx);
     // 반만 언급된 경우 해당 반의 수강료·시간표·강사를 함께 안내한다.
     selectedTopics = ctx.config.topics.filter((topic) =>
       ['fee', 'schedule', 'teacher'].includes(topic.id),

@@ -249,6 +249,12 @@ P2(GraphRAG·Self-RAG·Agentic·반복 LLM 평가 등)는 구현하지 않았습
   - 절 제목 번호를 숫자 검사가 막음
   - **즉 이 90건은 규칙을 다듬는 데 쓰였으므로 독립 평가가 아닙니다.** 새 학원 자료로 다시 검증해야 합니다.
 
+### 중학생 표현 100문항(`__fixtures__/academies-v1/eval/`)
+
+- 같은 저장소·권한 필터·BM25 조건에서 RAG만(검색 1위 문서) **12/100**, 엔진 보완 전 **60/100**, dev 실패 기반 유사어 보완 후 **87/100**.
+- 보완에 쓰지 않은 test 절반은 29 → 32/44로, 처음 보는 표현에 약한 한계가 남아 있습니다. 방법·결과·실패 원인은 [REPORT.md](REPORT.md) 2장에 있습니다.
+- 재현: `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/paraphrase-eval.ts <결과 이름>`
+
 ### 합성 평가셋 81건
 
 - **상태 일치 81/81**, 필수 근거 포함 81/81, 생성 호출 예산 초과 0건.

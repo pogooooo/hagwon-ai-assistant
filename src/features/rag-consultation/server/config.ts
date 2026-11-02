@@ -92,6 +92,11 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
       '쉬는날',
       '쉬나요',
       '쉬어요',
+      // 중학생 구어(dev 실패에서 보강): "학원 쉼?", "12월에 노는 날", "학원 쉬어?"
+      '학원쉼',
+      '학원쉬',
+      '수업쉬',
+      '노는날',
       '수업하나요',
       '수업있나요',
       '수업있어요',
@@ -108,7 +113,8 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
     id: 'makeup',
     label: '보강 규정',
     kind: 'structured',
-    terms: ['보강'],
+    // "보충(수업)"은 중학생이 보강을 부르는 말(dev 실패에서 보강). "보충 학습/보충해야 할"은 학습 상담으로 따로 본다.
+    terms: ['보강', '보충'],
     factTypes: ['makeup_policy'],
   },
   {
@@ -144,7 +150,7 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
     id: 'study_room',
     label: '자습실',
     kind: 'attribute',
-    terms: ['자습실', '독서실', '자습공간', '자습'],
+    terms: ['자습실', '독서실', '자습공간', '자습', '공부방'],
     factTypes: ['facility'],
     evidenceTerms: ['자습실', '독서실', '자습 공간', '자습'],
   },
@@ -206,6 +212,13 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
       '오시는길',
       '찾아가',
       '몇층',
+      // dev 실패에서 보강: "지하철 타고 가면 어디서 내려요?"
+      '지하철',
+      '전철',
+      '대중교통',
+      '어디서내려',
+      '몇번출구',
+      '가는길',
     ],
     ['주소', '위치', '오시는 길'],
   ),
@@ -226,7 +239,7 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
   section(
     'shuttle',
     '셔틀버스',
-    ['셔틀', '차량운행', '학원버스', '학원차', '픽업', '등하원차'],
+    ['셔틀', '차량운행', '학원버스', '학원차', '픽업', '등하원차', '봉고'],
     ['셔틀', '통학 차량', '학원 차량', '차량 운행', '노선'],
   ),
   section('discount', '할인', ['할인', '형제'], ['할인']),
@@ -257,7 +270,19 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
   section(
     'payment',
     '납부 방법',
-    ['납부', '결제', '카드결제', '계좌', '입금계좌', '계좌이체', '이체'],
+    [
+      '납부',
+      '결제',
+      '카드결제',
+      '계좌',
+      '입금계좌',
+      '계좌이체',
+      '이체',
+      // dev 실패에서 보강: "학원비 며칠까지 내야 됨?"
+      '며칠까지',
+      '언제까지내',
+      '내는날',
+    ],
     ['납부', '결제', '계좌', '카드'],
   ),
   section(
@@ -265,6 +290,13 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
     '재시험 규정',
     ['재시험', '단어시험'],
     ['재시험', '단어 시험', '단어시험'],
+  ),
+  // dev 실패에서 보강: "우리반 교실 몇 호였지"
+  section(
+    'classroom',
+    '강의실',
+    ['강의실', '교실', '몇호', '호실'],
+    ['강의실', '교실', '호실'],
   ),
   section('mock_exam', '모의고사', ['모의고사'], ['모의고사']),
   section('native', '원어민 수업', ['원어민'], ['원어민']),
@@ -287,6 +319,7 @@ export const TOPIC_SUPPRESSION: ReadonlyArray<readonly [string, string]> = [
   ['level_test', 'schedule'],
   ['retest', 'schedule'],
   ['shuttle', 'schedule'],
+  ['classroom', 'schedule'],
 ];
 
 /** 학습 분석 질문으로 보는 표현(단원·유형명은 카탈로그에서 추가). */
@@ -312,6 +345,7 @@ export const ANALYSIS_TERMS: readonly string[] = [
   '분석',
   '유형별',
   '월말평가',
+  '월말시험',
   '평가결과',
 ];
 

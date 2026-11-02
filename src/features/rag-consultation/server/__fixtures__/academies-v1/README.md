@@ -49,6 +49,12 @@
 - 회귀 테스트: `npm test` (`server/__tests__/academies-regression.test.ts`)
 - 로컬 dev 서버: `npm run rag:dev` 후 `x-dev-user: GA_GUARDIAN_KIM` 처럼 `users.json` 의 계정 ID 를 헤더로 보냅니다.
 
+## 중학생 표현 평가(`eval/`)
+
+- `eval/middle-school-paraphrase.jsonl`: 가온·새솔 중학생/방문자 계정의 구어체 질문 100개(답할 수 있는 85 + 보류 15). 문서에 정답 문구가 실제로 있는지 스크립트로 확인했습니다.
+- `also_valid_source_ids`: 작성자가 notes 에 "같은 문구가 다른 문서에도 있음"이라 적은 3문항의 대체 정답 문서.
+- `eval/results/1-before.json`(보완 전 엔진), `2-after.json`(보완 후 엔진): 문항별 결과·답변 전문. 비교 방법과 해석은 기능 폴더의 `REPORT.md` 2장.
+
 ## 한계
 
 - 리포트·사실·질문 일부는 작성 시 스크립트로 수치 합계를 맞춰 만들었고, 학원 공개 문서는 직접 작성했습니다. 사람 검수(정답 문장·표현 다양성)는 하지 않았습니다.
