@@ -12,7 +12,8 @@ import {
   shiftPeriod,
   toKstDate,
 } from '../text/time.ts';
-import type { AccuracyDimension, ApprovedFact } from '../types.ts';
+import { compactText } from '../text/normalize.ts';
+import type { AccuracyDimension, ApprovedFact, RagChunk } from '../types.ts';
 import {
   abstain,
   markMultiSubjectStudents,
@@ -375,6 +376,16 @@ export async function answerAnalysis(
     );
   }
 
+  if (targets.length === 1) {
+    const detail = await reportDetail(
+      ctx,
+      targets[0],
+      periods,
+      allAccuracy.filter((fact) => fact.subjectId === targets[0]),
+    );
+    if (detail) return detail;
+  }
+
   ctx.trace.intent = 'accuracy_lookup';
   let selected: AccuracyFact[];
   if (labels.length > 0) {
@@ -437,6 +448,136 @@ export async function answerAnalysis(
     units: labels,
     targets,
   });
+}
+
+const SUBMISSION_COUNT =
+  /몇\s*(번|회|개|건)\s*(냈|제출|했|풀었|썼)|제출\s*(횟수|한\s*거|몇)|(과제|활동지|숙제|기록지|보고서)\s*(을|를)?\s*(몇\s*(번|회|개|건)|횟수)/;
+const REVISION_REASON =
+  /(왜|이유|무슨|뭐가|어디가).{0,12}(수정|정정|바뀌|바뀐|바꿨|변경)|(수정|정정|변경)\s*(된|한|됐)?\s*(이유|내용|사유|문제|문항)|몇\s*번\s*문제/;
+
+/**
+ * 리포트 원문에만 있는 세부 내용: 과제 이름을 말한 질문(그 과제 행), 제출 횟수(분석 대상 과제 수),
+ * 채점 수정 이유(리포트의 수정 이력 절). 학생 본인 리포트 청크만 근거로 쓴다.
+ */
+async function reportDetail(
+  ctx: AnswerContext,
+  target: string,
+  periods: string[],
+  own: AccuracyFact[],
+): Promise<AnswerDraft | null> {
+  if (own.length === 0) return null;
+  const latest = [...new Set(own.map((fact) => fact.period ?? ''))]
+    .sort(comparePeriods)
+    .pop();
+  const scoped = own.filter((fact) =>
+    periods.length > 0
+      ? periods.includes(fact.period ?? '')
+      : fact.period === latest,
+  );
+  const label = studentLabel(ctx.access, target);
+  const search = async (query: string) =>
+    (
+      await ctx.documents.searchApprovedChunks({
+        access: ctx.access,
+        studentIds: [target],
+        asOf: ctx.asOf,
+        query,
+        limit: 30,
+        documentTypes: ['student_analysis'],
+      })
+    )
+      .map((result) => result.chunk)
+      .filter((chunk) => chunk.studentId === target);
+  // 내부 관리 번호처럼 보이는 칸(예: HK_HW_M2B_0908)은 답변에 싣지 않는다.
+  const rowText = (chunk: RagChunk) =>
+    (chunk.location.header ?? [])
+      .map((name, i) => [name, chunk.location.cells?.[i] ?? ''])
+      .filter(([, cell]) => !/^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(cell.trim()))
+      .map(([name, cell]) => `${name}: ${cell}`)
+      .join(' / ');
+  const chunkDraft = (text: string, chunks: RagChunk[]): AnswerDraft => ({
+    status: 'answered',
+    text,
+    citations: chunks.map((chunk) => ({ kind: 'chunk' as const, chunk })),
+    usedFacts: [],
+    instants: [ctx.asOf],
+    conversationUpdate: { selectedStudentId: target },
+  });
+
+  // 1) 과제 이름을 그대로 말한 질문 → 그 과제 행(같은 이름의 다른 학생 과제와 섞이지 않게 본인 리포트에서만)
+  const question = ctx.frame.compact;
+  const titles = [
+    ...new Set(own.flatMap((fact) => fact.assignments.map((a) => a.title))),
+  ].filter((title) => question.includes(compactText(title)));
+  if (titles.length === 1) {
+    const rows = (await search(titles[0])).filter(
+      (chunk) =>
+        chunk.location.kind === 'table_row' &&
+        (chunk.location.cells ?? []).some(
+          (cell) => compactText(cell) === compactText(titles[0]),
+        ),
+    );
+    if (rows.length > 0) {
+      ctx.trace.intent = 'report_assignment';
+      return chunkDraft(
+        `${rows[0].title} 기준 과제 기록입니다.\n${rowText(rows[0])}`,
+        [rows[0]],
+      );
+    }
+  }
+
+  // 2) 제출 횟수 → 그 기간 분석 대상 과제 수와 전체 문항 수
+  if (SUBMISSION_COUNT.test(ctx.frame.normalized) && scoped.length > 0) {
+    const period = scoped[0].period ?? '';
+    const sameSubject = scoped.filter((fact) => fact.period === period);
+    const assignments = [
+      ...new Set(
+        sameSubject.flatMap((fact) => fact.assignments.map((a) => a.title)),
+      ),
+    ];
+    const overall = sameSubject.find((fact) => dimensionOf(fact) === 'overall');
+    if (assignments.length > 0) {
+      ctx.trace.intent = 'report_submissions';
+      const lines = [
+        `${label} 학생 ${formatPeriod(period)} 분석 대상 과제는 ${assignments.length}회${overall ? `(총 ${overall.value.total}문항)` : ''}입니다.`,
+      ];
+      return draft(ctx, 'answered', lines, overall ? [overall] : sameSubject, {
+        periods: [period],
+        units: [],
+        targets: [target],
+      });
+    }
+  }
+
+  // 3) 채점 수정 이유 → 리포트의 수정 이력 절
+  if (REVISION_REASON.test(ctx.frame.normalized)) {
+    const notes = (await search(`${ctx.question} 수정 정정 변경 이력`)).filter(
+      (chunk) =>
+        chunk.revision > 1 &&
+        /수정|정정|변경/.test(chunk.location.section ?? '') &&
+        (periods.length === 0 ||
+          scoped.some((fact) => fact.documentId === chunk.documentId)),
+    );
+    if (notes.length > 0) {
+      ctx.trace.intent = 'report_revision';
+      const chunks = notes
+        .filter((chunk) => chunk.documentId === notes[0].documentId)
+        .sort(
+          (a, b) =>
+            Number(a.chunkId.split('#').pop()) -
+            Number(b.chunkId.split('#').pop()),
+        );
+      return chunkDraft(
+        `${chunks[0].title}(${chunks[0].revision}차 수정본) 수정 이력입니다.\n${chunks
+          .map((chunk) =>
+            chunk.location.kind === 'table_row' ? rowText(chunk) : chunk.text,
+          )
+          .join('\n')}`,
+        chunks,
+      );
+    }
+  }
+  return null;
 }
 
 function weakAreaAnswer(

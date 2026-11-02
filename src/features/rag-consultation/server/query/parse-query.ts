@@ -556,15 +556,37 @@ export function parseQuery(
     for (const token of new Set(unitTokens(unit)))
       tokenOwners.set(token, (tokenOwners.get(token) ?? 0) + 1);
   }
+  const tokenUnits = catalog.units.filter((unit) =>
+    unitTokens(unit).some(
+      (token) => tokenOwners.get(token) === 1 && withoutClasses.includes(token),
+    ),
+  );
+  // 줄여 말한 단원("수권이랑 해수 순환" ↔ "수권과 해수의 순환"): 두 글자 낱말(끝의 '의' 제외)이 두 개 이상
+  // 맞고 가장 많이 맞는 단원이 하나뿐일 때만.
+  const shortTokens = (unit: string) =>
+    unit
+      .split(/[\s·,/()\-–—]+|와|과|및/)
+      .map((token) => clean(token).replace(/의$/, ''))
+      .filter((token) => token.length >= 2 && !questionTypes.includes(token));
+  const shortHits = catalog.units.map((unit) => ({
+    unit,
+    hits: new Set(
+      shortTokens(unit).filter((token) => withoutClasses.includes(token)),
+    ).size,
+  }));
+  const bestShort = Math.max(0, ...shortHits.map((entry) => entry.hits));
+  const shortUnits =
+    bestShort >= 2
+      ? shortHits.filter((entry) => entry.hits === bestShort).map((e) => e.unit)
+      : [];
   const units =
     fullUnitMatches.length > 0
       ? fullUnitMatches
-      : catalog.units.filter((unit) =>
-          unitTokens(unit).some(
-            (token) =>
-              tokenOwners.get(token) === 1 && withoutClasses.includes(token),
-          ),
-        );
+      : tokenUnits.length > 0
+        ? tokenUnits
+        : shortUnits.length === 1
+          ? shortUnits
+          : [];
   // 과목(국어·수학·영어 등): 카탈로그 반의 과목명이 질문에 있으면 그 과목 자료로 좁힌다.
   const subjects = [
     ...new Set(
