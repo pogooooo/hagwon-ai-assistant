@@ -71,8 +71,17 @@ const factValueSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('schedule'), text: z.string().max(500) }),
   z.object({ kind: z.literal('text'), text: z.string().max(2000) }),
   z.object({
-    kind: z.literal('holiday'),
+    kind: z.literal('schedule_change'),
+    changeType: z.enum(['cancel', 'makeup']),
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    time: z.string().max(40).nullable(),
+    text: z.string().max(500),
+  }),
+  z.object({
+    kind: z.literal('enrollment'),
+    status: z.enum(['open', 'waitlist', 'closed']),
+    capacity: z.number().int().nonnegative().nullable(),
+    remaining: z.number().int().nonnegative().nullable(),
     text: z.string().max(500),
   }),
   z.object({
@@ -80,6 +89,12 @@ const factValueSchema = z.discriminatedUnion('kind', [
     correct: z.number().int().nonnegative(),
     total: z.number().int().positive(),
     unit: z.string().min(1).max(100),
+    dimension: z.enum(['unit', 'question_type', 'overall']).optional(),
+  }),
+  z.object({
+    kind: z.literal('weak_area'),
+    unit: z.string().min(1).max(100),
+    text: z.string().max(1000),
   }),
 ]);
 
@@ -127,15 +142,18 @@ const indexRequestSchema = z.object({
         subjectId: idString,
         factType: z.enum([
           'monthly_fee',
+          'material_fee',
           'schedule',
           'teacher',
           'facility',
           'makeup_policy',
-          'holiday',
+          'enrollment_status',
+          'schedule_change',
           'accuracy',
+          'weak_area',
+          'learning_guidance',
           'notice',
           'contact',
-          'capacity',
         ]),
         value: factValueSchema,
         period: z
@@ -146,6 +164,16 @@ const indexRequestSchema = z.object({
         validTo: isoString.nullable().optional(),
         approvalStatus: z.enum(['approved', 'pending_review']),
         assignmentIds: z.array(idString).max(200).optional(),
+        assignments: z
+          .array(
+            z.object({
+              assignmentId: idString,
+              title: z.string().min(1).max(200),
+            }),
+          )
+          .max(200)
+          .optional(),
+        evidence: z.string().max(500).nullable().optional(),
       }),
     )
     .max(500)

@@ -20,6 +20,7 @@ import {
   allowedNumbersFor,
   extractNumbers,
   findForbiddenIdentifiers,
+  findForbiddenNames,
   findUnsupportedNumbers,
 } from './answer/verify.ts';
 import { DEFAULT_RAG_CONFIG, type RagConfig } from './config.ts';
@@ -91,7 +92,7 @@ export function createRagConsultationService(
     if (flags.shareOrPermission || flags.sessionChange)
       return deny('SHARE_OR_PERMISSION_CHANGE');
     if (
-      frame.unauthorizedStudentCodes.length > 0 ||
+      frame.unauthorizedStudentRefs.length > 0 ||
       (studentIdHint !== undefined &&
         !access.allowedStudentIds.includes(studentIdHint))
     ) {
@@ -247,6 +248,15 @@ export function createRagConsultationService(
         studentCodePattern: ctx.config.studentCodePattern,
         allowedCodes,
       }).length > 0
+    ) {
+      return failClosed('WRONG_ENTITY');
+    }
+    if (
+      findForbiddenNames(
+        draft.text,
+        ctx.catalog.studentDirectory ?? [],
+        ctx.trace.targetStudentIds,
+      ).length > 0
     ) {
       return failClosed('WRONG_ENTITY');
     }

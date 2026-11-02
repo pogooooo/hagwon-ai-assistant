@@ -1,8 +1,9 @@
 /**
- * 원생 학습 분석 답변(정답률·문항 수·기간/단원/학생 비교).
- * - 점수·정답률은 3번 기능에서 확정된 사실만 사용하고 재계산·추정하지 않는다.
+ * 원생 학습 분석 답변(단원·유형·전체 정답률, 취약 영역, 기간/학생/단원 비교, 누적 추이).
+ * - 점수·정답률·취약 영역은 3번 기능에서 확정된 사실만 사용하고 재계산·추정하지 않는다.
+ * - 과거 성적은 분석 기간과 근거 숙제를 함께 제시한다(프로젝트 기준 4장).
  * - 원인·태도·미래 예측은 관찰 자료로 판단할 수 없으므로 보류한다.
- * - 비교는 각 기간/학생의 근거가 모두 있을 때만 결론을 내고, 표본·난도 한계를 함께 안내한다.
+ * - 비교는 각 기간/학생의 근거가 모두 있을 때만 결론을 내고, 난도·표본 한계를 함께 안내한다.
  */
 import {
   comparePeriods,
@@ -11,7 +12,7 @@ import {
   shiftPeriod,
   toKstDate,
 } from '../text/time.ts';
-import type { ApprovedFact } from '../types.ts';
+import type { AccuracyDimension, ApprovedFact } from '../types.ts';
 import {
   abstain,
   recordFacts,
@@ -19,14 +20,32 @@ import {
   type AnswerContext,
   type AnswerDraft,
 } from './context.ts';
-import { accuracyPercent, formatAccuracy } from './format.ts';
+import { accuracyPercent } from './format.ts';
 
 type AccuracyFact = ApprovedFact & {
-  value: { kind: 'accuracy'; correct: number; total: number; unit: string };
+  value: {
+    kind: 'accuracy';
+    correct: number;
+    total: number;
+    unit: string;
+    dimension?: AccuracyDimension;
+  };
+};
+type WeakAreaFact = ApprovedFact & {
+  value: { kind: 'weak_area'; unit: string; text: string };
 };
 
 function isAccuracy(fact: ApprovedFact): fact is AccuracyFact {
   return fact.value.kind === 'accuracy' && fact.period !== null;
+}
+function isWeakArea(fact: ApprovedFact): fact is WeakAreaFact {
+  return fact.value.kind === 'weak_area' && fact.period !== null;
+}
+function dimensionOf(fact: AccuracyFact): AccuracyDimension {
+  return fact.value.dimension ?? 'unit';
+}
+function percent(fact: AccuracyFact): number {
+  return accuracyPercent(fact.value.correct, fact.value.total);
 }
 
 const CAVEAT =
@@ -35,7 +54,9 @@ const CAVEAT =
 function resolvePeriods(ctx: AnswerContext): string[] {
   const { frame, state, asOf } = ctx;
   const { year, month } = toKstDate(asOf);
-  const explicit = frame.months.map((m) => makePeriod(year, m));
+  const explicit = frame.months.map((m) =>
+    makePeriod(m > month + 1 ? year - 1 : year, m),
+  );
   if (frame.relativePeriod === 'last_month')
     explicit.push(shiftPeriod(makePeriod(year, month), -1));
   if (frame.relativePeriod === 'this_month')
@@ -49,8 +70,9 @@ function resolvePeriods(ctx: AnswerContext): string[] {
   return [];
 }
 
-function resolveUnits(ctx: AnswerContext): string[] {
-  if (ctx.frame.units.length > 0) return ctx.frame.units;
+function resolveLabels(ctx: AnswerContext): string[] {
+  const requested = [...ctx.frame.units, ...ctx.frame.questionTypes];
+  if (requested.length > 0) return requested;
   if (
     ctx.frame.flags.elliptical &&
     ctx.state?.previousFrame?.domain === 'analysis'
@@ -60,45 +82,64 @@ function resolveUnits(ctx: AnswerContext): string[] {
   return [];
 }
 
+function labelOf(fact: AccuracyFact): string {
+  const dimension = dimensionOf(fact);
+  if (dimension === 'overall') return '전체';
+  if (dimension === 'question_type') return `${fact.value.unit} 유형`;
+  return fact.value.unit;
+}
+
 function line(ctx: AnswerContext, fact: AccuracyFact): string {
-  const label = studentLabel(ctx.access, fact.subjectId);
-  return `${label} 학생의 ${formatPeriod(fact.period ?? '')} ${fact.value.unit} 숙제 결과: ${formatAccuracy(fact.value)}.`;
+  const name = studentLabel(ctx.access, fact.subjectId);
+  const revision =
+    fact.revision > 1 ? ` (채점 수정 반영본 r${fact.revision})` : '';
+  return `${name} 학생 ${formatPeriod(fact.period ?? '')} ${labelOf(fact)}: ${fact.value.total}문항 중 ${fact.value.correct}문항 정답(정답률 ${percent(fact)}%)${revision}.`;
 }
 
-function latestPerUnit(facts: AccuracyFact[]): AccuracyFact[] {
-  const byKey = new Map<string, AccuracyFact>();
+/** 분석 기간과 근거 숙제를 함께 제시한다. */
+function assignmentLines(facts: readonly ApprovedFact[]): string[] {
+  const byPeriod = new Map<string, string[]>();
   for (const fact of facts) {
-    const key = `${fact.subjectId}|${fact.value.unit}`;
-    const existing = byKey.get(key);
-    if (
-      !existing ||
-      comparePeriods(fact.period ?? '', existing.period ?? '') > 0
-    )
-      byKey.set(key, fact);
+    if (!fact.period) continue;
+    const titles = byPeriod.get(fact.period) ?? [];
+    for (const assignment of fact.assignments) {
+      if (!titles.includes(assignment.title)) titles.push(assignment.title);
+    }
+    byPeriod.set(fact.period, titles);
   }
-  return [...byKey.values()];
+  return [...byPeriod.entries()]
+    .filter(([, titles]) => titles.length > 0)
+    .sort(([a], [b]) => comparePeriods(a, b))
+    .map(([period, titles]) => {
+      const shown = titles.slice(0, 3).join(', ');
+      const rest = titles.length > 3 ? ` 외 ${titles.length - 3}건` : '';
+      return `근거 숙제(${formatPeriod(period)}): ${shown}${rest}`;
+    });
 }
 
-function sortFacts(facts: AccuracyFact[]): AccuracyFact[] {
+function sortFacts<T extends ApprovedFact>(facts: T[]): T[] {
+  const rank = (fact: ApprovedFact) =>
+    fact.value.kind === 'accuracy'
+      ? ({ overall: 0, unit: 1, question_type: 2 } as const)[
+          fact.value.dimension ?? 'unit'
+        ]
+      : 3;
   return [...facts].sort(
     (a, b) =>
       a.subjectId.localeCompare(b.subjectId) ||
       comparePeriods(a.period ?? '', b.period ?? '') ||
-      a.value.unit.localeCompare(b.value.unit),
+      rank(a) - rank(b) ||
+      a.factId.localeCompare(b.factId),
   );
 }
 
 function notes(ctx: AnswerContext, facts: AccuracyFact[]): string[] {
   const result: string[] = [];
-  for (const percent of ctx.frame.percents) {
-    const matches = facts.some(
-      (fact) =>
-        accuracyPercent(fact.value.correct, fact.value.total) === percent,
-    );
-    if (!matches && facts.length > 0) {
+  for (const asked of ctx.frame.percents) {
+    if (facts.length > 0 && !facts.some((fact) => percent(fact) === asked)) {
       const latest = facts[facts.length - 1];
       result.push(
-        `문의하신 ${percent}%는 현재 확정된 값과 다릅니다. 최신 확정값은 ${accuracyPercent(latest.value.correct, latest.value.total)}%입니다.`,
+        `문의하신 ${asked}%는 현재 확정된 값과 다릅니다. 최신 확정값은 ${percent(latest)}%입니다.`,
       );
     }
   }
@@ -116,7 +157,7 @@ function draft(
   ctx: AnswerContext,
   status: 'answered' | 'partial',
   lines: string[],
-  used: AccuracyFact[],
+  used: ApprovedFact[],
   extras: {
     missing?: string[];
     derived?: number[];
@@ -127,7 +168,7 @@ function draft(
 ): AnswerDraft {
   return {
     status,
-    text: lines.join('\n'),
+    text: [...lines, ...assignmentLines(used)].join('\n'),
     citations: used.map((fact) => ({ kind: 'fact' as const, fact })),
     usedFacts: used,
     missingFields: status === 'partial' ? extras.missing : undefined,
@@ -157,6 +198,33 @@ function missingAbstain(what: string): AnswerDraft {
     [what],
     ['INSUFFICIENT_EVIDENCE'],
   );
+}
+
+function describeRequest(
+  ctx: AnswerContext,
+  targets: string[],
+  periods: string[],
+  labels: string[],
+): string {
+  const who = targets.map((id) => studentLabel(ctx.access, id)).join(', ');
+  const when = periods.map(formatPeriod).join(', ');
+  return (
+    [who && `${who} 학생`, when, labels.join(', ')].filter(Boolean).join(' ') ||
+    '요청하신 학습 결과'
+  );
+}
+
+/** 비교·추이에 쓸 기준: 요청한 단원/유형 → 전체 합계 → 단원별 순. */
+function seriesFacts(
+  facts: AccuracyFact[],
+  labels: string[],
+  requireAllPeriods: (fs: AccuracyFact[]) => boolean,
+): AccuracyFact[] {
+  if (labels.length > 0)
+    return facts.filter((fact) => labels.includes(fact.value.unit));
+  const overall = facts.filter((fact) => dimensionOf(fact) === 'overall');
+  if (overall.length > 0 && requireAllPeriods(overall)) return overall;
+  return facts.filter((fact) => dimensionOf(fact) === 'unit');
 }
 
 export async function answerAnalysis(
@@ -189,26 +257,25 @@ export async function answerAnalysis(
   }
 
   const periods = resolvePeriods(ctx);
-  const units = resolveUnits(ctx);
-  const allFacts = (
-    await ctx.facts.queryApprovedFacts({
-      access: ctx.access,
-      studentIds: targets,
-      factTypes: ['accuracy'],
-      asOf: ctx.asOf,
-    })
-  ).filter(isAccuracy);
-  recordFacts(ctx.trace, allFacts);
-  const facts = allFacts.filter(
-    (fact) =>
-      targets.includes(fact.subjectId) &&
-      (units.length === 0 || units.includes(fact.value.unit)),
-  );
+  const labels = resolveLabels(ctx);
+  const loaded = await ctx.facts.queryApprovedFacts({
+    access: ctx.access,
+    studentIds: targets,
+    factTypes: ['accuracy', 'weak_area'],
+    asOf: ctx.asOf,
+  });
+  recordFacts(ctx.trace, loaded);
+  const allAccuracy = loaded
+    .filter(isAccuracy)
+    .filter((fact) => targets.includes(fact.subjectId));
+  const weakAreas = loaded
+    .filter(isWeakArea)
+    .filter((fact) => targets.includes(fact.subjectId));
 
-  // 같은 학생·단원·기간에 동시에 유효한 승인 값이 서로 다르면 어느 쪽도 고르지 않는다.
+  // 같은 학생·지표·기간에 동시에 유효한 승인 값이 서로 다르면 어느 쪽도 고르지 않는다.
   const groups = new Map<string, Set<string>>();
-  for (const fact of facts) {
-    const key = `${fact.subjectId}|${fact.value.unit}|${fact.period}`;
+  for (const fact of allAccuracy) {
+    const key = `${fact.subjectId}|${dimensionOf(fact)}|${fact.value.unit}|${fact.period}`;
     const values = groups.get(key) ?? new Set<string>();
     values.add(`${fact.value.correct}/${fact.value.total}`);
     groups.set(key, values);
@@ -223,102 +290,211 @@ export async function answerAnalysis(
     );
   }
 
-  const wantsComparison = frame.flags.compare || frame.flags.trend;
+  const wantsComparison =
+    frame.flags.compare || frame.flags.trend || frame.flags.cumulative;
   if (wantsComparison && targets.length >= 2) {
     ctx.trace.intent = 'accuracy_compare_students';
-    return compareStudents(ctx, targets, periods, units, facts);
+    return compareStudents(ctx, targets, periods, labels, allAccuracy);
   }
-  if (wantsComparison && !(frame.flags.unitDimension && periods.length <= 1)) {
-    ctx.trace.intent = 'accuracy_compare_periods';
+  const unitComparison =
+    frame.flags.unitDimension && periods.length <= 1 && !frame.flags.cumulative;
+  if (wantsComparison && !unitComparison) {
+    ctx.trace.intent = frame.flags.cumulative
+      ? 'accuracy_cumulative'
+      : 'accuracy_compare_periods';
+    const available = [
+      ...new Set(allAccuracy.map((fact) => fact.period ?? '')),
+    ].sort(comparePeriods);
     const comparePeriodsList =
       periods.length >= 2
         ? periods
-        : periods.length === 1
-          ? [shiftPeriod(periods[0], -1), periods[0]]
-          : [...new Set(facts.map((fact) => fact.period ?? ''))]
-              .sort(comparePeriods)
-              .slice(-2);
-    return comparePeriodsFor(ctx, targets[0], comparePeriodsList, units, facts);
+        : frame.flags.cumulative
+          ? available.filter(
+              (period) =>
+                periods.length === 0 || comparePeriods(period, periods[0]) <= 0,
+            )
+          : periods.length === 1
+            ? [shiftPeriod(periods[0], -1), periods[0]]
+            : available.slice(-2);
+    return comparePeriodsFor(
+      ctx,
+      targets[0],
+      comparePeriodsList,
+      labels,
+      allAccuracy,
+    );
+  }
+
+  // 단일 조회
+  const inScope = (fact: ApprovedFact) =>
+    periods.length > 0 ? periods.includes(fact.period ?? '') : true;
+  const candidates = allAccuracy.filter(inScope);
+  const latestPeriod = (facts: ApprovedFact[]) =>
+    [...new Set(facts.map((fact) => fact.period ?? ''))]
+      .sort(comparePeriods)
+      .pop();
+
+  if (frame.flags.weakUnit && labels.length === 0) {
+    ctx.trace.intent = 'weak_area';
+    return weakAreaAnswer(
+      ctx,
+      targets,
+      periods,
+      candidates,
+      weakAreas.filter(inScope),
+      latestPeriod,
+    );
   }
 
   ctx.trace.intent = 'accuracy_lookup';
-  const selected =
-    periods.length > 0
-      ? facts.filter((fact) => periods.includes(fact.period ?? ''))
-      : latestPerUnit(facts);
-  const what = describeRequest(ctx, targets, periods, units);
+  let selected: AccuracyFact[];
+  if (labels.length > 0) {
+    selected = candidates.filter((fact) => labels.includes(fact.value.unit));
+  } else if (frame.flags.typeDimension) {
+    selected = candidates.filter(
+      (fact) => dimensionOf(fact) === 'question_type',
+    );
+  } else {
+    selected = candidates.filter(
+      (fact) => dimensionOf(fact) !== 'question_type',
+    );
+  }
+  if (periods.length === 0) {
+    // 기간을 말하지 않으면 학생별 가장 최근 확정 기간을 쓴다.
+    selected = targets.flatMap((target) => {
+      const own = selected.filter((fact) => fact.subjectId === target);
+      const latest = latestPeriod(own);
+      return own.filter((fact) => fact.period === latest);
+    });
+  }
+  const what = describeRequest(ctx, targets, periods, labels);
   if (selected.length === 0) return missingAbstain(what);
 
   const sorted = sortFacts(selected);
   const lines = sorted.map((fact) => line(ctx, fact));
   const missing: string[] = [];
-  for (const unit of units) {
+  for (const label of labels) {
     for (const target of targets) {
       if (
         !sorted.some(
-          (fact) => fact.value.unit === unit && fact.subjectId === target,
+          (fact) => fact.value.unit === label && fact.subjectId === target,
         )
       ) {
-        missing.push(`${studentLabel(ctx.access, target)} ${unit}`);
+        missing.push(`${studentLabel(ctx.access, target)} ${label}`);
       }
     }
   }
-  if (frame.flags.weakUnit && sorted.length >= 2 && targets.length === 1) {
-    const lowest = [...sorted].sort(
-      (a, b) =>
-        a.value.correct / a.value.total - b.value.correct / b.value.total,
-    )[0];
-    lines.push(
-      `확정 자료 중 정답률이 가장 낮은 단원은 ${lowest.value.unit}(${accuracyPercent(lowest.value.correct, lowest.value.total)}%)입니다. 숙제 결과 기준의 관찰값이며 원인을 뜻하지는 않습니다.`,
-    );
-  }
-  if (frame.flags.unitDimension && wantsComparison && sorted.length >= 2) {
-    const [a, b] = [...sorted].sort(
-      (x, y) =>
-        y.value.correct / y.value.total - x.value.correct / x.value.total,
-    );
-    const diff =
-      Math.round(
-        (accuracyPercent(a.value.correct, a.value.total) -
-          accuracyPercent(b.value.correct, b.value.total)) *
-          10,
-      ) / 10;
+  const derived: number[] = [];
+  const unitFacts = sorted.filter((fact) => dimensionOf(fact) !== 'overall');
+  if (frame.flags.unitDimension && wantsComparison && unitFacts.length >= 2) {
+    const [a, b] = [...unitFacts].sort((x, y) => percent(y) - percent(x));
+    const diff = Math.round((percent(a) - percent(b)) * 10) / 10;
+    derived.push(diff);
     lines.push(
       diff === 0
-        ? '두 단원의 정답률은 같습니다.'
-        : `${a.value.unit} 정답률이 ${b.value.unit}보다 ${diff}%p 높습니다. 단원마다 문항 수와 난도가 달라 단순 비교에는 한계가 있습니다.`,
+        ? '두 항목의 정답률은 같습니다.'
+        : `${labelOf(a)} 정답률이 ${labelOf(b)}보다 ${diff}%p 높습니다. 항목마다 문항 수와 난도가 달라 단순 비교에는 한계가 있습니다.`,
     );
-    lines.push(...notes(ctx, sorted));
-    return draft(ctx, missing.length ? 'partial' : 'answered', lines, sorted, {
-      missing,
-      derived: [diff],
-      periods,
-      units,
-      targets,
-    });
   }
+  if (missing.length > 0)
+    lines.push(`확인되지 않은 항목: ${missing.join(', ')}.`);
   lines.push(...notes(ctx, sorted));
   return draft(ctx, missing.length ? 'partial' : 'answered', lines, sorted, {
     missing,
+    derived,
     periods: periods.length
       ? periods
       : [...new Set(sorted.map((fact) => fact.period ?? ''))],
-    units,
+    units: labels,
     targets,
   });
 }
 
-function describeRequest(
+function weakAreaAnswer(
   ctx: AnswerContext,
   targets: string[],
   periods: string[],
-  units: string[],
-): string {
-  const who = targets.map((id) => studentLabel(ctx.access, id)).join(', ');
-  const when = periods.map(formatPeriod).join(', ');
-  return (
-    [who && `${who} 학생`, when, units.join(', ')].filter(Boolean).join(' ') ||
-    '요청하신 학습 결과'
+  accuracy: AccuracyFact[],
+  weakAreas: WeakAreaFact[],
+  latestPeriod: (facts: ApprovedFact[]) => string | undefined,
+): AnswerDraft {
+  const lines: string[] = [];
+  const used: ApprovedFact[] = [];
+  const missing: string[] = [];
+  for (const target of targets) {
+    const name = studentLabel(ctx.access, target);
+    const ownWeak = weakAreas.filter((fact) => fact.subjectId === target);
+    const period =
+      periods.length > 0
+        ? periods[periods.length - 1]
+        : latestPeriod(
+            ownWeak.length > 0
+              ? ownWeak
+              : accuracy.filter((fact) => fact.subjectId === target),
+          );
+    if (!period) {
+      missing.push(`${name} 학생 분석 자료`);
+      continue;
+    }
+    const reported = ownWeak.filter((fact) => fact.period === period);
+    if (reported.length > 0) {
+      // 3번 기능이 판정한 취약 영역을 그대로 전달하고, 해당 단원의 확정 수치를 함께 보여 준다.
+      for (const weak of reported) {
+        lines.push(
+          `${name} 학생 ${formatPeriod(period)} 리포트의 취약 영역: ${weak.value.unit} — ${weak.value.text}`,
+        );
+        used.push(weak);
+        const numbers = accuracy.find(
+          (fact) =>
+            fact.subjectId === target &&
+            fact.period === period &&
+            fact.value.unit === weak.value.unit,
+        );
+        if (numbers) {
+          lines.push(line(ctx, numbers));
+          used.push(numbers);
+        }
+      }
+      continue;
+    }
+    // 리포트에 취약 영역 판정이 없으면 확정 단원 정답률 중 가장 낮은 값을 관찰값으로만 안내한다.
+    const units = accuracy.filter(
+      (fact) =>
+        fact.subjectId === target &&
+        fact.period === period &&
+        dimensionOf(fact) === 'unit',
+    );
+    if (units.length === 0) {
+      missing.push(`${name} 학생 ${formatPeriod(period)} 분석 자료`);
+      continue;
+    }
+    const sortedUnits = [...units].sort((a, b) => percent(a) - percent(b));
+    lines.push(...sortFacts(units).map((fact) => line(ctx, fact)));
+    if (sortedUnits.length >= 2) {
+      const lowest = sortedUnits[0];
+      lines.push(
+        `확정 자료 중 정답률이 가장 낮은 단원은 ${lowest.value.unit}(${percent(lowest)}%)입니다. 숙제 결과 기준의 관찰값이며 원인을 뜻하지는 않습니다.`,
+      );
+    }
+    used.push(...units);
+  }
+  if (used.length === 0)
+    return missingAbstain(
+      describeRequest(ctx, targets, periods, ['취약 영역']),
+    );
+  if (missing.length > 0)
+    lines.push(`확인되지 않은 항목: ${missing.join(', ')}.`);
+  return draft(
+    ctx,
+    missing.length ? 'partial' : 'answered',
+    lines,
+    sortFacts(used),
+    {
+      missing,
+      periods: [...new Set(used.map((fact) => fact.period ?? ''))],
+      units: [],
+      targets,
+    },
   );
 }
 
@@ -326,92 +502,125 @@ function comparePeriodsFor(
   ctx: AnswerContext,
   target: string,
   periods: string[],
-  units: string[],
-  facts: AccuracyFact[],
+  labels: string[],
+  allFacts: AccuracyFact[],
 ): AnswerDraft {
-  const own = facts.filter((fact) => fact.subjectId === target);
+  const own = allFacts.filter((fact) => fact.subjectId === target);
+  const name = studentLabel(ctx.access, target);
+  if (periods.length < 2) {
+    const used = sortFacts(
+      seriesFacts(
+        own.filter((fact) => periods.includes(fact.period ?? '')),
+        labels,
+        () => true,
+      ),
+    );
+    if (used.length === 0)
+      return missingAbstain(describeRequest(ctx, [target], periods, labels));
+    return draft(
+      ctx,
+      'partial',
+      [
+        ...used.map((fact) => line(ctx, fact)),
+        '비교할 다른 기간의 확정 자료가 없어 변화 여부는 판단할 수 없습니다.',
+        ...notes(ctx, used),
+      ],
+      used,
+      {
+        missing: ['비교 기간 분석 자료'],
+        periods,
+        units: labels,
+        targets: [target],
+      },
+    );
+  }
+  const inPeriods = own.filter((fact) => periods.includes(fact.period ?? ''));
+  const coversAll = (facts: AccuracyFact[]) =>
+    periods.every((period) => facts.some((fact) => fact.period === period));
+  const series = seriesFacts(inPeriods, labels, coversAll);
   const byPeriod = periods.map((period) => ({
     period,
-    facts: own.filter((fact) => fact.period === period),
+    facts: series.filter((fact) => fact.period === period),
   }));
   const available = byPeriod.filter((entry) => entry.facts.length > 0);
-  const label = studentLabel(ctx.access, target);
   if (available.length === 0)
-    return missingAbstain(describeRequest(ctx, [target], periods, units));
+    return missingAbstain(describeRequest(ctx, [target], periods, labels));
 
   if (available.length < byPeriod.length) {
     const used = sortFacts(available.flatMap((entry) => entry.facts));
     const missing = byPeriod
       .filter((entry) => entry.facts.length === 0)
       .map((entry) => `${formatPeriod(entry.period)} 분석 자료`);
-    const lines = [
-      ...used.map((fact) => line(ctx, fact)),
-      `${missing.join(', ')}가 없어 기간 비교나 실력 변화 여부는 판단할 수 없습니다.`,
-      ...notes(ctx, used),
-    ];
-    return draft(ctx, 'partial', lines, used, {
-      missing,
-      periods,
-      units,
-      targets: [target],
-    });
+    return draft(
+      ctx,
+      'partial',
+      [
+        ...used.map((fact) => line(ctx, fact)),
+        `${missing.join(', ')}가 없어 기간 비교나 실력 변화 여부는 판단할 수 없습니다.`,
+        ...notes(ctx, used),
+      ],
+      used,
+      { missing, periods, units: labels, targets: [target] },
+    );
   }
 
-  const unitSets = byPeriod.map(
-    (entry) => new Set(entry.facts.map((fact) => fact.value.unit)),
-  );
-  const commonUnits = [...unitSets[0]]
-    .filter((unit) => unitSets.every((set) => set.has(unit)))
+  const keyOf = (fact: AccuracyFact) =>
+    `${dimensionOf(fact)}|${fact.value.unit}`;
+  const keySets = byPeriod.map((entry) => new Set(entry.facts.map(keyOf)));
+  const commonKeys = [...keySets[0]]
+    .filter((key) => keySets.every((set) => set.has(key)))
     .sort();
-  if (commonUnits.length === 0) {
+  if (commonKeys.length === 0) {
     const used = sortFacts(byPeriod.flatMap((entry) => entry.facts));
     return draft(
       ctx,
       'partial',
       [
         ...used.map((fact) => line(ctx, fact)),
-        '기간별로 같은 단원 자료가 없어 직접 비교할 수 없습니다.',
+        '기간별로 같은 항목 자료가 없어 직접 비교할 수 없습니다.',
       ],
       used,
-      { missing: ['동일 단원 비교 자료'], periods, units, targets: [target] },
+      {
+        missing: ['동일 항목 비교 자료'],
+        periods,
+        units: labels,
+        targets: [target],
+      },
     );
   }
 
   const used: AccuracyFact[] = [];
   const derived: number[] = [];
   const lines: string[] = [];
-  for (const unit of commonUnits) {
-    const series = byPeriod.map(
+  for (const key of commonKeys) {
+    const points = byPeriod.map(
       (entry) =>
-        entry.facts.find((fact) => fact.value.unit === unit) as AccuracyFact,
+        entry.facts.find((fact) => keyOf(fact) === key) as AccuracyFact,
     );
-    used.push(...series);
-    const parts = series.map(
+    used.push(...points);
+    const parts = points.map(
       (fact) =>
-        `${formatPeriod(fact.period ?? '')} ${fact.value.correct}/${fact.value.total}(${accuracyPercent(fact.value.correct, fact.value.total)}%)`,
+        `${formatPeriod(fact.period ?? '')} ${fact.value.correct}/${fact.value.total}(${percent(fact)}%)`,
     );
-    const first = series[0];
-    const last = series[series.length - 1];
     const diff =
       Math.round(
-        (accuracyPercent(last.value.correct, last.value.total) -
-          accuracyPercent(first.value.correct, first.value.total)) *
-          10,
+        (percent(points[points.length - 1]) - percent(points[0])) * 10,
       ) / 10;
     derived.push(Math.abs(diff));
     const direction =
       diff === 0
         ? '변화가 없습니다'
         : `${Math.abs(diff)}%p ${diff > 0 ? '높습니다' : '낮습니다'}`;
+    const span = points.length > 2 ? '첫 기간보다' : '이전 기간보다';
     lines.push(
-      `${label} 학생 ${unit}: ${parts.join(' → ')}. 이전 기간보다 정답률이 ${direction}.`,
+      `${name} 학생 ${labelOf(points[0])}: ${parts.join(' → ')}. ${span} 정답률이 ${direction}.`,
     );
   }
   lines.push(CAVEAT, ...notes(ctx, used));
   return draft(ctx, 'answered', lines, sortFacts(used), {
     derived,
     periods,
-    units: commonUnits,
+    units: labels,
     targets: [target],
   });
 }
@@ -420,35 +629,39 @@ function compareStudents(
   ctx: AnswerContext,
   targets: string[],
   periods: string[],
-  units: string[],
-  facts: AccuracyFact[],
+  labels: string[],
+  allFacts: AccuracyFact[],
 ): AnswerDraft {
   const period =
     periods[periods.length - 1] ??
-    [...new Set(facts.map((fact) => fact.period ?? ''))]
+    [...new Set(allFacts.map((fact) => fact.period ?? ''))]
       .sort(comparePeriods)
       .slice(-1)[0];
   if (!period)
-    return missingAbstain(describeRequest(ctx, targets, periods, units));
-  const inPeriod = facts.filter((fact) => fact.period === period);
-  const unitList =
-    units.length > 0
-      ? units
-      : [...new Set(inPeriod.map((fact) => fact.value.unit))].sort();
+    return missingAbstain(describeRequest(ctx, targets, periods, labels));
+  const inPeriod = allFacts.filter((fact) => fact.period === period);
+  const coversAll = (facts: AccuracyFact[]) =>
+    targets.every((target) => facts.some((fact) => fact.subjectId === target));
+  const series = seriesFacts(inPeriod, labels, coversAll);
+  const keys = [
+    ...new Set(series.map((fact) => `${dimensionOf(fact)}|${fact.value.unit}`)),
+  ].sort();
   const used: AccuracyFact[] = [];
   const lines: string[] = [];
   const missing: string[] = [];
-  for (const unit of unitList) {
+  for (const key of keys) {
     const rows = targets.map((target) => ({
       target,
-      fact: inPeriod.find(
-        (fact) => fact.subjectId === target && fact.value.unit === unit,
+      fact: series.find(
+        (fact) =>
+          fact.subjectId === target &&
+          `${dimensionOf(fact)}|${fact.value.unit}` === key,
       ),
     }));
     for (const row of rows) {
       if (!row.fact)
         missing.push(
-          `${studentLabel(ctx.access, row.target)} ${formatPeriod(period)} ${unit}`,
+          `${studentLabel(ctx.access, row.target)} ${formatPeriod(period)} ${key.split('|')[1]}`,
         );
       else {
         used.push(row.fact);
@@ -459,22 +672,20 @@ function compareStudents(
       .filter((row) => row.fact)
       .map((row) => row.fact as AccuracyFact);
     if (present.length === rows.length && present.length >= 2) {
-      const percents = present.map((fact) =>
-        accuracyPercent(fact.value.correct, fact.value.total),
-      );
+      const percents = present.map(percent);
       const same = percents.every((value) => value === percents[0]);
-      const labels = present
+      const names = present
         .map((fact) => studentLabel(ctx.access, fact.subjectId))
         .join(', ');
       lines.push(
         same
-          ? `${labels} 학생의 ${formatPeriod(period)} ${unit} 정답률은 모두 ${percents[0]}%로 같습니다. 같은 값이라도 각 학생의 별도 확정 기록입니다.`
-          : `${labels} 학생의 ${formatPeriod(period)} ${unit} 정답률은 서로 다릅니다.`,
+          ? `${names} 학생의 ${formatPeriod(period)} ${labelOf(present[0])} 정답률은 모두 ${percents[0]}%로 같습니다. 같은 값이라도 각 학생의 별도 확정 기록입니다.`
+          : `${names} 학생의 ${formatPeriod(period)} ${labelOf(present[0])} 정답률은 서로 다릅니다.`,
       );
     }
   }
   if (used.length === 0)
-    return missingAbstain(describeRequest(ctx, targets, [period], units));
+    return missingAbstain(describeRequest(ctx, targets, [period], labels));
   const status = missing.length > 0 ? 'partial' : 'answered';
   if (status === 'partial')
     lines.push(`확인되지 않은 항목: ${missing.join(', ')}.`);
@@ -482,7 +693,7 @@ function compareStudents(
   return draft(ctx, status, lines, sortFacts(used), {
     missing,
     periods: [period],
-    units: unitList,
+    units: labels,
     targets,
   });
 }

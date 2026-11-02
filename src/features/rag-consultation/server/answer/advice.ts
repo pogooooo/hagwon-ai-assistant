@@ -1,7 +1,8 @@
 /**
- * 학습 방향·서술형 상담처럼 생성 모델이 필요한 질문(질문당 최대 1회 호출).
- * 생성 전: 대상 확정·확정 사실 확보·공급자 가용성·개인정보 전송 승인 여부를 코드로 검사한다.
- * 생성 후: 출처·숫자·대상·금지 표현을 검사하고, 실패하면 재시도 없이 담당자 연결.
+ * 학습 방향 상담(원생별 분석 파일 기반).
+ * 1) 리포트에 강사가 확인한 학습 방향(learning_guidance)이 있으면 그대로 인용한다 → 생성 0회.
+ * 2) 없으면 확정 사실만 가명 처리해 생성 모델을 최대 1회 호출하고, 출력의 출처·숫자·대상·금지 표현을 검사한다.
+ *    공급자 장애·미승인·검증 실패는 재시도 없이 담당자 연결.
  */
 import { validateGeneratedOutput } from '../generation/validate-output.ts';
 import type { GenerationInput } from '../ports.ts';
@@ -22,15 +23,31 @@ import { allowedNumbersFor } from './verify.ts';
 const HANDOFF_TEXT =
   '자세한 학습 상담은 지금 자동으로 안내해 드리기 어려워 담당자에게 연결해 드리겠습니다. 확정된 정답률 같은 수치는 바로 질문해 주시면 안내해 드릴 수 있습니다.';
 
-function latestFacts(facts: ApprovedFact[]): ApprovedFact[] {
-  const byUnit = new Map<string, ApprovedFact>();
-  for (const fact of facts) {
-    if (fact.value.kind !== 'accuracy' || !fact.period) continue;
-    const existing = byUnit.get(fact.value.unit);
-    if (!existing || comparePeriods(fact.period, existing.period ?? '') > 0)
-      byUnit.set(fact.value.unit, fact);
+function latestPeriodOf(facts: ApprovedFact[]): string | undefined {
+  return [...new Set(facts.map((fact) => fact.period ?? '').filter(Boolean))]
+    .sort(comparePeriods)
+    .pop();
+}
+
+function valueLine(fact: ApprovedFact): string {
+  switch (fact.value.kind) {
+    case 'accuracy': {
+      const dimension = fact.value.dimension ?? 'unit';
+      const label =
+        dimension === 'overall'
+          ? '전체'
+          : dimension === 'question_type'
+            ? `${fact.value.unit} 유형`
+            : fact.value.unit;
+      return `${label}: ${factText(fact)}`;
+    }
+    case 'weak_area':
+      return `취약 영역 ${fact.value.unit}: ${fact.value.text}`;
+    case 'text':
+      return fact.value.text;
+    default:
+      return factText(fact);
   }
-  return [...byUnit.values()];
 }
 
 export async function answerAdvice(
@@ -49,24 +66,70 @@ export async function answerAdvice(
     };
   }
   const [target] = targets;
-  const facts = await ctx.facts.queryApprovedFacts({
-    access: ctx.access,
-    studentIds: targets,
-    factTypes: ['accuracy'],
-    asOf: ctx.asOf,
-  });
-  recordFacts(ctx.trace, facts);
-  const evidence = latestFacts(
-    facts.filter((fact) => fact.subjectId === target),
+  const loaded = (
+    await ctx.facts.queryApprovedFacts({
+      access: ctx.access,
+      studentIds: targets,
+      factTypes: ['accuracy', 'weak_area', 'learning_guidance'],
+      asOf: ctx.asOf,
+    })
+  ).filter((fact) => fact.subjectId === target && fact.period);
+  recordFacts(ctx.trace, loaded);
+
+  const period = latestPeriodOf(
+    loaded.filter((fact) => fact.factType === 'accuracy'),
   );
-  if (evidence.length === 0) {
+  if (!period) {
     return abstain(
       '상담에 사용할 확정된 학습 분석 자료가 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다.',
       'INSUFFICIENT_EVIDENCE',
       ['학습 분석 자료'],
     );
   }
+  const inPeriod = loaded.filter((fact) => fact.period === period);
+  const numbers = inPeriod.filter(
+    (fact) =>
+      fact.value.kind === 'accuracy' &&
+      (fact.value.dimension ?? 'unit') !== 'question_type',
+  );
+  const weakAreas = inPeriod.filter((fact) => fact.factType === 'weak_area');
+  const guidance = inPeriod.filter(
+    (fact) => fact.factType === 'learning_guidance',
+  );
+  const name = studentLabel(ctx.access, target);
 
+  // 1) 강사가 확인한 학습 방향이 있으면 인용(생성 0회)
+  if (guidance.length > 0) {
+    const weakUnits = new Set(
+      weakAreas.map((fact) =>
+        fact.value.kind === 'weak_area' ? fact.value.unit : '',
+      ),
+    );
+    const shownNumbers = numbers.filter(
+      (fact) =>
+        fact.value.kind === 'accuracy' &&
+        ((fact.value.dimension ?? 'unit') === 'overall' ||
+          weakUnits.has(fact.value.unit)),
+    );
+    const used = [...guidance, ...weakAreas, ...shownNumbers];
+    const lines = [
+      `${name} 학생 ${formatPeriod(period)} 분석 리포트 기준입니다.`,
+      ...shownNumbers.map((fact) => `· ${valueLine(fact)}`),
+      ...weakAreas.map((fact) => `· ${valueLine(fact)}`),
+      `담당 강사가 확인한 학습 방향: ${guidance.map((fact) => valueLine(fact)).join(' ')}`,
+    ];
+    return {
+      status: 'answered',
+      text: lines.join('\n'),
+      citations: used.map((fact) => ({ kind: 'fact' as const, fact })),
+      usedFacts: used,
+      instants: [ctx.asOf],
+      conversationUpdate: { selectedStudentId: target, selectedPeriod: period },
+    };
+  }
+
+  // 2) 승인된 학습 방향이 없으면 생성(최대 1회)
+  const evidence = [...numbers, ...weakAreas];
   const now = ctx.clock.now();
   const availability = ctx.generation.availability(now);
   if (availability !== 'available') {
@@ -78,39 +141,54 @@ export async function answerAdvice(
     return handoff(HANDOFF_TEXT, 'PERSONAL_DATA_TRANSFER_NOT_APPROVED');
   }
 
-  const guidance = (
+  const guidanceChunks = (
     await ctx.documents.searchApprovedChunks({
       access: ctx.access,
       studentIds: targets,
       asOf: ctx.asOf,
       query: evidence
-        .map((fact) => (fact.value.kind === 'accuracy' ? fact.value.unit : ''))
+        .map((fact) =>
+          fact.value.kind === 'accuracy' || fact.value.kind === 'weak_area'
+            ? fact.value.unit
+            : '',
+        )
         .join(' '),
       limit: 3,
       documentTypes: ['guidance'],
     })
   ).map((result) => result.chunk);
-  recordChunks(ctx.trace, guidance);
+  recordChunks(ctx.trace, guidanceChunks);
 
   // 외부 전송 시 실제 이름·ID 대신 가명 표기("학생")를 사용한다.
+  const directoryNames = (ctx.catalog.studentDirectory ?? []).flatMap(
+    (entry) => entry.names,
+  );
+  let question = ctx.question.replace(
+    new RegExp(ctx.config.studentCodePattern.source, 'gi'),
+    '학생',
+  );
+  for (const alias of [
+    ...ctx.access.studentRefs.flatMap((ref) => [
+      ref.displayLabel,
+      ...ref.aliases,
+    ]),
+    ...directoryNames,
+  ]) {
+    if (/[가-힣]/.test(alias) && alias.length >= 2)
+      question = question.split(alias).join('학생');
+  }
   const input: GenerationInput = {
     requestId: ctx.trace.requestId,
-    question: ctx.question.replace(
-      new RegExp(ctx.config.studentCodePattern.source, 'gi'),
-      '학생',
-    ),
+    question,
     facts: evidence.map((fact) => ({
       factId: fact.factId,
       sourceId: fact.sourceId,
       subjectLabel: '학생',
       factType: fact.factType,
       period: fact.period,
-      valueText:
-        fact.value.kind === 'accuracy'
-          ? `${fact.value.unit} ${factText(fact)}`
-          : factText(fact),
+      valueText: valueLine(fact),
     })),
-    sources: guidance.map((chunk) => ({
+    sources: guidanceChunks.map((chunk) => ({
       sourceId: chunk.sourceId,
       title: chunk.title,
       location: chunk.location.label,
@@ -136,13 +214,12 @@ export async function answerAdvice(
       'GENERATION_FAILED',
     ]);
 
-  const allowedNumbers = allowedNumbersFor({
-    facts: evidence,
-    instants: [ctx.asOf],
-  });
   const validation = validateGeneratedOutput(result.rawText, {
     allowedSourceIds: ctx.trace.generationInputSourceIds,
-    allowedNumbers,
+    allowedNumbers: allowedNumbersFor({
+      facts: evidence,
+      instants: [ctx.asOf],
+    }),
     studentCodePattern: ctx.config.studentCodePattern,
     allowedStudentCodes: [],
   });
@@ -160,19 +237,15 @@ export async function answerAdvice(
 
   const cited = new Set(validation.output.cited_source_ids);
   const usedFacts = evidence.filter((fact) => cited.has(fact.sourceId));
-  const usedChunks = guidance.filter((chunk) => cited.has(chunk.sourceId));
-  const label = studentLabel(ctx.access, target);
-  const factLines = evidence.map((fact) =>
-    fact.value.kind === 'accuracy'
-      ? `· ${formatPeriod(fact.period ?? '')} ${fact.value.unit}: ${factText(fact)}`
-      : `· ${factText(fact)}`,
+  const usedChunks = guidanceChunks.filter((chunk) =>
+    cited.has(chunk.sourceId),
   );
   return {
     status: 'answered',
     text: [
-      `${label} 학생의 확정된 학습 기록:`,
-      ...factLines,
-      validation.output.answer,
+      `${name} 학생의 확정된 학습 기록(${formatPeriod(period)}):`,
+      ...evidence.map((fact) => `· ${valueLine(fact)}`),
+      `참고 의견(자동 생성, 담당 강사 확인 전): ${validation.output.answer}`,
     ].join('\n'),
     citations: [
       ...usedFacts.map((fact) => ({ kind: 'fact' as const, fact })),
@@ -181,6 +254,6 @@ export async function answerAdvice(
     usedFacts,
     generated: true,
     instants: [ctx.asOf],
-    conversationUpdate: { selectedStudentId: target },
+    conversationUpdate: { selectedStudentId: target, selectedPeriod: period },
   };
 }

@@ -91,6 +91,8 @@ export interface StoredDocumentRevision {
   validFrom: number;
   validTo: number | null;
   approvedAt: number | null;
+  /** 이 revision 이 효력을 갖기 시작한 시각 = 승인 시각(없으면 유효 시작). 활성화 전에는 null. */
+  activatedAt: number | null;
   sourceId: string;
   status: DocumentStatus;
   contentHash: string;
@@ -107,6 +109,8 @@ export interface ChunkLocation {
   rowIndex?: number;
   header?: string[];
   paragraphIndex?: number;
+  /** 문서의 절 제목(## 제목) */
+  section?: string;
 }
 
 export interface RagChunk {
@@ -133,22 +137,56 @@ export interface RagChunk {
 
 export type FactType =
   | 'monthly_fee'
+  | 'material_fee'
   | 'schedule'
   | 'teacher'
   | 'facility'
   | 'makeup_policy'
-  | 'holiday'
+  | 'enrollment_status'
+  | 'schedule_change'
   | 'accuracy'
+  | 'weak_area'
+  | 'learning_guidance'
   | 'notice'
-  | 'contact'
-  | 'capacity';
+  | 'contact';
+
+/** unit: 단원별, question_type: 문항 유형별, overall: 전체 합계(3번 기능 산출) */
+export type AccuracyDimension = 'unit' | 'question_type' | 'overall';
 
 export type FactValue =
   | { kind: 'money'; amount: number; currency: 'KRW' }
   | { kind: 'schedule'; text: string }
   | { kind: 'text'; text: string }
-  | { kind: 'holiday'; date: string; text: string }
-  | { kind: 'accuracy'; correct: number; total: number; unit: string };
+  | {
+      kind: 'schedule_change';
+      changeType: 'cancel' | 'makeup';
+      /** YYYY-MM-DD (KST) */
+      date: string;
+      time: string | null;
+      text: string;
+    }
+  | {
+      kind: 'enrollment';
+      status: 'open' | 'waitlist' | 'closed';
+      capacity: number | null;
+      remaining: number | null;
+      text: string;
+    }
+  | {
+      kind: 'accuracy';
+      correct: number;
+      total: number;
+      /** 단원명·유형명, overall 이면 "전체" */
+      unit: string;
+      dimension?: AccuracyDimension;
+    }
+  | { kind: 'weak_area'; unit: string; text: string };
+
+/** 분석 사실의 근거 숙제(3·6번 기능). */
+export interface FactAssignment {
+  assignmentId: string;
+  title: string;
+}
 
 export interface ApprovedFactInput {
   factId: string;
@@ -166,6 +204,9 @@ export interface ApprovedFactInput {
   validTo?: string | null;
   approvalStatus: 'approved' | 'pending_review';
   assignmentIds?: string[];
+  assignments?: FactAssignment[];
+  /** 근거 문항 등 보충 설명(예: "5·7·12번 오답") */
+  evidence?: string | null;
 }
 
 export interface ApprovedFact {
@@ -183,12 +224,25 @@ export interface ApprovedFact {
   validTo: number | null;
   approvalStatus: 'approved' | 'pending_review';
   assignmentIds: string[];
+  assignments: FactAssignment[];
+  evidence: string | null;
 }
 
 export interface AcademyClass {
   classId: string;
   name: string;
   aliases: readonly string[];
+  subject?: string;
+  grade?: string;
+}
+
+/**
+ * 학원 원생 명부(서버 전용). 권한 밖 학생을 이름으로 지칭했는지 판별하는 데만 쓰며,
+ * 이름·존재 여부를 응답에 노출하지 않는다.
+ */
+export interface StudentDirectoryEntry {
+  studentId: string;
+  names: readonly string[];
 }
 
 /** 현재 사용자의 학원에 한정된 카탈로그. 다른 학원의 이름·반은 절대 포함하지 않는다. */
@@ -199,6 +253,9 @@ export interface AcademyCatalog {
   classes: readonly AcademyClass[];
   /** 학습 분석 단원명(예: 일차방정식, 함수). */
   units: readonly string[];
+  /** 학습 분석 문항 유형명(예: 계산, 서술형). */
+  questionTypes?: readonly string[];
+  studentDirectory?: readonly StudentDirectoryEntry[];
 }
 
 /** 대화 상태는 서버에만 저장한다(클라이언트가 보낸 값으로 복원하지 않음). */

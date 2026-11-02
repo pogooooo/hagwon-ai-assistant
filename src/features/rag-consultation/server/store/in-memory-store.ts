@@ -10,6 +10,8 @@
  * 5. 사실(fact)은 자신이 속한 문서 revision 이 활성일 때만 보인다.
  * 6. 승인된 새 revision 의 색인이 끝나지 않았거나 실패하면, 그 문서의 이전 revision 은 검색·조회에서 제외한다
  *    (검증되지 않은 구버전을 현재 값으로 답하지 않도록 보류 쪽으로 실패).
+ * 7. 조회 시각(asOf)에는 "그 시각까지 효력이 생긴 가장 높은 revision" 하나만 쓴다.
+ *    (실서비스의 asOf 는 현재 시각이므로 항상 최신 revision 만 보인다. 과거 시각 재현은 감사·테스트용.)
  */
 import { DEFAULT_RAG_CONFIG } from '../config.ts';
 import { buildChunks } from '../ingest/chunking.ts';
@@ -175,6 +177,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       validFrom: parseInstant(document.validFrom),
       validTo: parseOptionalInstant(document.validTo),
       approvedAt: parseOptionalInstant(document.approvedAt),
+      activatedAt: null,
       sourceId,
       status: 'indexing',
       contentHash: hash,
@@ -229,7 +232,12 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         validFrom: parseInstant(fact.validFrom),
         validTo: parseOptionalInstant(fact.validTo),
         approvalStatus: fact.approvalStatus,
-        assignmentIds: fact.assignmentIds ?? [],
+        assignmentIds:
+          fact.assignmentIds ??
+          fact.assignments?.map((a) => a.assignmentId) ??
+          [],
+        assignments: fact.assignments ?? [],
+        evidence: fact.evidence ?? null,
       })),
     );
     stored.status = 'indexed_verified';
@@ -270,6 +278,8 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       if (previous) previous.status = 'superseded';
     }
     stored.status = 'approved_active';
+    // 승인(공개) 시각부터 효력. 승인 시각이 없으면 유효 시작 시각.
+    stored.activatedAt = stored.approvedAt ?? stored.validFrom;
     this.activeRevision.set(documentId, revision);
     if ((this.pendingApproved.get(documentId) ?? 0) <= revision)
       this.pendingApproved.delete(documentId);
@@ -298,10 +308,19 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       if (input.revision !== undefined && stored.revision !== input.revision)
         continue;
       stored.status = input.reason;
-      if (this.activeRevision.get(stored.documentId) === stored.revision) {
-        this.activeRevision.delete(stored.documentId);
-      }
     }
+    // 남아 있는 활성화 이력 중 가장 높은 revision 을 최신으로 다시 계산한다(특정 revision 철회 시 롤백).
+    const remaining = [...this.revisions.values()]
+      .filter(
+        (stored) =>
+          stored.documentId === input.documentId &&
+          (stored.status === 'approved_active' ||
+            stored.status === 'superseded'),
+      )
+      .map((stored) => stored.revision);
+    if (remaining.length > 0)
+      this.activeRevision.set(input.documentId, Math.max(...remaining));
+    else this.activeRevision.delete(input.documentId);
     if (
       input.revision === undefined ||
       this.pendingApproved.get(input.documentId) === input.revision
@@ -330,15 +349,21 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
     return this.revisions.get(keyOf(documentId, revision))?.status ?? null;
   }
 
-  private activeRevisions(): StoredDocumentRevision[] {
-    const result: StoredDocumentRevision[] = [];
-    for (const [documentId, revision] of this.activeRevision) {
-      const pending = this.pendingApproved.get(documentId);
-      if (pending !== undefined && pending > revision) continue;
-      const stored = this.revisions.get(keyOf(documentId, revision));
-      if (stored && stored.status === 'approved_active') result.push(stored);
+  /** asOf 시각에 효력이 있는 문서별 최신 revision. */
+  private activeRevisions(asOf: number): StoredDocumentRevision[] {
+    const best = new Map<string, StoredDocumentRevision>();
+    for (const stored of this.revisions.values()) {
+      if (stored.status !== 'approved_active' && stored.status !== 'superseded')
+        continue;
+      if (stored.activatedAt === null || stored.activatedAt > asOf) continue;
+      const latest = this.activeRevision.get(stored.documentId) ?? 0;
+      const pending = this.pendingApproved.get(stored.documentId);
+      if (pending !== undefined && pending > latest) continue;
+      const current = best.get(stored.documentId);
+      if (!current || stored.revision > current.revision)
+        best.set(stored.documentId, stored);
     }
-    return result;
+    return [...best.values()];
   }
 
   async queryApprovedFacts(query: FactQuery): Promise<ApprovedFact[]> {
@@ -348,7 +373,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       Boolean(query.includeHistory) && query.access.canViewPublicHistory;
     const result: ApprovedFact[] = [];
 
-    for (const stored of this.activeRevisions()) {
+    for (const stored of this.activeRevisions(query.asOf)) {
       if (!canReadRecord(query.access, stored, targets)) continue;
       const facts =
         this.factsByRevision.get(keyOf(stored.documentId, stored.revision)) ??
@@ -379,7 +404,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   async searchApprovedChunks(query: ChunkSearchQuery): Promise<ScoredChunk[]> {
     const targets = restrictToAllowedStudents(query.access, query.studentIds);
     const candidates: RagChunk[] = [];
-    for (const stored of this.activeRevisions()) {
+    for (const stored of this.activeRevisions(query.asOf)) {
       if (!canReadRecord(query.access, stored, targets)) continue;
       if (!isValidAt(stored.validFrom, stored.validTo, query.asOf)) continue;
       if (
@@ -419,7 +444,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   }): Promise<SourceSummary | null> {
     const targets = restrictToAllowedStudents(input.access, input.studentIds);
     const at = input.effectiveAt ?? input.asOf;
-    for (const stored of this.activeRevisions()) {
+    for (const stored of this.activeRevisions(input.asOf)) {
       if (stored.sourceId !== input.sourceId) continue;
       if (!canReadRecord(input.access, stored, targets)) return null;
       const current = isValidAt(stored.validFrom, stored.validTo, at);
@@ -478,8 +503,16 @@ function factNeedles(fact: ApprovedFact): string[] {
       return [String(fact.value.amount)];
     case 'accuracy':
       return [fact.value.unit, `${fact.value.correct}`];
-    case 'holiday':
-      return [fact.value.date];
+    case 'schedule_change': {
+      const [, month, day] = fact.value.date.split('-').map(Number);
+      return [fact.value.date, `${month}월${day}일`];
+    }
+    case 'weak_area':
+      return [fact.value.unit.replace(/\s/g, '')];
+    case 'schedule':
+    case 'text':
+    case 'enrollment':
+      return [fact.value.text.replace(/\s/g, '').slice(0, 20)];
     default:
       return [];
   }

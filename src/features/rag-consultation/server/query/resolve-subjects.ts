@@ -25,7 +25,7 @@ export function resolveSubjects(input: {
   const { access, frame, state, studentIdHint } = input;
   const allowed = access.allowedStudentIds;
 
-  if (frame.unauthorizedStudentCodes.length > 0) return { kind: 'denied' };
+  if (frame.unauthorizedStudentRefs.length > 0) return { kind: 'denied' };
   if (studentIdHint !== undefined && !allowed.includes(studentIdHint))
     return { kind: 'denied' };
   if (allowed.length === 0) return { kind: 'denied' };

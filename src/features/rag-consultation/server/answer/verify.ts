@@ -3,8 +3,10 @@
  * 답변에 등장하는 숫자가 근거 사실·날짜·코드 계산값에서 왔는지, 다른 학생/학원 식별자가
  * 섞이지 않았는지 확인한다. 숫자 일치가 문장 전체의 참을 보장하지는 않는다.
  */
+import { mentionsName } from '../query/parse-query.ts';
+import { normalizeText } from '../text/normalize.ts';
 import { toKstDate } from '../text/time.ts';
-import type { ApprovedFact } from '../types.ts';
+import type { ApprovedFact, StudentDirectoryEntry } from '../types.ts';
 import { accuracyPercent } from './format.ts';
 
 const NUMBER_PATTERN = /(?<![A-Za-z가-힣_\d.])\d[\d,]*(?:\.\d+)?/g;
@@ -50,12 +52,32 @@ export function allowedNumbersFor(input: {
         allowed.add(value.total);
         allowed.add(accuracyPercent(value.correct, value.total));
         break;
-      case 'holiday':
+      case 'enrollment':
+        if (value.capacity !== null) allowed.add(value.capacity);
+        if (value.remaining !== null) allowed.add(value.remaining);
+        for (const number of extractNumbers(value.text)) allowed.add(number);
+        break;
+      case 'schedule_change':
+        for (const number of extractNumbers(
+          `${value.date} ${value.time ?? ''} ${value.text}`,
+        ))
+          allowed.add(number);
+        break;
+      case 'weak_area':
+        for (const number of extractNumbers(`${value.unit} ${value.text}`))
+          allowed.add(number);
+        break;
       case 'schedule':
       case 'text':
         for (const number of extractNumbers(value.text)) allowed.add(number);
         break;
     }
+    for (const assignment of fact.assignments ?? []) {
+      for (const number of extractNumbers(assignment.title))
+        allowed.add(number);
+    }
+    for (const number of extractNumbers(fact.evidence ?? ''))
+      allowed.add(number);
   }
   for (const instant of input.instants) addDateParts(allowed, instant);
   for (const number of input.derived ?? []) allowed.add(number);
@@ -82,4 +104,18 @@ export function findForbiddenIdentifiers(
   return [...text.toLowerCase().matchAll(pattern)]
     .map((match) => match[1].toUpperCase())
     .filter((code) => !allowed.has(code));
+}
+
+/** 답변에 대상이 아닌 원생의 이름(서버 명부 기준)이 들어 있는지 검사한다. */
+export function findForbiddenNames(
+  text: string,
+  directory: readonly StudentDirectoryEntry[],
+  allowedStudentIds: readonly string[],
+): string[] {
+  const normalized = normalizeText(text);
+  return directory
+    .filter((entry) => !allowedStudentIds.includes(entry.studentId))
+    .flatMap((entry) =>
+      entry.names.filter((name) => mentionsName(normalized, name)),
+    );
 }

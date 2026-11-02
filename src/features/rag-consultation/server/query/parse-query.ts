@@ -1,13 +1,16 @@
 /**
  * 규칙 기반 질의 해석(생성 API 호출 없음).
  *
- * 질문에 들어 있는 학생·반·단원·기간·숫자·부정/비교 연산자(Evidence Anchors)를
+ * 질문에 들어 있는 학생·반·단원·유형·기간·숫자·부정/비교 연산자(Evidence Anchors)를
  * 지우거나 바꾸지 않고 구조화한다. 해석이 애매하면 더 좁은 범위나 확인 질문을 택하도록
  * 플래그만 세우고, 최종 판단은 서비스 계층이 한다.
  */
 import {
   ANALYSIS_TERMS,
+  CUMULATIVE_TERMS,
+  GENERIC_ACADEMY_PREFIXES,
   RELATION_WORDS,
+  TOPIC_SUPPRESSION,
   type RagConfig,
   type TopicDefinition,
 } from '../config.ts';
@@ -35,6 +38,7 @@ export interface QueryFlags {
   prediction: boolean;
   compare: boolean;
   trend: boolean;
+  cumulative: boolean;
   previousRevision: boolean;
   generationRequest: boolean;
   countLimit: boolean;
@@ -42,6 +46,12 @@ export interface QueryFlags {
   weakUnit: boolean;
   elliptical: boolean;
   unitDimension: boolean;
+  /** "유형별"처럼 문항 유형 분석을 묻는지 */
+  typeDimension: boolean;
+  /** 보강 "일정"을 묻는지(보강 규정이 아니라) */
+  makeupSchedule: boolean;
+  /** 휴강을 묻는지 */
+  cancelSchedule: boolean;
 }
 
 export interface QueryFrame {
@@ -49,10 +59,13 @@ export interface QueryFrame {
   compact: string;
   /** 질문에 등장한 학생 코드(정규화된 대문자, 예: A01) */
   studentCodes: string[];
-  /** 서버가 내려준 허용 학생 별칭으로 해석된 학생 ID */
+  /** 서버가 내려준 허용 학생 별칭(코드·이름·형제 지칭)으로 해석된 학생 ID */
   matchedStudentIds: string[];
-  /** 허용 별칭으로 해석되지 않은 학생 코드(권한 밖이거나 존재하지 않음 — 구분하지 않는다) */
-  unauthorizedStudentCodes: string[];
+  /**
+   * 허용 범위 밖 학생 지칭(코드 또는 원생 명부의 이름).
+   * 권한 밖인지 존재하지 않는지는 구분하지 않고 같은 거부 응답을 쓴다.
+   */
+  unauthorizedStudentRefs: string[];
   /** 서버 별칭이 없는 형제 지시어(첫째/둘째 등) */
   unresolvedRelationWords: string[];
   selfReference: boolean;
@@ -61,17 +74,19 @@ export interface QueryFrame {
   classIds: string[];
   negatedClassIds: string[];
   explicitDates: ExplicitDate[];
+  /** 오늘/내일/모레 → 0/1/2 */
+  relativeDay: number | null;
+  relativeWeek: 'last_week' | 'this_week' | 'next_week' | null;
   months: number[];
   relativePeriod: 'last_month' | 'this_month' | null;
   units: string[];
+  questionTypes: string[];
   topics: TopicDefinition[];
   amountsKrw: number[];
   percents: number[];
   hasAnalysisTerms: boolean;
   flags: QueryFlags;
 }
-
-const SELF_WORDS = new Set(['우리', '저희', '본', '이', '해당', '제', '내']);
 
 function test(pattern: RegExp, text: string): boolean {
   pattern.lastIndex = 0;
@@ -135,38 +150,80 @@ function parseAmounts(text: string): number[] {
   return amounts;
 }
 
+const GRADE = /(초|중|고)[1-6]/;
+
+/**
+ * 반 이름·별칭 매칭. 같은 위치에서 더 긴 표현이 다른 반을 가리키면 짧은 쪽은 버린다
+ * (예: "고1 수학 특강" 은 "고1 수학" 반이 아니라 특강).
+ */
 function matchClasses(compact: string, catalog: AcademyCatalog) {
   const grades = unique(
     [...compact.matchAll(/(초|중|고)[1-6]/g)].map((m) => m[0]),
   );
-  const positive: string[] = [];
-  const negated: string[] = [];
+  interface Hit {
+    classId: string;
+    start: number;
+    end: number;
+    negated: boolean;
+  }
+  const hits: Hit[] = [];
   for (const klass of catalog.classes) {
     const name = compactText(klass.name);
-    const grade = name.match(/^(초|중|고)[1-6]/)?.[0] ?? null;
-    const core = name.replace(/^(초|중|고)[1-6]/, '').replace(/반$/, '');
-    if (grade && grades.length > 0 && !grades.includes(grade)) continue;
+    const grade = klass.grade
+      ? compactText(klass.grade)
+      : (name.match(GRADE)?.[0] ?? null);
+    const core = name.replace(GRADE, '').replace(/반$/, '');
     const keywords = unique(
-      [core, ...klass.aliases.map(compactText)].filter((k) => k.length >= 2),
+      [name, core, ...klass.aliases.map(compactText)]
+        .map((k) => k.replace(/[^0-9a-z가-힣]/g, ''))
+        .filter((k) => k.length >= 2),
     );
-    let isPositive = false;
-    let isNegated = false;
     for (const keyword of keywords) {
+      const keywordGrade = keyword.match(GRADE)?.[0] ?? null;
+      // 학년 없는 키워드는 질문에 다른 학년이 명시되면 쓰지 않는다.
+      if (
+        !keywordGrade &&
+        grade &&
+        grades.length > 0 &&
+        !grades.includes(grade)
+      )
+        continue;
       let index = compact.indexOf(keyword);
       while (index !== -1) {
         const after = compact.slice(index + keyword.length).replace(/^반/, '');
-        if (/^(이|가|은|는)?(아닌|아니고|말고|제외|빼고)/.test(after)) {
-          isNegated = true;
-        } else {
-          isPositive = true;
-        }
+        hits.push({
+          classId: klass.classId,
+          start: index,
+          end: index + keyword.length,
+          negated: /^(이|가|은|는)?(아닌|아니고|말고|제외|빼고)/.test(after),
+        });
         index = compact.indexOf(keyword, index + keyword.length);
       }
     }
-    if (isNegated) negated.push(klass.classId);
-    else if (isPositive) positive.push(klass.classId);
   }
-  return { positive, negated };
+  const kept = hits.filter(
+    (hit) =>
+      !hits.some(
+        (other) =>
+          other.classId !== hit.classId &&
+          other.start <= hit.start &&
+          other.end >= hit.end &&
+          other.end - other.start > hit.end - hit.start,
+      ),
+  );
+  const negated = unique(
+    kept.filter((hit) => hit.negated).map((hit) => hit.classId),
+  );
+  const positive = unique(
+    kept
+      .filter((hit) => !hit.negated && !negated.includes(hit.classId))
+      .map((hit) => hit.classId),
+  );
+  return {
+    positive,
+    negated,
+    spans: kept.map((hit) => [hit.start, hit.end] as const),
+  };
 }
 
 function matchAcademies(normalized: string, catalog: AcademyCatalog): boolean {
@@ -177,10 +234,59 @@ function matchAcademies(normalized: string, catalog: AcademyCatalog): boolean {
   );
   for (const match of normalized.matchAll(/([0-9a-z가-힣]+)\s*학원/g)) {
     const prefix = match[1];
-    if (SELF_WORDS.has(prefix)) continue;
+    if (GENERIC_ACADEMY_PREFIXES.includes(prefix)) continue;
     if (!own.has(prefix)) return true;
   }
   return false;
+}
+
+const NAME_SUFFIX =
+  '(이|가|는|은|의|도|랑|이랑|한테|에게|이는|이가|이의|이도|이한테|이네|네|씨|학생|군|양)?';
+
+/** 한글 이름 지칭 여부. 2글자 이름은 앞뒤가 다른 한글 단어의 일부가 아닐 때만 인정한다. */
+export function mentionsName(normalized: string, name: string): boolean {
+  const target = compactText(name);
+  if (!/[가-힣]/.test(target)) return false;
+  if (target.length >= 3)
+    return normalized.replace(/\s+/g, '').includes(target);
+  return new RegExp(`(^|[^가-힣])${target}${NAME_SUFFIX}(?![가-힣])`).test(
+    normalized,
+  );
+}
+
+function selectTopics(compact: string, config: RagConfig): TopicDefinition[] {
+  const matched = config.topics
+    .map((topic) => ({
+      topic,
+      terms: topic.terms.filter((term) => compact.includes(compactText(term))),
+    }))
+    .filter((entry) => entry.terms.length > 0);
+  const hasSpecific = (except: TopicDefinition) =>
+    matched.some(
+      (entry) =>
+        entry.topic !== except &&
+        entry.terms.some(
+          (term) => !(entry.topic.genericTerms ?? []).includes(term),
+        ),
+    );
+  let topics = matched
+    .filter(
+      (entry) =>
+        !(
+          entry.topic.genericTerms &&
+          entry.terms.every((term) =>
+            entry.topic.genericTerms?.includes(term),
+          ) &&
+          hasSpecific(entry.topic)
+        ),
+    )
+    .map((entry) => entry.topic);
+  for (const [dominant, suppressed] of TOPIC_SUPPRESSION) {
+    if (topics.some((topic) => topic.id === dominant)) {
+      topics = topics.filter((topic) => topic.id !== suppressed);
+    }
+  }
+  return topics;
 }
 
 export function parseQuery(
@@ -195,7 +301,7 @@ export function parseQuery(
   const normalized = normalizeText(question);
   const compact = normalized.replace(/\s+/g, '');
 
-  // 학생 코드와 서버 별칭
+  // 1) 학생 코드(합성 형식)
   const codePattern = new RegExp(config.studentCodePattern.source, 'g');
   const studentCodes = unique(
     [...normalized.matchAll(codePattern)].map((match) =>
@@ -203,7 +309,7 @@ export function parseQuery(
     ),
   );
   const matchedStudentIds: string[] = [];
-  const unauthorizedStudentCodes: string[] = [];
+  const unauthorizedStudentRefs: string[] = [];
   for (const code of studentCodes) {
     const owner = access.studentRefs.find((ref) =>
       ref.aliases.some((alias) => {
@@ -212,8 +318,26 @@ export function parseQuery(
       }),
     );
     if (owner) matchedStudentIds.push(owner.studentId);
-    else unauthorizedStudentCodes.push(code);
+    else unauthorizedStudentRefs.push(code);
   }
+
+  // 2) 이름·별칭(서버가 내려준 허용 학생 별칭 → 원생 명부 순으로 판별)
+  for (const ref of access.studentRefs) {
+    const names = [ref.displayLabel, ...ref.aliases].filter(
+      (alias) => !RELATION_WORDS.includes(alias),
+    );
+    if (names.some((name) => mentionsName(normalized, name)))
+      matchedStudentIds.push(ref.studentId);
+  }
+  for (const entry of catalog.studentDirectory ?? []) {
+    if (access.allowedStudentIds.includes(entry.studentId)) continue;
+    if (matchedStudentIds.includes(entry.studentId)) continue;
+    if (entry.names.some((name) => mentionsName(normalized, name))) {
+      unauthorizedStudentRefs.push(`name:${entry.studentId}`);
+    }
+  }
+
+  // 3) 형제 지칭(첫째/둘째 …)
   const unresolvedRelationWords: string[] = [];
   for (const word of RELATION_WORDS) {
     if (!compact.includes(word)) continue;
@@ -222,6 +346,7 @@ export function parseQuery(
     else unresolvedRelationWords.push(word);
   }
 
+  // 4) 날짜·기간
   const { dates, rest: withoutDates } = parseDates(normalized);
   const months = unique(
     [...withoutDates.matchAll(/(\d{1,2})\s*월/g)]
@@ -233,20 +358,76 @@ export function parseQuery(
     : test(/이번\s*달|이달|금월/g, normalized)
       ? 'this_month'
       : null;
+  const relativeWeek = test(/이번\s*주|금주|이번주/g, normalized)
+    ? 'this_week'
+    : test(/다음\s*주|차주/g, normalized)
+      ? 'next_week'
+      : test(/지난\s*주|저번\s*주/g, normalized)
+        ? 'last_week'
+        : null;
+  const relativeDay = test(/(^|\s)오늘/g, normalized)
+    ? 0
+    : test(/(^|\s)내일/g, normalized)
+      ? 1
+      : test(/(^|\s)모레/g, normalized)
+        ? 2
+        : null;
 
-  const units = catalog.units.filter((unit) =>
-    compact.includes(compactText(unit)),
+  // 5) 반 → (반 이름을 지운 문장에서) 단원·유형 → 주제
+  const stripped = compact.replace(/[^0-9a-z가-힣]/g, '');
+  const { positive, negated, spans } = matchClasses(stripped, catalog);
+  let withoutClasses = stripped;
+  for (const [start, end] of spans) {
+    withoutClasses = `${withoutClasses.slice(0, start)}${' '.repeat(end - start)}${withoutClasses.slice(end)}`;
+  }
+  const clean = (text: string) =>
+    compactText(text).replace(/[^0-9a-z가-힣]/g, '');
+  const questionTypes = (catalog.questionTypes ?? []).filter((type) =>
+    withoutClasses.includes(clean(type)),
   );
-  const topics = config.topics.filter((topic) =>
-    topic.terms.some((term) => compact.includes(compactText(term))),
-  );
-  const { positive, negated } = matchClasses(compact, catalog);
+  const units = catalog.units.filter((unit) => {
+    if (withoutClasses.includes(clean(unit))) return true;
+    const tokens = unit
+      .split(/[\s·,/()\-–—]+|와|과|및/)
+      .map(clean)
+      .filter((token) => token.length >= 3 && !questionTypes.includes(token));
+    return tokens.some((token) => withoutClasses.includes(token));
+  });
   const percents = [...normalized.matchAll(/(\d+(?:\.\d+)?)\s*%/g)].map((m) =>
     Number(m[1]),
   );
 
+  let topics = selectTopics(compact, config);
+  const policyWords = test(
+    /규정|기준|받을\s*수|신청|무조건|횟수|조건|어떻게|되나요|돼요|가능한가|가능해요/g,
+    normalized,
+  );
+  const scheduleWords =
+    dates.length > 0 ||
+    relativeWeek !== null ||
+    relativeDay !== null ||
+    test(/일정|언제|날짜|몇\s*시|잡혔|예정|있어요|있나요/g, normalized);
+  const makeupSchedule =
+    topics.some((topic) => topic.id === 'makeup') &&
+    scheduleWords &&
+    !policyWords;
+  if (makeupSchedule) {
+    const change = config.topics.find(
+      (topic) => topic.id === 'schedule_change',
+    );
+    topics = topics.filter(
+      (topic) => topic.id !== 'makeup' && topic.id !== 'schedule',
+    );
+    if (change && !topics.includes(change)) topics.push(change);
+  }
+  if (topics.some((topic) => topic.id === 'schedule_change')) {
+    topics = topics.filter(
+      (topic) => topic.id !== 'schedule' || test(/시간표|요일/g, normalized),
+    );
+  }
+
   const distinctStudentRefs =
-    unique(matchedStudentIds).length + unauthorizedStudentCodes.length;
+    unique(matchedStudentIds).length + unauthorizedStudentRefs.length;
   const selfReference =
     test(/(^|\s)(내|제|나의|저의)\s/g, normalized) ||
     test(/(우리|내|제)\s*(아이|애|자녀|딸|아들)/g, normalized);
@@ -255,7 +436,10 @@ export function parseQuery(
     crossTenant: matchAcademies(normalized, catalog),
     bulkStudent:
       test(/(모든|전체|전부|모두의)\s*(학생|원생|아이|회원)/g, normalized) ||
-      test(/(학생|원생)\s*(명단|목록|리스트|전원)/g, normalized),
+      test(
+        /(학생|원생)\s*(명단|목록|리스트|전원|연락처|전화번호)/g,
+        normalized,
+      ),
     shareOrPermission:
       test(
         /(아무나|누구나|외부인?|모두가)\s*(열|볼|보|접근|다운)/g,
@@ -281,9 +465,12 @@ export function parseQuery(
       (test(/(성적|점수|결과|정답률)\s*(으로|처럼)/g, normalized) ||
         test(/인\s*것처럼|라고\s*(답|해)/g, normalized)),
     causal: test(/원인|이유|때문|(^|\s)왜(\s|$)/g, normalized),
-    attitude: test(/집중력|태도|성실|의지|산만|게으|성격/g, normalized),
+    attitude: test(
+      /집중력|태도|성실|의지|산만|게으|성격|공부\s*안\s*하|딴짓/g,
+      normalized,
+    ),
     prediction: test(
-      /받을까|될까|나올까|오를까|떨어질까|예상|예측|전망/g,
+      /받을까|될까|나올까|오를까|떨어질까|예상|예측|전망|붙을까|갈\s*수\s*있을까/g,
       normalized,
     ),
     compare: test(
@@ -291,9 +478,10 @@ export function parseQuery(
       normalized,
     ),
     trend: test(
-      /좋아졌|나아졌|향상|올랐|늘었|나빠졌|떨어졌|낮아졌|높아졌|달라졌|변했|변화/g,
+      /좋아졌|나아졌|향상|올랐|늘었|나빠졌|떨어졌|낮아졌|높아졌|달라졌|변했|변화|추이/g,
       normalized,
     ),
+    cumulative: CUMULATIVE_TERMS.some((term) => compact.includes(term)),
     previousRevision:
       test(/(개정|변경|인상|인하|바뀌기)\s*전/g, normalized) ||
       test(
@@ -301,7 +489,7 @@ export function parseQuery(
         normalized,
       ),
     generationRequest: test(
-      /학습\s*방향|공부\s*방법|보완|보충|조언|어떻게\s*(하면|공부|해야)|서술형|자세(한|히)|생성해|상담해/g,
+      /학습\s*방향|공부\s*방법|보완|보충|조언|어떻게\s*(하면|공부|해야)|뭘\s*더\s*(해야|공부)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
       normalized,
     ),
     countLimit: test(/\d+\s*(번|회)|횟수|몇\s*번|한도|제한/g, normalized),
@@ -309,10 +497,16 @@ export function parseQuery(
       /무조건|자동으로|자동\s*승인|항상|반드시|언제나/g,
       normalized,
     ),
-    weakUnit: test(/취약|약한|부족한|못하는/g, normalized),
+    weakUnit: test(/취약|약한|약점|부족한|못하는/g, normalized),
     elliptical: test(/^(그럼|그러면|그리고|그건|그거)(\s|$)/g, normalized),
     unitDimension:
       test(/(두|여러|각|모든)\s*단원/g, normalized) || units.length >= 2,
+    typeDimension: test(/유형/g, normalized) || questionTypes.length > 0,
+    makeupSchedule,
+    cancelSchedule: test(
+      /휴강|휴원|쉬|수업\s*(하나요|있나요|있어요|해요|하는지|없)/g,
+      normalized,
+    ),
   };
 
   return {
@@ -320,7 +514,7 @@ export function parseQuery(
     compact,
     studentCodes,
     matchedStudentIds: unique(matchedStudentIds),
-    unauthorizedStudentCodes,
+    unauthorizedStudentRefs: unique(unauthorizedStudentRefs),
     unresolvedRelationWords,
     selfReference,
     groupReference: test(
@@ -331,17 +525,22 @@ export function parseQuery(
       /그\s*(아이|애|학생|친구)|걔|그때\s*말한|아까\s*말한/g,
       normalized,
     ),
-    classIds: positive.filter((id) => !negated.includes(id)),
+    classIds: positive,
     negatedClassIds: negated,
     explicitDates: dates,
+    relativeDay,
+    relativeWeek,
     months,
     relativePeriod,
     units,
+    questionTypes,
     topics,
     amountsKrw: parseAmounts(withoutDates),
     percents,
     hasAnalysisTerms:
-      ANALYSIS_TERMS.some((term) => compact.includes(term)) || units.length > 0,
+      ANALYSIS_TERMS.some((term) => compact.includes(term)) ||
+      units.length > 0 ||
+      questionTypes.length > 0,
     flags,
   };
 }

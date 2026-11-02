@@ -29,22 +29,38 @@ function splitCells(line: string): string[] {
     .map((cell) => cell.trim());
 }
 
+const HEADING = /^\s*(#{1,6})\s+(.+?)\s*#*\s*$/;
+const LIST_ITEM = /^\s*([-*•]|\d+[.)])\s+/;
+const RULE = /^\s*([-*_]\s*){3,}$/;
+
+/**
+ * 원문을 절(## 제목) · 문단 · 표 행 단위 블록으로 나눈다.
+ * 목록 항목은 줄을 유지해 항목 경계(예: 환불 구간)가 섞이지 않게 한다.
+ */
 export function splitIntoBlocks(text: string): RawBlock[] {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const blocks: RawBlock[] = [];
   let paragraph: string[] = [];
   let paragraphIndex = 0;
   let tableIndex = 0;
+  let section: string | undefined;
+  const label = (base: string) => (section ? `${section} · ${base}` : base);
 
   const flushParagraph = () => {
-    const joined = paragraph.join(' ').trim();
+    const joined = paragraph
+      .reduce((acc, line) => {
+        if (acc === '') return line;
+        return LIST_ITEM.test(line) ? `${acc}\n${line}` : `${acc} ${line}`;
+      }, '')
+      .trim();
     if (joined) {
       paragraphIndex += 1;
       blocks.push({
         location: {
           kind: 'paragraph',
-          label: `문단 ${paragraphIndex}`,
+          label: label(`문단 ${paragraphIndex}`),
           paragraphIndex,
+          section,
         },
         text: joined,
       });
@@ -55,6 +71,13 @@ export function splitIntoBlocks(text: string): RawBlock[] {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
+    const heading = line.match(HEADING);
+    if (heading) {
+      flushParagraph();
+      section = heading[2].replace(/[*_`]/g, '').trim();
+      i += 1;
+      continue;
+    }
     if (TABLE_LINE.test(line)) {
       flushParagraph();
       const tableLines: string[] = [];
@@ -75,20 +98,21 @@ export function splitIntoBlocks(text: string): RawBlock[] {
         blocks.push({
           location: {
             kind: 'table_row',
-            label: `표 ${tableIndex} · ${rowOffset + 1}행`,
+            label: label(`표 ${tableIndex} · ${rowOffset + 1}행`),
             tableIndex,
             rowIndex: rowOffset + 1,
             header,
+            section,
           },
           text: pairs.join(' / '),
         });
       });
       continue;
     }
-    if (line.trim() === '') {
+    if (line.trim() === '' || RULE.test(line)) {
       flushParagraph();
     } else {
-      paragraph.push(line.trim());
+      paragraph.push(line.trim().replace(/^>\s?/, ''));
     }
     i += 1;
   }
@@ -104,6 +128,7 @@ export function buildChunks(
   return splitIntoBlocks(text).map((block, index) => {
     const context = [
       `문서: ${revision.title}`,
+      block.location.section ? `절: ${block.location.section}` : null,
       revision.classId ? `반: ${revision.classId}` : null,
       `기간: ${formatValidity(revision.validFrom, revision.validTo)}`,
     ]

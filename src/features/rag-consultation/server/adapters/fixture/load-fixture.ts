@@ -139,8 +139,17 @@ function toFactValue(fact: FixtureFact): FactValue {
   if (fact.fact_type === 'schedule' && typeof raw === 'string')
     return { kind: 'schedule', text: raw };
   if (fact.fact_type === 'holiday' && typeof raw === 'string') {
+    // v1 합성 자료의 휴강 사실 → 휴보강(schedule_change) 형식
     const date = raw.match(/\d{4}-\d{2}-\d{2}/)?.[0];
-    if (date) return { kind: 'holiday', date, text: raw };
+    if (date) {
+      return {
+        kind: 'schedule_change',
+        changeType: 'cancel',
+        date,
+        time: null,
+        text: raw.replace(date, '').trim() || '휴강',
+      };
+    }
   }
   return { kind: 'text', text: String(raw) };
 }
@@ -154,7 +163,9 @@ export function toFactInput(fact: FixtureFact): ApprovedFactInput {
     academyId: fact.academy_id,
     subjectType: fact.subject_type,
     subjectId: fact.subject_id,
-    factType: fact.fact_type as FactType,
+    factType: (fact.fact_type === 'holiday'
+      ? 'schedule_change'
+      : fact.fact_type) as FactType,
     value: toFactValue(fact),
     period: fact.period,
     validFrom: fact.valid_from,

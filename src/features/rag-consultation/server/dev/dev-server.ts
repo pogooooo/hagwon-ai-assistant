@@ -3,7 +3,8 @@
  *
  *   npm run rag:dev
  *   curl -s localhost:8787/api/rag/query -H 'content-type: application/json' \
- *     -H 'x-dev-user: GUARDIAN_A' -d '{"question":"A01의 10월 일차방정식 정답률은?"}'
+ *     -H 'x-dev-user: GA_GUARDIAN_KIM' -d '{"question":"서윤이 10월 성적 알려주세요"}'
+ *   (계정 목록: __fixtures__/academies-v1/<학원>/users.json, __fixtures__/axr-synthetic-v1/users.json)
  *
  * - 127.0.0.1 에만 바인딩한다.
  * - x-dev-user 헤더로 합성 계정을 고르는 것은 이 dev 서버에서만 허용되는 모의 인증이다.
@@ -11,6 +12,12 @@
  */
 import { createServer } from 'node:http';
 
+import {
+  buildAcademiesStore,
+  createAcademyAccessScopePort,
+  createAcademyCatalogPort,
+  readAcademiesDataset,
+} from '../adapters/fixture/load-academies.ts';
 import {
   buildFixtureStore,
   createFixtureAccessScopePort,
@@ -33,14 +40,30 @@ const port = Number(process.env.RAG_DEV_PORT ?? 8787);
 const allowedOrigin =
   process.env.RAG_DEV_ALLOWED_ORIGIN ?? 'http://localhost:3000';
 
+// 두 합성 자료(v1 스모크셋 + 가상 학원 3곳)를 한 저장소에 올린다. 계정·학원 ID 는 서로 겹치지 않는다.
 const data = readFixtureData();
-const store = await buildFixtureStore(data);
+const academies = readAcademiesDataset();
+const store = await buildAcademiesStore(
+  academies,
+  await buildFixtureStore(data),
+);
+const v1Catalog = createFixtureCatalogPort(data);
+const academyCatalog = createAcademyCatalogPort(academies);
+const v1Access = createFixtureAccessScopePort(data);
+const academyAccess = createAcademyAccessScopePort(academies);
 const clock = new SystemClock();
 const logger = new ConsoleRagLogger();
 const service = createRagConsultationService({
   facts: store,
   documents: store,
-  catalog: createFixtureCatalogPort(data),
+  catalog: {
+    async getAcademyCatalog(academyId) {
+      return (
+        (await academyCatalog.getAcademyCatalog(academyId)) ??
+        v1Catalog.getAcademyCatalog(academyId)
+      );
+    },
+  },
   generation: createGenerationProviderFromEnv(process.env),
   handoff: new InMemoryHandoffStore(),
   conversations: new InMemoryConversationStore(),
@@ -51,7 +74,14 @@ const handler = createRagHttpHandler({
   service,
   clock,
   logger,
-  accessScope: createFixtureAccessScopePort(data),
+  accessScope: {
+    async resolveFromServerSession(session: { userId: string }) {
+      return (
+        (await academyAccess.resolveFromServerSession(session)) ??
+        v1Access.resolveFromServerSession(session)
+      );
+    },
+  },
   resolveSession: async (request) => {
     const userId = request.headers.get('x-dev-user');
     return userId ? { userId } : null;

@@ -17,7 +17,14 @@ import {
   GuardedGenerationProvider,
   MockGenerationProvider,
 } from '../generation/providers.ts';
-import type { GenerationPort } from '../ports.ts';
+import {
+  buildAcademiesStore,
+  createAcademyCatalogPort,
+  readAcademiesDataset,
+  toAcademyAccessScope,
+  type AcademiesDataset,
+} from '../adapters/fixture/load-academies.ts';
+import type { CatalogPort, GenerationPort } from '../ports.ts';
 import {
   createRagConsultationService,
   type RagQueryOutput,
@@ -26,12 +33,23 @@ import type { InMemoryRagStore } from '../store/in-memory-store.ts';
 import { parseInstant, toKstDate } from '../text/time.ts';
 import type { RagAccessScope } from '../types.ts';
 
-export interface TestEnv {
-  data: FixtureData;
+/** runQuery 가 필요로 하는 최소 환경(데이터셋 종류와 무관). */
+export interface QueryEnv {
   store: InMemoryRagStore;
+  catalog: CatalogPort;
+  resolveScope: (userId: string) => RagAccessScope;
+}
+
+export interface TestEnv extends QueryEnv {
+  data: FixtureData;
+}
+
+export interface AcademyEnv extends QueryEnv {
+  dataset: AcademiesDataset;
 }
 
 let cached: Promise<TestEnv> | null = null;
+let cachedAcademies: Promise<AcademyEnv> | null = null;
 
 /** 읽기 전용 회귀 테스트용 공유 저장소(변경 테스트는 freshEnv 사용). */
 export function sharedEnv(): Promise<TestEnv> {
@@ -42,7 +60,33 @@ export function sharedEnv(): Promise<TestEnv> {
 export async function freshEnv(): Promise<TestEnv> {
   const data = readFixtureData();
   const store = await buildFixtureStore(data);
-  return { data, store };
+  return {
+    data,
+    store,
+    catalog: createFixtureCatalogPort(data),
+    resolveScope: (userId) => scopeFor(data, userId),
+  };
+}
+
+/** 가상 학원 3곳 자료(academies-v1) 공유 환경. */
+export function academiesEnv(): Promise<AcademyEnv> {
+  cachedAcademies ??= (async () => {
+    const dataset = readAcademiesDataset();
+    const store = await buildAcademiesStore(dataset);
+    return {
+      dataset,
+      store,
+      catalog: createAcademyCatalogPort(dataset),
+      resolveScope: (userId: string) => {
+        const user = dataset.users.find(
+          (candidate) => candidate.user_id === userId,
+        );
+        if (!user) throw new Error(`unknown academy user ${userId}`);
+        return toAcademyAccessScope(user, dataset.students);
+      },
+    };
+  })();
+  return cachedAcademies;
 }
 
 export function scopeFor(data: FixtureData, userId: string): RagAccessScope {
@@ -81,11 +125,11 @@ export interface RunOptions {
 }
 
 export async function runQuery(
-  env: TestEnv,
+  env: QueryEnv,
   options: RunOptions,
 ): Promise<RagQueryOutput & { generationCalls: number }> {
   const now = parseInstant(options.asOf);
-  const access = scopeFor(env.data, options.userId);
+  const access = env.resolveScope(options.userId);
   const conversations =
     options.conversations ?? new InMemoryConversationStore();
   const conversationId = options.conversationId ?? 'conv-test';
@@ -99,7 +143,7 @@ export async function runQuery(
   const service = createRagConsultationService({
     facts: env.store,
     documents: env.store,
-    catalog: createFixtureCatalogPort(env.data),
+    catalog: env.catalog,
     generation: provider,
     handoff: options.handoff ?? new InMemoryHandoffStore(),
     conversations,

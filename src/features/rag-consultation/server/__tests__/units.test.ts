@@ -99,7 +99,7 @@ describe('정규화·질의 해석', () => {
   });
   test('허용 별칭 밖 학생 코드는 권한 밖으로 분류(존재 여부와 무관)', () => {
     const frame = parse('A01 성적');
-    assert.deepEqual(frame.unauthorizedStudentCodes, ['A01']);
+    assert.deepEqual(frame.unauthorizedStudentRefs, ['A01']);
   });
   test('"자료에 없음" 문장은 답이 아니다', () => {
     assert.equal(

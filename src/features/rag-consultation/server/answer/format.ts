@@ -21,10 +21,13 @@ export function factText(fact: ApprovedFact): string {
       return formatKrw(fact.value.amount);
     case 'accuracy':
       return formatAccuracy(fact.value);
-    case 'holiday':
     case 'schedule':
     case 'text':
+    case 'enrollment':
+    case 'schedule_change':
       return fact.value.text;
+    case 'weak_area':
+      return `${fact.value.unit}: ${fact.value.text}`;
     default:
       return '';
   }
