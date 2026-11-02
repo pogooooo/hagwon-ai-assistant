@@ -43,7 +43,9 @@
 - **새 런타임 의존성 0개.** 이미 설치된 `zod`(입력·출력 검증)와 `axios`(클라이언트)만 사용합니다.
 - **테스트**: Node 24 내장 `node:test` + TypeScript 타입 제거 실행(별도 테스트 프레임워크를 설치하지 않음). 이를 위해 `tsconfig.json` 에 `allowImportingTsExtensions` 를 켰습니다(`noEmit` 환경이라 빌드에는 영향 없음).
 - **저장소**: 메모리 구현(`InMemoryRagStore`). 운영 DB 가 정해지면 같은 포트(`ApprovedFactsPort`, `RagDocumentsPort`)로 교체합니다.
-- **검색**: 권한 필터를 통과한 후보 안에서만 계산하는 BM25(단어 + 한글 2-gram). 벡터 DB·임베딩·리랭커는 쓰지 않습니다(P1, 아래 6절).
+- **검색**: 권한 필터를 통과한 후보 안에서만 계산하는 BM25(단어 + 한글 2-gram)가 기본값입니다.
+  - 기술 조사 문서의 검색 기법(Kiwi 형태소 BM25, multilingual-e5-small 임베딩, Hybrid RRF, bge-reranker-v2-m3 재정렬, 점수 기반 보류)은 `InMemoryRagStore({ ranker })` 로 바꿔 끼울 수 있습니다(`server/retrieval/rankers.ts`, `confidence.ts`).
+  - 모델을 쓰는 기법은 **개발·평가 전용**입니다(`kiwi-nlp`, `@huggingface/transformers` 는 devDependencies). 서비스 기본 경로는 모델을 불러오지 않습니다.
 
 ---
 
@@ -130,6 +132,22 @@ RAG_GENERATION_PROVIDER=mock npm run rag:dev
 python3 -I src/features/rag-consultation/server/__fixtures__/axr-synthetic-v1/validate_fixtures.py
 ```
 
+### 로컬 모델 준비(검색 기법 비교 실험용, 선택)
+
+모델 파일은 저장소에 넣지 않고 `RAG_MODEL_CACHE_DIR`(기본 `~/.cache/axr-rag-models`)에 둡니다.
+
+Kiwi 모델(kiwipiepy_model 0.24.0, 약 88MB, PyPI 배포본):
+
+```bash
+mkdir -p ~/.cache/axr-rag-models/kiwi && cd ~/.cache/axr-rag-models/kiwi && curl -sSLO https://files.pythonhosted.org/packages/b8/b8/38c99548461844e0be45073cc84c58678024ccb8b5930cabfbaf2bbbe081/kiwipiepy_model-0.24.0.tar.gz && tar xzf kiwipiepy_model-0.24.0.tar.gz && mv kiwipiepy_model-0.24.0/kiwipiepy_model 0.24.0 && rm -rf kiwipiepy_model-0.24.0 kiwipiepy_model-0.24.0.tar.gz
+```
+
+임베딩·재정렬 모델(`Xenova/multilingual-e5-small`, `onnx-community/bge-reranker-v2-m3-ONNX`, q8, 합계 약 690MB)은 실험을 처음 실행할 때 Hugging Face 에서 자동으로 받습니다.
+
+```bash
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/paraphrase-eval.ts techniques
+```
+
 ### 환경 변수(서버 전용, `.env.example` 참고)
 
 | 이름                                                                        | 의미                                                   | 기본값     |
@@ -201,21 +219,22 @@ python3 -I src/features/rag-consultation/server/__fixtures__/axr-synthetic-v1/va
 | 자료 없음·충돌·대상 불명확·권한 부족·API 장애 처리       | 완료       | abstained / clarify / denied / handoff                                     |
 | 출처·버전·위치·수치·대상 사후 검사                       | 완료       | 인용 재조회, 숫자 ⊆ 근거·계산값, 다른 학생 코드 차단                       |
 | 수정·삭제·채점 변경 후 이전 근거 제외                    | 완료       | CounterMem식 같은 질문 재실행 테스트                                       |
-| 합성 데이터 로더, 단위·통합·권한·최신성·장애 테스트      | 완료       | 243개 테스트(가상 학원 3곳 90건 포함)                                      |
+| 합성 데이터 로더, 단위·통합·권한·최신성·장애 테스트      | 완료       | 249개 테스트(가상 학원 3곳 90건, 검색 순위 전략 포함)                      |
 | 문서화                                                   | 완료       | 이 문서                                                                    |
 | PDF/DOCX/HWPX/스캔 파싱                                  | **미구현** | 실제 형식 요구가 확인되지 않음. 현재는 텍스트/Markdown 표만 지원           |
 | 운영 DB·인증 연동, 서버 배포                             | **미구현** | 저장소에 대상이 없음(통합 차단 요소)                                       |
 
 ### P1 판단
 
-| 후보                              | 판단            | 근거                                                                                                                      |
-| --------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 한국어 형태소(Kiwi)·BM25 개선     | 보류            | 합성셋 81건에서 키워드 검색 실패가 없음. 별칭은 운영 사전으로 처리. 실제 질의 로그로 실패가 확인되면 E03/E25 비교         |
-| 로컬 임베딩·Hybrid+RRF·리랭커     | 보류            | 서버 CPU/RAM 미확인, BM25 실패 사례 없음. 모델 다운로드·추론 자원이 추가로 듦                                             |
-| Parent–Child / 중복 제거          | 보류            | 문서가 짧아 효과를 측정할 수 없음                                                                                         |
-| 답변 캐시                         | 보류            | 캐시가 없으면 오래된 답이 남을 위험도 없음. 도입 시 키 = 학원·actor·허용 학생·색인 세대(`indexGeneration`)·기준 시각 구간 |
-| 사용자별 호출 제한·일일 생성 한도 | 채택(간단 구현) | 무료 한도 보호와 장애 대응에 직접 필요. 다중 인스턴스에서는 공유 저장소로 교체 필요                                       |
-| Recall@K·p95·CPU/RAM 비교         | 미실행          | 실제 서버·데이터가 없어 측정 불가                                                                                         |
+| 후보                              | 판단                   | 근거                                                                                                                               |
+| --------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 한국어 형태소(Kiwi)·BM25 개선     | 구현·측정(기본값 아님) | 중학생 표현 100문항에서 Recall@3 62.4% → 69.4%, hit@1 37.6% → 36.5%. dev/test 결과가 엇갈려 채택 보류 ([REPORT.md](REPORT.md) 2장) |
+| 로컬 임베딩·Hybrid+RRF·리랭커     | 구현·측정(기본값 아님) | Dense 단독 hit@1 55.3%, Hybrid RRF 50.6~52.9%, +bge 재정렬 81.2%. 재정렬은 CPU 검색 1회 약 1.4초라 배포 서버 확인 후 결정          |
+| 점수 기반 보류(E18)               | 구현·측정(기본값 아님) | 재정렬 + 절대값 보류에서 RAG 틀린 답 64 → 31개, 대신 답할 수 있는 23개 보류                                                        |
+| Parent–Child / 중복 제거          | 보류                   | 문서가 짧아 효과를 측정할 수 없음                                                                                                  |
+| 답변 캐시                         | 보류                   | 캐시가 없으면 오래된 답이 남을 위험도 없음. 도입 시 키 = 학원·actor·허용 학생·색인 세대(`indexGeneration`)·기준 시각 구간          |
+| 사용자별 호출 제한·일일 생성 한도 | 채택(간단 구현)        | 무료 한도 보호와 장애 대응에 직접 필요. 다중 인스턴스에서는 공유 저장소로 교체 필요                                                |
+| Recall@K·p95·CPU/RAM 비교         | 미실행                 | 실제 서버·데이터가 없어 측정 불가                                                                                                  |
 
 P2(GraphRAG·Self-RAG·Agentic·반복 LLM 평가 등)는 구현하지 않았습니다.
 
@@ -227,7 +246,7 @@ P2(GraphRAG·Self-RAG·Agentic·반복 LLM 평가 등)는 구현하지 않았습
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `python3 -I …/axr-synthetic-v1/validate_fixtures.py` | PASS, 0 errors (81 cases / 18 docs / 17 facts / 9 users)                                 |
 | `python3 -I …/academies-v1/validate_academies.py`    | PASS, 0 errors (학원 3곳: 문서 84 / 사실 645 / 질문 90 / 원생 18 / 계정 27)              |
-| `npm test`                                           | **243개 통과, 0개 실패**                                                                 |
+| `npm test`                                           | **249개 통과, 0개 실패**                                                                 |
 | `npm run check` (ESLint·tsc·Prettier)                | 통과                                                                                     |
 | `npm run build` (정적 export)                        | 통과. `out/` 에 서버 코드·합성 학생 데이터·키 이름 없음(grep 확인)                       |
 | `npm run rag:dev` + curl                             | 가상 학원 계정으로 성적·취약 영역 답변 200, 권한 밖 원생 이름 질문 denied, 세션 없음 401 |
@@ -249,11 +268,13 @@ P2(GraphRAG·Self-RAG·Agentic·반복 LLM 평가 등)는 구현하지 않았습
   - 절 제목 번호를 숫자 검사가 막음
   - **즉 이 90건은 규칙을 다듬는 데 쓰였으므로 독립 평가가 아닙니다.** 새 학원 자료로 다시 검증해야 합니다.
 
-### 중학생 표현 100문항(`__fixtures__/academies-v1/eval/`)
+### 중학생 표현 100문항(`__fixtures__/academies-v1/eval/`) — 기술 조사 검색 기법 비교
 
-- 같은 저장소·권한 필터·BM25 조건에서 RAG만(검색 1위 문서) **12/100**, 엔진 보완 전 **60/100**, dev 실패 기반 유사어 보완 후 **87/100**.
-- 보완에 쓰지 않은 test 절반은 29 → 32/44로, 처음 보는 표현에 약한 한계가 남아 있습니다. 방법·결과·실패 원인은 [REPORT.md](REPORT.md) 2장에 있습니다.
-- 재현: `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/paraphrase-eval.ts <결과 이름>`
+- 같은 저장소·권한 필터에서 순위 전략만 바꿔 비교했습니다(엔진 규칙은 그대로).
+- 검색 hit@1: BM25 37.6% → Kiwi 36.5% / Dense 55.3% / Hybrid RRF 50.6~52.9% / **Hybrid + bge 재정렬 81.2%**.
+- RAG 답변(1위 청크 그대로): **12/100 → 36/100**, 점수 기반 보류를 더하면 46/100(틀린 답 64 → 31개).
+- 상담 엔진: 60/100 → 58~61/100(거의 변화 없음, 오답 대부분이 질문 해석 문제). 방법·결과·해석은 [REPORT.md](REPORT.md) 2장에 있습니다.
+- 재현: 위 "로컬 모델 준비" 참고.
 
 ### 합성 평가셋 81건
 

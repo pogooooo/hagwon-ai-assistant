@@ -33,8 +33,7 @@ import {
   canReadRecord,
   restrictToAllowedStudents,
 } from '../retrieval/access-filter.ts';
-import { bm25Rank } from '../retrieval/bm25.ts';
-import { tokenize } from '../text/normalize.ts';
+import { Bm25Ranker, type ChunkRanker } from '../retrieval/rankers.ts';
 import { isValidAt, parseInstant, parseOptionalInstant } from '../text/time.ts';
 import type {
   ApprovedFact,
@@ -54,6 +53,11 @@ export interface InMemoryRagStoreOptions {
   maxDocumentChars?: number;
   /** 테스트에서 색인 실패를 주입하기 위한 훅 */
   failIndexing?: (document: SourceDocumentInput) => boolean;
+  /**
+   * 권한 필터를 통과한 후보의 순위 전략(기본: 단어 + 한글 2-gram BM25).
+   * Kiwi·임베딩·RRF·재정렬 실험용(retrieval/rankers.ts). 후보 집합(보안 범위)은 바꾸지 않는다.
+   */
+  ranker?: ChunkRanker;
 }
 
 export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
@@ -65,6 +69,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   private readonly pendingApproved = new Map<string, number>();
   private readonly logger: RagLogger | undefined;
   private readonly maxDocumentChars: number;
+  private readonly ranker: ChunkRanker;
   private readonly failIndexing:
     ((document: SourceDocumentInput) => boolean) | undefined;
   private generation = 0;
@@ -74,6 +79,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
     this.maxDocumentChars =
       options.maxDocumentChars ?? DEFAULT_RAG_CONFIG.maxDocumentChars;
     this.failIndexing = options.failIndexing;
+    this.ranker = options.ranker ?? new Bm25Ranker();
   }
 
   /** 색인 세대. 문서 활성화·삭제 때마다 증가(캐시 키·관측용). */
@@ -420,18 +426,10 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         candidates.push(chunk);
       }
     }
-    const ranked = bm25Rank(
-      candidates.map((chunk) => ({
-        id: chunk.chunkId,
-        tokens: chunk.tokens,
-        chunk,
-      })),
-      tokenize(query.query),
-    );
-    return ranked.slice(0, query.limit).map(({ document, score }) => ({
-      chunk: document.chunk,
-      score,
-    }));
+    const ranked = await this.ranker.rank(candidates, query.query);
+    return ranked
+      .slice(0, query.limit)
+      .map(({ chunk, score }) => ({ chunk, score }));
   }
 
   async getCitableSource(input: {

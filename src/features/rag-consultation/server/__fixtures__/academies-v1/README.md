@@ -53,7 +53,7 @@
 
 - `eval/middle-school-paraphrase.jsonl`: 가온·새솔 중학생/방문자 계정의 구어체 질문 100개(답할 수 있는 85 + 보류 15). 문서에 정답 문구가 실제로 있는지 스크립트로 확인했습니다.
 - `also_valid_source_ids`: 작성자가 notes 에 "같은 문구가 다른 문서에도 있음"이라 적은 3문항의 대체 정답 문서.
-- `eval/results/1-before.json`(보완 전 엔진), `2-after.json`(보완 후 엔진): 문항별 결과·답변 전문. 비교 방법과 해석은 기능 폴더의 `REPORT.md` 2장.
+- `eval/results/techniques.json`: 기술 조사 검색 기법(BM25·Kiwi·e5 임베딩·RRF·bge 재정렬·점수 보류) 구성별 문항 결과(검색 순위·점수·엔진 답변). 비교 방법과 해석은 기능 폴더의 `REPORT.md` 2장.
 
 ## 한계
 

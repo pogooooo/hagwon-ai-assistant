@@ -122,8 +122,7 @@ export function resolveEffectiveTime(
   const date = frame.explicitDates[0];
   if (!date) return { at: asOf, explicitDay: null };
   const year = Number.isNaN(date.year) ? toKstDate(asOf).year : date.year;
-  const month = Number.isNaN(date.month) ? toKstDate(asOf).month : date.month;
-  const start = kstStartOfDay({ year, month, day: date.day });
+  const start = kstStartOfDay({ year, month: date.month, day: date.day });
   if (date.operator === 'before') return { at: start - 1, explicitDay: start };
   if (date.operator === 'at' && isSameKstDay(start, asOf))
     return { at: asOf, explicitDay: start };

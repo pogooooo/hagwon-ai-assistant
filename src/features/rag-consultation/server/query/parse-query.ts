@@ -116,11 +116,6 @@ function parseDates(text: string): { dates: ExplicitDate[]; rest: string } {
       regex: /(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/g,
       map: (m) => [m[1] ? Number(m[1]) : null, Number(m[2]), Number(m[3])],
     },
-    // 구어 "10일날": 달을 말하지 않으면 기준 시점의 달로 본다(month = NaN → resolveEffectiveTime 에서 채움).
-    {
-      regex: /(?<![\d월]\s*)(\d{1,2})\s*일\s*날/g,
-      map: (m) => [null, Number.NaN, Number(m[1])],
-    },
   ];
   for (const { regex, map } of patterns) {
     regex.lastIndex = 0;
@@ -134,11 +129,7 @@ function parseDates(text: string): { dates: ExplicitDate[]; rest: string } {
         : /^\s*(이전|전까지|까지)/.test(after)
           ? 'before'
           : 'at';
-      if (
-        (Number.isNaN(month) || (month >= 1 && month <= 12)) &&
-        day >= 1 &&
-        day <= 31
-      ) {
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
         dates.push({ year: year ?? Number.NaN, month, day, operator });
       }
       replacements.push([match.index, match.index + match[0].length]);
@@ -475,11 +466,9 @@ export function parseQuery(
     Number(m[1]),
   );
 
-  // "쉬는 시간"은 휴강(쉬다)이 아니다.
-  let topics = selectTopics(compact.replace(/쉬는시간/g, ''), config);
+  let topics = selectTopics(compact, config);
   const policyWords = test(
-    // 결석 사유·"해 줘요?"처럼 보강을 받을 수 있는지 묻는 말(dev 실패에서 보강)도 규정 질문으로 본다.
-    /규정|기준|받을\s*수|신청|무조건|횟수|조건|어떻게|되나요|돼요|가능한가|가능해요|해\s*줘|해\s*주(나|시|세)|빠지면|빠져야|빠졌|못\s*(가|갔)|결석|아파서|아프면|언제까지\s*(말|연락|알려)/g,
+    /규정|기준|받을\s*수|신청|무조건|횟수|조건|어떻게|되나요|돼요|가능한가|가능해요/g,
     normalized,
   );
   const scheduleWords =
@@ -583,15 +572,10 @@ export function parseQuery(
         normalized,
       ),
     generationRequest: test(
-      // "보충"은 중학생 구어로 보강 수업을 뜻하므로 "보충 학습/보충해야 할 부분"만 학습 상담으로 본다.
-      // "쌤이 뭐 하라고 했어?", "앞으로 공부 어떻게 하라고 돼 있어?"(dev 실패에서 보강)는 강사 학습 방향 질문이다.
-      /학습\s*방향|공부\s*방향|방향으로|방향\s*(좀|을|잡)|공부\s*방법|보완|보충\s*(학습|공부|해야|할\s*(점|부분|곳))|조언|어떻게\s*(하면|공부|해야|하라)|공부\s*(하면|시키면|해야)\s*(좋|될|할)|뭘\s*(더\s*)?(해야|공부)|(뭐|뭘)\s*(더\s*)?(하라|하래)|앞으로\s*(뭐|뭘|어떻게)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
+      /학습\s*방향|공부\s*방향|방향으로|방향\s*(좀|을|잡)|공부\s*방법|보완|보충|조언|어떻게\s*(하면|공부|해야)|공부\s*(하면|시키면|해야)\s*(좋|될|할)|뭘\s*(더\s*)?(해야|공부)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
       normalized,
     ),
-    countLimit: test(
-      /\d+\s*(번|회)|횟수|몇\s*번|한도|(?<!언)제한/g,
-      normalized,
-    ),
+    countLimit: test(/\d+\s*(번|회)|횟수|몇\s*번|한도|제한/g, normalized),
     unconditional: test(
       /무조건|자동으로|자동\s*승인|항상|반드시|언제나/g,
       normalized,

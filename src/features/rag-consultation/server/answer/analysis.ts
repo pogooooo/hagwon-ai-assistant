@@ -18,7 +18,6 @@ import {
   markMultiSubjectStudents,
   matchesRequestedSubject,
   subjectOf,
-  recordChunks,
   recordFacts,
   studentLabel,
   subjectTag,
@@ -246,72 +245,6 @@ function seriesFacts(
   return facts.filter((fact) => dimensionOf(fact) === 'unit');
 }
 
-/**
- * 월말 평가 점수: 3번 기능의 정형 사실(정답률)과 별도로 리포트 표에만 있는 값이므로 그 표 행을 그대로 인용한다.
- * (dev 실패에서 보강: "10월 월말 시험 몇 점 나왔어요?")
- */
-async function answerMonthlyExam(
-  ctx: AnswerContext,
-  target: string,
-): Promise<AnswerDraft> {
-  ctx.trace.intent = 'monthly_exam';
-  const results = await ctx.documents.searchApprovedChunks({
-    access: ctx.access,
-    studentIds: [target],
-    asOf: ctx.asOf,
-    query: '월말 평가 점수',
-    limit: 40,
-    documentTypes: ['student_analysis'],
-  });
-  const rows = results
-    .map((result) => result.chunk)
-    .filter(
-      (chunk) =>
-        chunk.studentId === target &&
-        chunk.location.kind === 'table_row' &&
-        /월말/.test(chunk.location.section ?? '') &&
-        (chunk.location.cells?.length ?? 0) > 1,
-    );
-  recordChunks(ctx.trace, rows);
-  const monthOf = (cells: string[]) =>
-    Number(cells[0]?.match(/(\d{1,2})\s*월/)?.[1] ?? Number.NaN);
-  const wanted = resolvePeriods(ctx).map((period) =>
-    Number(period.split('-')[1]),
-  );
-  const latest = Math.max(
-    ...rows
-      .map((chunk) => monthOf(chunk.location.cells ?? []))
-      .filter((month) => !Number.isNaN(month)),
-  );
-  const selected = rows.filter((chunk) => {
-    const month = monthOf(chunk.location.cells ?? []);
-    return wanted.length > 0 ? wanted.includes(month) : month === latest;
-  });
-  const name = studentLabel(ctx.access, target);
-  if (selected.length === 0) {
-    return abstain(
-      `${name} 학생의 요청하신 기간 월말 평가 점수는 확정된 분석 리포트에서 확인되지 않습니다. 담당자 상담으로 연결해 드릴 수 있습니다.`,
-      'INSUFFICIENT_EVIDENCE',
-      ['월말 평가 점수'],
-    );
-  }
-  const lines = selected.map((chunk) => {
-    const header = chunk.location.header ?? [];
-    const cells = chunk.location.cells ?? [];
-    return `${name} 학생 ${cells[0]}: ${cells
-      .slice(1)
-      .map((cell, index) => `${header[index + 1] ?? ''} ${cell}`.trim())
-      .join(', ')}`;
-  });
-  return {
-    status: 'answered',
-    text: [...lines, '(분석 리포트의 월말 평가 표 기준)'].join('\n'),
-    citations: selected.map((chunk) => ({ kind: 'chunk' as const, chunk })),
-    usedFacts: [],
-    instants: [ctx.asOf],
-  };
-}
-
 export async function answerAnalysis(
   ctx: AnswerContext,
   targets: string[],
@@ -339,15 +272,6 @@ export async function answerAnalysis(
       undefined,
       ['WRONG_ENTITY'],
     );
-  }
-
-  if (
-    /월말\s*(평가|시험|고사|테스트)/.test(frame.normalized) &&
-    targets.length === 1 &&
-    !frame.flags.compare &&
-    !frame.flags.trend
-  ) {
-    return answerMonthlyExam(ctx, targets[0]);
   }
 
   const periods = resolvePeriods(ctx);
