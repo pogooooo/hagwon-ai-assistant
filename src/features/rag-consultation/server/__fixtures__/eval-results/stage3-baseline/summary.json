@@ -1,0 +1,644 @@
+{
+  "label": "stage3-baseline",
+  "startedAt": "2026-11-02T13:30:40.217Z",
+  "node": "v24.19.0",
+  "platform": "linux/x64",
+  "runs": [
+    {
+      "suite": "v1-paraphrase-100",
+      "variant": "rag-bm25",
+      "n": 100,
+      "correct": 12,
+      "accuracy": 12,
+      "answerable": 85,
+      "falseAbstainRate": 2.4,
+      "unanswerable": 15,
+      "falseAnswerRate": 100,
+      "citationAccuracy": 38.6,
+      "contentAccuracy": 15.7,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 0,
+      "latencyMs": {
+        "p50": 2.1,
+        "p95": 3.9
+      },
+      "errorStages": {
+        "binding": 20,
+        "selection": 38,
+        "interpretation": 13,
+        "retrieval": 2,
+        "over_answer": 15
+      },
+      "byCategory": {
+        "fee": {
+          "n": 12,
+          "correct": 2,
+          "accuracy": 16.7
+        },
+        "material_fee": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "schedule": {
+          "n": 11,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "teacher": {
+          "n": 5,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "schedule_change": {
+          "n": 9,
+          "correct": 3,
+          "accuracy": 33.3
+        },
+        "makeup_policy": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "study_room": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "level_test": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "refund": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "enrollment": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "location_hours": {
+          "n": 3,
+          "correct": 1,
+          "accuracy": 33.3
+        },
+        "accuracy": {
+          "n": 10,
+          "correct": 2,
+          "accuracy": 20
+        },
+        "weak_area": {
+          "n": 5,
+          "correct": 1,
+          "accuracy": 20
+        },
+        "guidance": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "abstain": {
+          "n": 15,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "shuttle": {
+          "n": 5,
+          "correct": 1,
+          "accuracy": 20
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 85,
+          "correct": 12,
+          "accuracy": 14.1
+        },
+        "abstained": {
+          "n": 15,
+          "correct": 0,
+          "accuracy": 0
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 100,
+          "correct": 12,
+          "accuracy": 12
+        }
+      },
+      "resources": {
+        "indexBuildMs": 93,
+        "cpuMsTotal": 280,
+        "cpuMsPerCase": 3,
+        "rssBeforeMb": 101,
+        "rssPeakMb": 139
+      }
+    },
+    {
+      "suite": "v1-paraphrase-100",
+      "variant": "engine",
+      "n": 100,
+      "correct": 60,
+      "accuracy": 60,
+      "answerable": 85,
+      "falseAbstainRate": 5.9,
+      "unanswerable": 15,
+      "falseAnswerRate": 40,
+      "citationAccuracy": 77.5,
+      "contentAccuracy": 65,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 0,
+      "latencyMs": {
+        "p50": 1.1,
+        "p95": 7.9
+      },
+      "errorStages": {
+        "binding": 11,
+        "interpretation": 15,
+        "retrieval": 1,
+        "selection": 3,
+        "sufficiency": 2,
+        "over_answer": 6,
+        "guard": 2
+      },
+      "byCategory": {
+        "fee": {
+          "n": 12,
+          "correct": 10,
+          "accuracy": 83.3
+        },
+        "material_fee": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "schedule": {
+          "n": 11,
+          "correct": 7,
+          "accuracy": 63.6
+        },
+        "teacher": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "schedule_change": {
+          "n": 9,
+          "correct": 1,
+          "accuracy": 11.1
+        },
+        "makeup_policy": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "study_room": {
+          "n": 3,
+          "correct": 1,
+          "accuracy": 33.3
+        },
+        "level_test": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "refund": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "enrollment": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "location_hours": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "accuracy": {
+          "n": 10,
+          "correct": 8,
+          "accuracy": 80
+        },
+        "weak_area": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "guidance": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "abstain": {
+          "n": 15,
+          "correct": 9,
+          "accuracy": 60
+        },
+        "shuttle": {
+          "n": 5,
+          "correct": 1,
+          "accuracy": 20
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 85,
+          "correct": 51,
+          "accuracy": 60
+        },
+        "abstained": {
+          "n": 15,
+          "correct": 9,
+          "accuracy": 60
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 100,
+          "correct": 60,
+          "accuracy": 60
+        }
+      },
+      "resources": {
+        "indexBuildMs": 64,
+        "cpuMsTotal": 273,
+        "cpuMsPerCase": 3,
+        "rssBeforeMb": 140,
+        "rssPeakMb": 180
+      }
+    },
+    {
+      "suite": "v1-90",
+      "variant": "rag-bm25",
+      "n": 90,
+      "correct": 9,
+      "accuracy": 10,
+      "answerable": 57,
+      "falseAbstainRate": 0,
+      "unanswerable": 33,
+      "falseAnswerRate": 100,
+      "citationAccuracy": 71.9,
+      "contentAccuracy": 21.1,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 0,
+      "latencyMs": {
+        "p50": 2.8,
+        "p95": 4.5
+      },
+      "errorStages": {
+        "binding": 30,
+        "selection": 15,
+        "status": 2,
+        "over_answer": 33,
+        "interpretation": 1
+      },
+      "byCategory": {
+        "public_faq": {
+          "n": 16,
+          "correct": 5,
+          "accuracy": 31.3
+        },
+        "policy": {
+          "n": 6,
+          "correct": 1,
+          "accuracy": 16.7
+        },
+        "facility": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "student_report": {
+          "n": 18,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "learning_guidance": {
+          "n": 2,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "permission": {
+          "n": 7,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "table_cell": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "temporal_version": {
+          "n": 8,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "insufficiency": {
+          "n": 6,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "private_analysis": {
+          "n": 2,
+          "correct": 1,
+          "accuracy": 50
+        },
+        "entity_binding": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "api_failure": {
+          "n": 2,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "multi_turn": {
+          "n": 2,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "security": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "fee_revision": {
+          "n": 1,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "schedule": {
+          "n": 2,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "schedule_change": {
+          "n": 1,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "abstain": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "injection": {
+          "n": 2,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "handoff": {
+          "n": 1,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "clarify": {
+          "n": 1,
+          "correct": 0,
+          "accuracy": 0
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 54,
+          "correct": 9,
+          "accuracy": 16.7
+        },
+        "partial": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "abstained": {
+          "n": 15,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "handoff": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "clarify": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "denied": {
+          "n": 12,
+          "correct": 0,
+          "accuracy": 0
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 60,
+          "correct": 8,
+          "accuracy": 13.3
+        },
+        "holdout": {
+          "n": 30,
+          "correct": 1,
+          "accuracy": 3.3
+        }
+      },
+      "resources": {
+        "indexBuildMs": 73,
+        "cpuMsTotal": 303,
+        "cpuMsPerCase": 3,
+        "rssBeforeMb": 181,
+        "rssPeakMb": 190
+      }
+    },
+    {
+      "suite": "v1-90",
+      "variant": "engine",
+      "n": 90,
+      "correct": 90,
+      "accuracy": 100,
+      "answerable": 57,
+      "falseAbstainRate": 0,
+      "unanswerable": 33,
+      "falseAnswerRate": 0,
+      "citationAccuracy": 100,
+      "contentAccuracy": 100,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 3,
+      "latencyMs": {
+        "p50": 0.8,
+        "p95": 5.1
+      },
+      "errorStages": {},
+      "byCategory": {
+        "public_faq": {
+          "n": 16,
+          "correct": 16,
+          "accuracy": 100
+        },
+        "policy": {
+          "n": 6,
+          "correct": 6,
+          "accuracy": 100
+        },
+        "facility": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "student_report": {
+          "n": 18,
+          "correct": 18,
+          "accuracy": 100
+        },
+        "learning_guidance": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "permission": {
+          "n": 7,
+          "correct": 7,
+          "accuracy": 100
+        },
+        "table_cell": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "temporal_version": {
+          "n": 8,
+          "correct": 8,
+          "accuracy": 100
+        },
+        "insufficiency": {
+          "n": 6,
+          "correct": 6,
+          "accuracy": 100
+        },
+        "private_analysis": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "entity_binding": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "api_failure": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "multi_turn": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "security": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "fee_revision": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "schedule": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "schedule_change": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "abstain": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "injection": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "handoff": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "clarify": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 54,
+          "correct": 54,
+          "accuracy": 100
+        },
+        "partial": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "abstained": {
+          "n": 15,
+          "correct": 15,
+          "accuracy": 100
+        },
+        "handoff": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "clarify": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "denied": {
+          "n": 12,
+          "correct": 12,
+          "accuracy": 100
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 60,
+          "correct": 60,
+          "accuracy": 100
+        },
+        "holdout": {
+          "n": 30,
+          "correct": 30,
+          "accuracy": 100
+        }
+      },
+      "resources": {
+        "indexBuildMs": 54,
+        "cpuMsTotal": 193,
+        "cpuMsPerCase": 2,
+        "rssBeforeMb": 190,
+        "rssPeakMb": 207
+      }
+    }
+  ]
+}

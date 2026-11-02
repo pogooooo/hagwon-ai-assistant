@@ -144,7 +144,7 @@ describe('가상 학원 3곳 현실형 자료 회귀', () => {
             `필수 출처 누락: ${sourceId} / 실제 ${cited.join(', ')}`,
           );
         }
-        for (const factId of testCase.expected.fact_ids) {
+        for (const factId of testCase.expected.fact_ids ?? []) {
           assert.ok(
             trace.usedFactIds.includes(factId),
             `필수 사실 누락: ${factId} / 실제 ${trace.usedFactIds.join(', ')}`,
@@ -173,7 +173,7 @@ describe('가상 학원 3곳 현실형 자료 회귀', () => {
         const exact =
           new Set(cited).size === new Set(testCase.expected.source_ids).size &&
           new Set(trace.usedFactIds).size ===
-            new Set(testCase.expected.fact_ids).size;
+            new Set(testCase.expected.fact_ids ?? []).size;
         if (
           exact ||
           (answer.status !== 'answered' && answer.status !== 'partial')

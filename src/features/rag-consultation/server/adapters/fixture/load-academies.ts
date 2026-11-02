@@ -5,8 +5,24 @@
  *    테스트 러너와 dev 서버에서만 허용된다.
  * 형식은 __fixtures__/academies-v1/FORMAT.md 참고.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
+
+import { prepareFileDocument } from '../../ingest/ingest-file.ts';
+import {
+  PARSER_VERSION,
+  type OcrEngine,
+  type ParsedFile,
+} from '../../ingest/parsers/index.ts';
 
 import type { AccessScopePort, CatalogPort } from '../../ports.ts';
 import { InMemoryRagStore } from '../../store/in-memory-store.ts';
@@ -78,6 +94,19 @@ export interface AcademyDocument {
   };
   body: string;
   file: string;
+  /** v2: PDF·TXT 원본 파일(엔진은 이 파일을 파싱해 색인). Markdown 문서는 없음 */
+  source?: {
+    path: string;
+    fileName: string;
+    format: 'pdf_text' | 'pdf_scan' | 'txt';
+  };
+  /** v2 메타의 render 정보(시험 자료 생성 조건) */
+  render?: {
+    format: string;
+    layout?: string;
+    rotate?: number;
+    scan_quality?: string | null;
+  };
 }
 
 export interface AcademyFactJson {
@@ -98,7 +127,7 @@ export interface AcademyFactJson {
 
 export interface AcademyCase {
   case_id: string;
-  split: 'dev' | 'holdout';
+  split: 'dev' | 'holdout' | 'test';
   category: string;
   tags?: string[];
   input: {
@@ -107,14 +136,20 @@ export interface AcademyCase {
     as_of: string;
     session: Record<string, unknown>;
     api_state: 'ok' | '429' | '5xx' | 'timeout' | 'quota_exhausted';
+    /** v2: 같은 대화에서 먼저 보낸 질문 */
+    history?: Array<{ query: string }>;
   };
   expected: {
     status: string;
-    fact_ids: string[];
+    fact_ids?: string[];
     source_ids: string[];
     generation_budget_max: number;
     must_include?: string[];
     must_not_include?: string[];
+    /** v2: 함께 허용하는 결과 */
+    alternatives?: Array<{ status: string; must_include?: string[] }>;
+    evidence_quote?: string;
+    evidence_location?: string;
     notes?: string;
   };
 }
@@ -214,6 +249,33 @@ export function readAcademiesDataset(
         meta: meta as AcademyDocument['meta'],
         body,
         file: `${folder}/documents/${file}`,
+      });
+    }
+    // v2: <stem>.meta.json + 원본(<stem>.pdf 또는 <stem>.txt). HTML 원본은 엔진에 주지 않는다.
+    for (const file of readdirSync(join(base, 'documents'))
+      .filter((name) => name.endsWith('.meta.json'))
+      .sort()) {
+      const stem = file.slice(0, -'.meta.json'.length);
+      const meta = readJson<
+        AcademyDocument['meta'] & {
+          file_name: string;
+          render: NonNullable<AcademyDocument['render']>;
+        }
+      >(join(base, 'documents', file));
+      const format = meta.render.format as 'pdf_text' | 'pdf_scan' | 'txt';
+      const sourcePath = join(
+        base,
+        'documents',
+        `${stem}.${format === 'txt' ? 'txt' : 'pdf'}`,
+      );
+      if (!existsSync(sourcePath))
+        throw new Error(`원본 파일 없음(렌더링 필요): ${sourcePath}`);
+      dataset.documents.push({
+        meta,
+        body: '',
+        file: `${folder}/documents/${stem}.${format === 'txt' ? 'txt' : 'pdf'}`,
+        source: { path: sourcePath, fileName: meta.file_name, format },
+        render: meta.render,
       });
     }
     dataset.facts.push(
@@ -318,9 +380,94 @@ export function toAcademyDocumentInput(
   };
 }
 
+/** 파싱 결과 캐시(같은 파일·같은 파서 버전이면 다시 OCR 하지 않음). 평가 반복 실행용. */
+function parseCacheDir(): string {
+  return join(
+    process.env.RAG_MODEL_CACHE_DIR ??
+      join(homedir(), '.cache', 'axr-rag-models'),
+    'parse-cache',
+  );
+}
+
+export interface BuildStoreOptions {
+  /** OCR 엔진(없으면 필요할 때 tesseract.js). null 이면 OCR 끔 */
+  ocr?: OcrEngine | null;
+  /** 파싱 결과 캐시 사용(기본 true) */
+  cache?: boolean;
+  /** 문서별 파싱 결과를 받는다(파싱 정확도 보고용) */
+  onParsed?: (
+    document: AcademyDocument,
+    parsed: ParsedFile,
+    cached: boolean,
+  ) => void;
+}
+
+async function documentInput(
+  document: AcademyDocument,
+  options: BuildStoreOptions,
+): Promise<SourceDocumentInput> {
+  const base = toAcademyDocumentInput(document);
+  if (!document.source) return base;
+  const bytes = new Uint8Array(readFileSync(document.source.path));
+  const key = createHash('sha256')
+    .update(PARSER_VERSION)
+    .update(bytes)
+    .digest('hex');
+  const cachePath = join(parseCacheDir(), `${key}.json`);
+  const { text: _text, ...meta } = base;
+  void _text;
+  if (options.cache !== false && existsSync(cachePath)) {
+    const parsed = JSON.parse(readFileSync(cachePath, 'utf-8')) as ParsedFile;
+    options.onParsed?.(document, parsed, true);
+    return withParsed(meta, parsed, document.source.fileName);
+  }
+  const prepared = await prepareFileDocument(
+    meta,
+    { bytes, fileName: document.source.fileName },
+    { ocr: options.ocr },
+  );
+  options.onParsed?.(document, prepared.parsed, false);
+  if (options.cache !== false) {
+    mkdirSync(parseCacheDir(), { recursive: true });
+    writeFileSync(cachePath, JSON.stringify(prepared.parsed));
+  }
+  if (!prepared.document)
+    throw new Error(
+      `원본 파싱 실패: ${document.file} (${prepared.parsed.error})`,
+    );
+  return prepared.document;
+}
+
+function withParsed(
+  meta: Omit<SourceDocumentInput, 'text'>,
+  parsed: ParsedFile,
+  fileName: string,
+): SourceDocumentInput {
+  if (parsed.status === 'failed')
+    throw new Error(
+      `원본 파싱 실패(캐시): ${meta.documentId} (${parsed.error})`,
+    );
+  return {
+    ...meta,
+    text: parsed.text,
+    extraction: {
+      fileName,
+      format: parsed.format,
+      status: parsed.status,
+      pages: parsed.pages,
+      warnings: parsed.warnings.map((w) =>
+        [w.code, w.page ? `p${w.page}` : null, w.detail]
+          .filter(Boolean)
+          .join(':'),
+      ),
+    },
+  };
+}
+
 export async function buildAcademiesStore(
   dataset: AcademiesDataset,
   store: InMemoryRagStore = new InMemoryRagStore(),
+  options: BuildStoreOptions = {},
 ): Promise<InMemoryRagStore> {
   const ordered = [...dataset.documents].sort(
     (a, b) =>
@@ -336,7 +483,7 @@ export async function buildAcademiesStore(
       )
       .map(toAcademyFactInput);
     const result = await store.upsertIndexedRevision({
-      document: toAcademyDocumentInput(document),
+      document: await documentInput(document, options),
       facts,
       approve: document.meta.status === 'approved_active',
     });
