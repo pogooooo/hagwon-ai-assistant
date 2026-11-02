@@ -1,0 +1,1035 @@
+{
+  "label": "s4-r16-models",
+  "startedAt": "2026-11-02T14:32:58.289Z",
+  "node": "v22.23.4",
+  "platform": "linux/x64",
+  "runs": [
+    {
+      "suite": "v1-paraphrase-100",
+      "variant": "engine-dense",
+      "n": 100,
+      "correct": 73,
+      "accuracy": 73,
+      "answerable": 85,
+      "falseAbstainRate": 5.9,
+      "unanswerable": 15,
+      "falseAnswerRate": 20,
+      "citationAccuracy": 87.5,
+      "contentAccuracy": 77.5,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 0,
+      "latencyMs": {
+        "p50": 3.3,
+        "p95": 18.4
+      },
+      "errorStages": {
+        "binding": 9,
+        "interpretation": 6,
+        "sufficiency": 3,
+        "selection": 4,
+        "retrieval": 1,
+        "over_answer": 3,
+        "guard": 1
+      },
+      "byCategory": {
+        "fee": {
+          "n": 12,
+          "correct": 10,
+          "accuracy": 83.3
+        },
+        "material_fee": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "schedule": {
+          "n": 11,
+          "correct": 7,
+          "accuracy": 63.6
+        },
+        "teacher": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "schedule_change": {
+          "n": 9,
+          "correct": 6,
+          "accuracy": 66.7
+        },
+        "makeup_policy": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "study_room": {
+          "n": 3,
+          "correct": 1,
+          "accuracy": 33.3
+        },
+        "level_test": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "refund": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "enrollment": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "location_hours": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "accuracy": {
+          "n": 10,
+          "correct": 8,
+          "accuracy": 80
+        },
+        "weak_area": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "guidance": {
+          "n": 4,
+          "correct": 2,
+          "accuracy": 50
+        },
+        "abstain": {
+          "n": 15,
+          "correct": 12,
+          "accuracy": 80
+        },
+        "shuttle": {
+          "n": 5,
+          "correct": 3,
+          "accuracy": 60
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 85,
+          "correct": 61,
+          "accuracy": 71.8
+        },
+        "abstained": {
+          "n": 15,
+          "correct": 12,
+          "accuracy": 80
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 100,
+          "correct": 73,
+          "accuracy": 73
+        }
+      },
+      "resources": {
+        "indexBuildMs": 1571,
+        "cpuMsTotal": 29476,
+        "cpuMsPerCase": 295,
+        "rssBeforeMb": 103,
+        "rssPeakMb": 769
+      }
+    },
+    {
+      "suite": "v1-paraphrase-100",
+      "variant": "engine-dense-rerank",
+      "n": 100,
+      "correct": 76,
+      "accuracy": 76,
+      "answerable": 85,
+      "falseAbstainRate": 5.9,
+      "unanswerable": 15,
+      "falseAnswerRate": 13.3,
+      "citationAccuracy": 88.8,
+      "contentAccuracy": 80,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 0,
+      "latencyMs": {
+        "p50": 4.2,
+        "p95": 2173.8
+      },
+      "errorStages": {
+        "binding": 8,
+        "interpretation": 6,
+        "sufficiency": 3,
+        "retrieval": 1,
+        "selection": 3,
+        "over_answer": 2,
+        "guard": 1
+      },
+      "byCategory": {
+        "fee": {
+          "n": 12,
+          "correct": 10,
+          "accuracy": 83.3
+        },
+        "material_fee": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "schedule": {
+          "n": 11,
+          "correct": 7,
+          "accuracy": 63.6
+        },
+        "teacher": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "schedule_change": {
+          "n": 9,
+          "correct": 7,
+          "accuracy": 77.8
+        },
+        "makeup_policy": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "study_room": {
+          "n": 3,
+          "correct": 1,
+          "accuracy": 33.3
+        },
+        "level_test": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "refund": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "enrollment": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "location_hours": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "accuracy": {
+          "n": 10,
+          "correct": 8,
+          "accuracy": 80
+        },
+        "weak_area": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "guidance": {
+          "n": 4,
+          "correct": 2,
+          "accuracy": 50
+        },
+        "abstain": {
+          "n": 15,
+          "correct": 13,
+          "accuracy": 86.7
+        },
+        "shuttle": {
+          "n": 5,
+          "correct": 3,
+          "accuracy": 60
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 85,
+          "correct": 63,
+          "accuracy": 74.1
+        },
+        "abstained": {
+          "n": 15,
+          "correct": 13,
+          "accuracy": 86.7
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 100,
+          "correct": 76,
+          "accuracy": 76
+        }
+      },
+      "resources": {
+        "indexBuildMs": 67866,
+        "cpuMsTotal": 137498,
+        "cpuMsPerCase": 1375,
+        "rssBeforeMb": 721,
+        "rssPeakMb": 2381
+      }
+    },
+    {
+      "suite": "v1-90",
+      "variant": "engine-dense",
+      "n": 90,
+      "correct": 88,
+      "accuracy": 97.8,
+      "answerable": 57,
+      "falseAbstainRate": 0,
+      "unanswerable": 33,
+      "falseAnswerRate": 3,
+      "citationAccuracy": 98.2,
+      "contentAccuracy": 100,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 3,
+      "latencyMs": {
+        "p50": 1.8,
+        "p95": 14.7
+      },
+      "errorStages": {
+        "selection": 1,
+        "over_answer": 1
+      },
+      "byCategory": {
+        "public_faq": {
+          "n": 16,
+          "correct": 16,
+          "accuracy": 100
+        },
+        "policy": {
+          "n": 6,
+          "correct": 5,
+          "accuracy": 83.3
+        },
+        "facility": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "student_report": {
+          "n": 18,
+          "correct": 18,
+          "accuracy": 100
+        },
+        "learning_guidance": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "permission": {
+          "n": 7,
+          "correct": 7,
+          "accuracy": 100
+        },
+        "table_cell": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "temporal_version": {
+          "n": 8,
+          "correct": 8,
+          "accuracy": 100
+        },
+        "insufficiency": {
+          "n": 6,
+          "correct": 5,
+          "accuracy": 83.3
+        },
+        "private_analysis": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "entity_binding": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "api_failure": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "multi_turn": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "security": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "fee_revision": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "schedule": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "schedule_change": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "abstain": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "injection": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "handoff": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "clarify": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 54,
+          "correct": 54,
+          "accuracy": 100
+        },
+        "partial": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "abstained": {
+          "n": 15,
+          "correct": 14,
+          "accuracy": 93.3
+        },
+        "handoff": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "clarify": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "denied": {
+          "n": 12,
+          "correct": 12,
+          "accuracy": 100
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 60,
+          "correct": 60,
+          "accuracy": 100
+        },
+        "holdout": {
+          "n": 30,
+          "correct": 28,
+          "accuracy": 93.3
+        }
+      },
+      "resources": {
+        "indexBuildMs": 105,
+        "cpuMsTotal": 20557,
+        "cpuMsPerCase": 228,
+        "rssBeforeMb": 2382,
+        "rssPeakMb": 2400
+      }
+    },
+    {
+      "suite": "v1-90",
+      "variant": "engine-dense-rerank",
+      "n": 90,
+      "correct": 87,
+      "accuracy": 96.7,
+      "answerable": 57,
+      "falseAbstainRate": 0,
+      "unanswerable": 33,
+      "falseAnswerRate": 3,
+      "citationAccuracy": 98.2,
+      "contentAccuracy": 98.2,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 3,
+      "latencyMs": {
+        "p50": 1.5,
+        "p95": 20.4
+      },
+      "errorStages": {
+        "binding": 1,
+        "selection": 1,
+        "over_answer": 1
+      },
+      "byCategory": {
+        "public_faq": {
+          "n": 16,
+          "correct": 15,
+          "accuracy": 93.8
+        },
+        "policy": {
+          "n": 6,
+          "correct": 5,
+          "accuracy": 83.3
+        },
+        "facility": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "student_report": {
+          "n": 18,
+          "correct": 18,
+          "accuracy": 100
+        },
+        "learning_guidance": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "permission": {
+          "n": 7,
+          "correct": 7,
+          "accuracy": 100
+        },
+        "table_cell": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "temporal_version": {
+          "n": 8,
+          "correct": 8,
+          "accuracy": 100
+        },
+        "insufficiency": {
+          "n": 6,
+          "correct": 5,
+          "accuracy": 83.3
+        },
+        "private_analysis": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "entity_binding": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "api_failure": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "multi_turn": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "security": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "fee_revision": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "schedule": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "schedule_change": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "abstain": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "injection": {
+          "n": 2,
+          "correct": 2,
+          "accuracy": 100
+        },
+        "handoff": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        },
+        "clarify": {
+          "n": 1,
+          "correct": 1,
+          "accuracy": 100
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 54,
+          "correct": 53,
+          "accuracy": 98.1
+        },
+        "partial": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "abstained": {
+          "n": 15,
+          "correct": 14,
+          "accuracy": 93.3
+        },
+        "handoff": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "clarify": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "denied": {
+          "n": 12,
+          "correct": 12,
+          "accuracy": 100
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 60,
+          "correct": 60,
+          "accuracy": 100
+        },
+        "holdout": {
+          "n": 30,
+          "correct": 27,
+          "accuracy": 90
+        }
+      },
+      "resources": {
+        "indexBuildMs": 75,
+        "cpuMsTotal": 41254,
+        "cpuMsPerCase": 458,
+        "rssBeforeMb": 2401,
+        "rssPeakMb": 2482
+      }
+    },
+    {
+      "suite": "v2-dev",
+      "variant": "engine-dense",
+      "n": 153,
+      "correct": 113,
+      "accuracy": 73.9,
+      "answerable": 109,
+      "falseAbstainRate": 4.6,
+      "unanswerable": 44,
+      "falseAnswerRate": 25,
+      "citationAccuracy": 87.5,
+      "contentAccuracy": 77.9,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 2,
+      "latencyMs": {
+        "p50": 2.2,
+        "p95": 19.4
+      },
+      "errorStages": {
+        "binding": 10,
+        "selection": 7,
+        "guard": 1,
+        "generation": 1,
+        "over_answer": 11,
+        "interpretation": 6,
+        "retrieval": 2,
+        "sufficiency": 1,
+        "status": 1
+      },
+      "byCategory": {
+        "academy_info": {
+          "n": 6,
+          "correct": 3,
+          "accuracy": 50
+        },
+        "course_info": {
+          "n": 7,
+          "correct": 3,
+          "accuracy": 42.9
+        },
+        "fee": {
+          "n": 8,
+          "correct": 8,
+          "accuracy": 100
+        },
+        "schedule": {
+          "n": 9,
+          "correct": 7,
+          "accuracy": 77.8
+        },
+        "learning_status": {
+          "n": 10,
+          "correct": 10,
+          "accuracy": 100
+        },
+        "weak_area": {
+          "n": 5,
+          "correct": 5,
+          "accuracy": 100
+        },
+        "learning_guidance": {
+          "n": 6,
+          "correct": 5,
+          "accuracy": 83.3
+        },
+        "multi_condition": {
+          "n": 8,
+          "correct": 5,
+          "accuracy": 62.5
+        },
+        "followup": {
+          "n": 7,
+          "correct": 6,
+          "accuracy": 85.7
+        },
+        "target_switch": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "entity_confusion": {
+          "n": 7,
+          "correct": 6,
+          "accuracy": 85.7
+        },
+        "table_row_trap": {
+          "n": 6,
+          "correct": 4,
+          "accuracy": 66.7
+        },
+        "temporal_change": {
+          "n": 7,
+          "correct": 6,
+          "accuracy": 85.7
+        },
+        "grading_revision": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "conflict_insufficient": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "not_in_docs": {
+          "n": 10,
+          "correct": 4,
+          "accuracy": 40
+        },
+        "prompt_injection": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "privacy": {
+          "n": 11,
+          "correct": 11,
+          "accuracy": 100
+        },
+        "plausible_but_unanswerable": {
+          "n": 5,
+          "correct": 5,
+          "accuracy": 100
+        },
+        "pdf_layout": {
+          "n": 9,
+          "correct": 4,
+          "accuracy": 44.4
+        },
+        "scan_pdf": {
+          "n": 7,
+          "correct": 5,
+          "accuracy": 71.4
+        },
+        "api_failure": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "answerable_but_hesitant": {
+          "n": 6,
+          "correct": 1,
+          "accuracy": 16.7
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 105,
+          "correct": 80,
+          "accuracy": 76.2
+        },
+        "partial": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "clarify": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "handoff": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "denied": {
+          "n": 14,
+          "correct": 14,
+          "accuracy": 100
+        },
+        "abstained": {
+          "n": 23,
+          "correct": 12,
+          "accuracy": 52.2
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 153,
+          "correct": 113,
+          "accuracy": 73.9
+        }
+      },
+      "resources": {
+        "indexBuildMs": 29,
+        "cpuMsTotal": 40103,
+        "cpuMsPerCase": 262,
+        "rssBeforeMb": 2483,
+        "rssPeakMb": 2581
+      }
+    },
+    {
+      "suite": "v2-dev",
+      "variant": "engine-dense-rerank",
+      "n": 153,
+      "correct": 117,
+      "accuracy": 76.5,
+      "answerable": 109,
+      "falseAbstainRate": 4.6,
+      "unanswerable": 44,
+      "falseAnswerRate": 22.7,
+      "citationAccuracy": 89.4,
+      "contentAccuracy": 80.8,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 2,
+      "latencyMs": {
+        "p50": 2.1,
+        "p95": 2901.3
+      },
+      "errorStages": {
+        "binding": 9,
+        "selection": 5,
+        "guard": 1,
+        "generation": 1,
+        "over_answer": 10,
+        "interpretation": 6,
+        "retrieval": 2,
+        "sufficiency": 1,
+        "status": 1
+      },
+      "byCategory": {
+        "academy_info": {
+          "n": 6,
+          "correct": 4,
+          "accuracy": 66.7
+        },
+        "course_info": {
+          "n": 7,
+          "correct": 4,
+          "accuracy": 57.1
+        },
+        "fee": {
+          "n": 8,
+          "correct": 8,
+          "accuracy": 100
+        },
+        "schedule": {
+          "n": 9,
+          "correct": 7,
+          "accuracy": 77.8
+        },
+        "learning_status": {
+          "n": 10,
+          "correct": 10,
+          "accuracy": 100
+        },
+        "weak_area": {
+          "n": 5,
+          "correct": 5,
+          "accuracy": 100
+        },
+        "learning_guidance": {
+          "n": 6,
+          "correct": 5,
+          "accuracy": 83.3
+        },
+        "multi_condition": {
+          "n": 8,
+          "correct": 5,
+          "accuracy": 62.5
+        },
+        "followup": {
+          "n": 7,
+          "correct": 6,
+          "accuracy": 85.7
+        },
+        "target_switch": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "entity_confusion": {
+          "n": 7,
+          "correct": 6,
+          "accuracy": 85.7
+        },
+        "table_row_trap": {
+          "n": 6,
+          "correct": 4,
+          "accuracy": 66.7
+        },
+        "temporal_change": {
+          "n": 7,
+          "correct": 6,
+          "accuracy": 85.7
+        },
+        "grading_revision": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "conflict_insufficient": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "not_in_docs": {
+          "n": 10,
+          "correct": 5,
+          "accuracy": 50
+        },
+        "prompt_injection": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "privacy": {
+          "n": 11,
+          "correct": 11,
+          "accuracy": 100
+        },
+        "plausible_but_unanswerable": {
+          "n": 5,
+          "correct": 5,
+          "accuracy": 100
+        },
+        "pdf_layout": {
+          "n": 9,
+          "correct": 4,
+          "accuracy": 44.4
+        },
+        "scan_pdf": {
+          "n": 7,
+          "correct": 5,
+          "accuracy": 71.4
+        },
+        "api_failure": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "answerable_but_hesitant": {
+          "n": 6,
+          "correct": 2,
+          "accuracy": 33.3
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 105,
+          "correct": 83,
+          "accuracy": 79
+        },
+        "partial": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "clarify": {
+          "n": 4,
+          "correct": 4,
+          "accuracy": 100
+        },
+        "handoff": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "denied": {
+          "n": 14,
+          "correct": 14,
+          "accuracy": 100
+        },
+        "abstained": {
+          "n": 23,
+          "correct": 13,
+          "accuracy": 56.5
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 153,
+          "correct": 117,
+          "accuracy": 76.5
+        }
+      },
+      "resources": {
+        "indexBuildMs": 39,
+        "cpuMsTotal": 232574,
+        "cpuMsPerCase": 1520,
+        "rssBeforeMb": 2548,
+        "rssPeakMb": 2694
+      }
+    }
+  ]
+}

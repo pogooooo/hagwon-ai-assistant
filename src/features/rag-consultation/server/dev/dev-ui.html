@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RAG 개발 테스트</title>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --text: #1d2330;
+        --muted: #667085;
+        --line: #e3e6eb;
+        --accent: #2f5bd3;
+        --ok: #1f7a4d;
+        --warn: #a15c00;
+        --bad: #b42318;
+        --code: #f1f3f6;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14171c;
+          --panel: #1c2027;
+          --text: #e6e9ef;
+          --muted: #98a2b3;
+          --line: #2c323c;
+          --accent: #7aa2ff;
+          --ok: #4cc38a;
+          --warn: #f0b35a;
+          --bad: #ff7a70;
+          --code: #232832;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 system-ui,
+          -apple-system,
+          'Apple SD Gothic Neo',
+          'Malgun Gothic',
+          sans-serif;
+      }
+      header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        align-items: baseline;
+      }
+      header h1 {
+        font-size: 16px;
+        margin: 0;
+      }
+      header .note {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(260px, 340px) 1fr;
+        gap: 12px;
+        padding: 12px 16px;
+      }
+      @media (max-width: 860px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        min-width: 0;
+      }
+      h2 {
+        font-size: 13px;
+        margin: 0 0 8px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin: 8px 0 4px;
+      }
+      select,
+      input[type='text'],
+      textarea {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+      }
+      textarea {
+        min-height: 64px;
+        resize: vertical;
+      }
+      button {
+        padding: 6px 12px;
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: #fff;
+        border-radius: 6px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--accent);
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .docs {
+        max-height: 320px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 4px 8px;
+      }
+      .docs label {
+        display: flex;
+        gap: 6px;
+        color: var(--text);
+        margin: 4px 0;
+        font-size: 12px;
+      }
+      .docs small {
+        color: var(--muted);
+      }
+      .badge {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid currentColor;
+      }
+      .answered {
+        color: var(--ok);
+      }
+      .partial,
+      .clarify,
+      .handoff {
+        color: var(--warn);
+      }
+      .abstained,
+      .denied {
+        color: var(--bad);
+      }
+      .answer {
+        white-space: pre-wrap;
+        background: var(--code);
+        border-radius: 6px;
+        padding: 10px;
+        margin: 8px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 4px 6px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .scroll {
+        overflow-x: auto;
+      }
+      pre {
+        background: var(--code);
+        border-radius: 6px;
+        padding: 8px;
+        overflow: auto;
+        max-height: 360px;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 2px 12px;
+        font-size: 12px;
+      }
+      .kv span:nth-child(odd) {
+        color: var(--muted);
+      }
+      details {
+        margin-top: 8px;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>RAG 상담 개발 테스트</h1>
+      <span class="note" id="env">불러오는 중…</span>
+      <span class="note"
+        >개발 전용 화면 · 합성 데이터 · 운영 API 응답에는 아래 진단 정보가
+        들어가지 않습니다</span
+      >
+    </header>
+    <main>
+      <div>
+        <section>
+          <h2>계정</h2>
+          <select id="user"></select>
+          <label
+            >문서 선택(체크한 문서로만 검색·조회, 비우면 권한 안의 전체)</label
+          >
+          <div class="docs" id="docs"></div>
+          <div class="row" style="margin-top: 6px">
+            <button class="secondary" id="allDocs">전체 선택</button>
+            <button class="secondary" id="noDocs">선택 해제</button>
+          </div>
+        </section>
+        <section style="margin-top: 12px">
+          <h2>파일 업로드(PDF·DOCX·HWPX·TXT)</h2>
+          <input type="file" id="file" accept=".pdf,.docx,.hwpx,.txt,.md" />
+          <label>제목</label>
+          <input type="text" id="upTitle" placeholder="비우면 파일 이름" />
+          <label>문서 종류</label>
+          <select id="upType">
+            <option>announcement</option>
+            <option>fee</option>
+            <option>schedule</option>
+            <option>policy</option>
+            <option>academy_info</option>
+            <option>facility</option>
+            <option>teacher</option>
+          </select>
+          <div class="row" style="margin-top: 8px">
+            <button class="secondary" id="parseBtn">파싱 미리 보기</button>
+            <button id="uploadBtn">색인(관리자 계정)</button>
+          </div>
+          <div id="parseOut"></div>
+        </section>
+      </div>
+      <div>
+        <section>
+          <h2>질문</h2>
+          <textarea
+            id="question"
+            placeholder="예: 중2 내신반 수강료 얼마예요?"
+          ></textarea>
+          <div class="row" style="margin-top: 8px">
+            <button id="ask">질문하기</button>
+            <button class="secondary" id="newConv">대화 새로 시작</button>
+            <span class="note" id="conv"></span>
+          </div>
+        </section>
+        <section style="margin-top: 12px" id="result" hidden>
+          <h2>답변</h2>
+          <div id="status"></div>
+          <div class="answer" id="answer"></div>
+          <h2>인용</h2>
+          <div class="scroll"><table id="citations"></table></div>
+        </section>
+        <section style="margin-top: 12px" id="debug" hidden>
+          <h2>진단(개발 전용)</h2>
+          <div class="kv" id="timings"></div>
+          <h2 style="margin-top: 12px">
+            검색 결과(호출별 순위)
+            <label style="display: inline; margin-left: 8px"
+              ><input type="checkbox" id="showAll" /> 전체 순위 보기</label
+            >
+          </h2>
+          <div id="searches"></div>
+          <details>
+            <summary>trace 원본</summary>
+            <pre id="trace"></pre>
+          </details>
+        </section>
+      </div>
+    </main>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let meta = null;
+      let conversationId = `dev-${Date.now()}`;
+      const esc = (s) =>
+        String(s ?? '').replace(
+          /[&<>"]/g,
+          (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
+        );
+      const post = async (path, body) => {
+        const response = await fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        return response.json();
+      };
+      const fileBase64 = (file) =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+      function renderDocs() {
+        const user = meta.users.find((u) => u.userId === $('user').value);
+        const docs = meta.documents.filter(
+          (d) => !user || d.academyId === user.academyId,
+        );
+        $('docs').innerHTML = docs
+          .map(
+            (d) =>
+              `<label><input type="checkbox" value="${esc(d.documentId)}"><span>${esc(d.title)}<br><small>${esc(d.documentId)} r${d.revision} · ${esc(d.documentType)} · ${esc(d.origin)}</small></span></label>`,
+          )
+          .join('');
+      }
+      async function load() {
+        meta = await (await fetch('/dev/api/meta')).json();
+        $('env').textContent =
+          `검색기: ${meta.retriever.strategy} · 생성: ${meta.generation.mode} (${meta.generation.providerId})` +
+          (meta.retriever.errors.length
+            ? ` · 모델 오류: ${meta.retriever.errors.join('; ')}`
+            : '');
+        $('user').innerHTML = meta.users
+          .map(
+            (u) =>
+              `<option value="${esc(u.userId)}">${esc(u.userId)} · ${esc(u.role)} · ${esc(u.academyId)} (${esc(u.dataset)})</option>`,
+          )
+          .join('');
+        renderDocs();
+        $('conv').textContent = `대화 ID ${conversationId}`;
+      }
+      $('user').onchange = () => {
+        renderDocs();
+        conversationId = `dev-${Date.now()}`;
+        $('conv').textContent = `대화 ID ${conversationId}`;
+      };
+      $('allDocs').onclick = () =>
+        document
+          .querySelectorAll('#docs input')
+          .forEach((i) => (i.checked = true));
+      $('noDocs').onclick = () =>
+        document
+          .querySelectorAll('#docs input')
+          .forEach((i) => (i.checked = false));
+      $('newConv').onclick = () => {
+        conversationId = `dev-${Date.now()}`;
+        $('conv').textContent = `대화 ID ${conversationId}`;
+      };
+
+      $('parseBtn').onclick = async () => {
+        const file = $('file').files[0];
+        if (!file) return;
+        $('parseOut').innerHTML = '<p class="note">파싱 중…</p>';
+        const out = await post('/dev/api/parse', {
+          fileName: file.name,
+          contentBase64: await fileBase64(file),
+        });
+        $('parseOut').innerHTML = `
+          <div class="kv" style="margin-top:8px">
+            <span>형식</span><span>${esc(out.format)}</span>
+            <span>상태</span><span>${esc(out.status)}${out.error ? ` (${esc(out.error)})` : ''}</span>
+            <span>쪽</span><span>${(out.pages ?? []).map((p) => `${p.page}쪽 ${p.method}${p.confidence ? ` ${Math.round(p.confidence)}` : ''}`).join(', ')}</span>
+            <span>경고</span><span>${(out.warnings ?? []).map((w) => esc(w.code)).join(', ') || '없음'}</span>
+          </div>
+          <details open><summary>정규화 Markdown</summary><pre>${esc(out.markdown)}</pre></details>
+          <details><summary>청크 위치(${out.chunks.length})</summary><pre>${out.chunks
+            .map(
+              (c) => `${c.page ? c.page + '쪽 · ' : ''}${c.label} | ${c.text}`,
+            )
+            .map(esc)
+            .join('\n')}</pre></details>`;
+      };
+      $('uploadBtn').onclick = async () => {
+        const file = $('file').files[0];
+        if (!file) return;
+        const out = await post('/dev/api/upload', {
+          userId: $('user').value,
+          fileName: file.name,
+          contentBase64: await fileBase64(file),
+          title: $('upTitle').value,
+          documentType: $('upType').value,
+        });
+        if (out.error) {
+          $('parseOut').innerHTML = `<p class="denied">${esc(out.error)}</p>`;
+          return;
+        }
+        await load();
+        $('parseOut').innerHTML =
+          `<p class="answered">색인 ${esc(out.status)} · ${esc(out.documentId)} (${esc(out.parse.format)} ${esc(out.parse.status)})</p>`;
+      };
+
+      $('ask').onclick = async () => {
+        const question = $('question').value.trim();
+        if (!question) return;
+        const documentIds = [
+          ...document.querySelectorAll('#docs input:checked'),
+        ].map((i) => i.value);
+        $('ask').disabled = true;
+        try {
+          const out = await post('/dev/api/ask', {
+            userId: $('user').value,
+            question,
+            conversationId,
+            documentIds: documentIds.length ? documentIds : null,
+          });
+          if (out.error) throw new Error(out.error);
+          const a = out.answer;
+          $('result').hidden = false;
+          $('debug').hidden = false;
+          $('status').innerHTML =
+            `<span class="badge ${esc(a.status)}">${esc(a.status)}</span> ` +
+            `${a.reasonCode ? `<span class="note">${esc(a.reasonCode)}</span>` : ''}` +
+            `${a.missingFields?.length ? ` <span class="note">빠진 항목: ${a.missingFields.map(esc).join(', ')}</span>` : ''}`;
+          $('answer').textContent = a.answer;
+          $('citations').innerHTML =
+            '<tr><th>출처</th><th>문서</th><th>위치</th></tr>' +
+            (a.citations ?? [])
+              .map(
+                (c) =>
+                  `<tr><td>${esc(c.sourceId)}</td><td>${esc(c.title)} r${c.revision ?? ''}</td><td>${esc(c.location ?? '')}</td></tr>`,
+              )
+              .join('');
+          const d = out.debug;
+          const t = d.timings;
+          $('timings').innerHTML = `
+            <span>검색 전략</span><span>${esc(d.strategy)}</span>
+            <span>생성</span><span>${esc(d.generation.mode)} (${esc(d.generation.providerId)}) · 호출 ${d.generation.calls}회</span>
+            <span>경로(intent)</span><span>${esc(d.trace.domain)} / ${esc(d.trace.intent)}</span>
+            <span>전체</span><span>${t.totalMs} ms</span>
+            <span>검색</span><span>${t.retrievalMs} ms (${d.searches.length}회)</span>
+            <span>정형 사실 조회</span><span>${t.factLookupMs} ms (${d.factQueries.length}회)</span>
+            <span>생성</span><span>${t.generationMs} ms</span>
+            <span>해석·라우팅·검증</span><span>${t.routingAndVerificationMs} ms</span>
+            <span>문서 선택</span><span>${d.documentFilter ? d.documentFilter.map(esc).join(', ') : '권한 안의 전체'}</span>`;
+          const showAll = $('showAll').checked;
+          $('searches').innerHTML = d.searches
+            .map(
+              (s, i) => `
+              <details ${i === 0 ? 'open' : ''}><summary>#${i + 1} 질의 “${esc(s.query.slice(0, 80))}” · ${s.results.length}건 · ${Math.round(s.ms * 10) / 10} ms${s.question ? ' · 원문 검색' : ''}${s.documentTypes ? ` · 문서 종류 ${s.documentTypes.map(esc).join('/')}` : ''}</summary>
+              <div class="scroll"><table><tr><th>순위</th><th>점수</th><th>신호</th><th>청크</th><th>위치</th><th>본문</th></tr>
+              ${s.results
+                .slice(0, showAll ? s.results.length : 10)
+                .map(
+                  (r) =>
+                    `<tr><td>${r.rank}</td><td>${r.score}</td><td>${r.signals ? esc(JSON.stringify(r.signals)) : ''}</td><td>${esc(r.chunkId)}</td><td>${r.page ? r.page + '쪽 · ' : ''}${esc(r.section ?? '')}<br><small>${esc(r.location)}</small></td><td>${esc(r.text)}</td></tr>`,
+                )
+                .join(
+                  '',
+                )}</table></div>${!showAll && s.results.length > 10 ? `<p class="note">상위 10건만 표시(전체 ${s.results.length}건 — “전체 순위 보기”)</p>` : ''}</details>`,
+            )
+            .join('');
+          $('trace').textContent = JSON.stringify(d.trace, null, 2);
+        } catch (error) {
+          $('result').hidden = false;
+          $('answer').textContent = `오류: ${error.message}`;
+        } finally {
+          $('ask').disabled = false;
+        }
+      };
+      load();
+    </script>
+  </body>
+</html>
