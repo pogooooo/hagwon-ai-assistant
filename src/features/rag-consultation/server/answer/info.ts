@@ -126,6 +126,27 @@ function datePrefix(effective: EffectiveTime): string {
   return `${formatKstDate(effective.at)} 기준 `;
 }
 
+/** 그 말이 승인 자료의 표 머리글이나 절 제목으로 쓰였는지(“정원” 열이 있는 과정 구성 표 등). */
+async function definedAsLabel(
+  ctx: AnswerContext,
+  term: string,
+): Promise<boolean> {
+  const needle = compactText(term);
+  const results = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    query: term,
+    limit: 10,
+  });
+  return results.some(
+    ({ chunk }) =>
+      (chunk.location.header ?? []).some((h) =>
+        compactText(h).includes(needle),
+      ) || compactText(chunk.location.section ?? '').includes(needle),
+  );
+}
+
 /** 두 글자 묶음이 하나라도 겹치는지(“재료비” ↔ “실험 재료비(월)”). */
 function sharesBigram(a: string, b: string): boolean {
   const x = compactText(a);
@@ -1405,7 +1426,26 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
           }),
         );
         break;
-      case 'enrollment':
+      case 'enrollment': {
+        // 모집 현황 사실에 없는 항목(정원 등)을 물었고 그 말이 자료의 표 머리글·절 제목으로 따로 있으면
+        // 모집 현황 대신 그 문서 근거로 답한다.
+        const generic = topic.genericTerms ?? [];
+        const asked = topic.terms.filter(
+          (term) =>
+            !generic.includes(term) &&
+            ctx.frame.compact.includes(compactText(term)),
+        );
+        const vocabulary = `${topic.label} 모집 마감 대기 접수 잔여 석 자리`;
+        const outside = asked.filter((term) => !sharesBigram(term, vocabulary));
+        if (asked.length > 0 && outside.length === asked.length) {
+          let labelled = false;
+          for (const term of outside)
+            if (await definedAsLabel(ctx, term)) labelled = true;
+          if (labelled) {
+            parts.push(emptyPart('missing', [topic.label]));
+            break;
+          }
+        }
         parts.push(
           await answerClassFacts(ctx, effective, {
             factType: 'enrollment_status',
@@ -1416,6 +1456,7 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
           }),
         );
         break;
+      }
       case 'schedule_change':
         parts.push(await answerScheduleChange(ctx, effective));
         break;

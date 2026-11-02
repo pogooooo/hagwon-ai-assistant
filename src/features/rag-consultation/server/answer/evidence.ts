@@ -186,9 +186,14 @@ export const EVIDENCE_THRESHOLDS = {
   rerank: -2.5,
 };
 
+/** 의문사로 시작하는 말(몇명이에·언제쯤·어디예 …)은 핵심어가 아니다(국어 의문사 — 학원별 유의어가 아님). */
+const INTERROGATIVE =
+  /^(몇|언제|어디|얼마|무엇|무슨|뭐|누구|누가|왜|어떻게|어떤|어느)/;
+
 export function keywordsOf(question: string): string[] {
   return contentWords(question).filter(
-    (word) => !GENERIC_WORDS.has(word) && word.length >= 2,
+    (word) =>
+      !GENERIC_WORDS.has(word) && word.length >= 2 && !INTERROGATIVE.test(word),
   );
 }
 

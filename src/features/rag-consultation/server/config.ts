@@ -139,6 +139,8 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
       '수강할수',
       '자리있',
     ],
+    // "몇 명"은 의문사(인원 일반)라 이것만으로는 모집 현황 질문으로 보지 않는다(“상 받은 학생 몇 명?”).
+    genericTerms: ['몇명'],
     factTypes: ['enrollment_status'],
   },
   {

@@ -673,10 +673,16 @@ export function createRagConsultationService(
     }
     if (weak) {
       const viaEvidence = await tryEvidence();
+      // 반도 정하지 않고 의문사(얼마·몇 명·언제)로만 주제가 잡혔는데 믿을 만한 근거가 없으면
+      // 전체 반 목록을 내지 않고 보류한다.
+      const unboundGeneric =
+        explicitClassIds(ctx).length === 0 &&
+        frame.topics.every((topic) => CLASS_FACT_TOPICS.includes(topic.id));
       if (
         viaEvidence.status === 'answered' ||
         viaEvidence.status === 'partial' ||
-        noTopic
+        noTopic ||
+        unboundGeneric
       )
         return viaEvidence;
       return answerInfo(ctx);
