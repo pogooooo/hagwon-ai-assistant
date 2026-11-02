@@ -293,7 +293,8 @@ export function abbreviatedClasses(
   );
   const found = new Set<string>();
   for (const match of normalized.matchAll(
-    /([가-힣a-z0-9]{2,8})반(?![가-힣])/g,
+    // 반 뒤에 조사(이랑·은·도·에서 …)가 붙어도 반 이름으로 본다(국어 조사 목록이지 학원별 유의어가 아님).
+    /([가-힣a-z0-9]{2,8})반(?=$|[^가-힣]|(?:이랑|랑|이나|이요|이에요|이예요|은|는|이|가|을|를|도|에서|에|만|하고|과|와|으로|로|의|까지|부터|요)(?![가-힣]))/g,
   )) {
     const word = match[1].replace(/^(초|중|고)[1-6]/, '');
     if (word.length < 2 || NON_CLASS_PREFIXES.has(word)) continue;

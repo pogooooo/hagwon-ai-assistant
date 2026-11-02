@@ -13,7 +13,7 @@
 import type { TopicDefinition } from '../config.ts';
 import type { ScoredChunk } from '../ports.ts';
 import { compactText, normalizeText } from '../text/normalize.ts';
-import type { FactType } from '../types.ts';
+import type { FactType, RagChunk } from '../types.ts';
 import {
   abstain,
   recordChunks,
@@ -48,6 +48,8 @@ export function expectedAnswerTypes(question: string): AnswerType[] {
     types.add('date');
   if (/몇\s*시|몇\s*분(?!\s*(동안|간))|시간(?!표)|언제/.test(q))
     types.add('time');
+  // "언제"는 날짜로도 답한다(“언제까지 해요?” → 12월 18일).
+  if (/언제/.test(q) && !/몇\s*시/.test(q)) types.add('date');
   if (/몇\s*(명|개|석|번|회|문항|권|자리)|정원|인원/.test(q))
     types.add('count');
   if (/몇\s*점|몇\s*퍼|몇\s*%|정답률|백분율/.test(q)) types.add('percent');
@@ -61,7 +63,7 @@ const TYPE_PATTERNS: Record<AnswerType, RegExp> = {
   amount:
     /\d[\d,]*\s*(원|만\s*원)|무료|없(음|습니다)|포함|\d+\s*분의\s*\d+|\d+\/\d+|전액|반액|\d+\s*%|실비/,
   date: /\d{1,2}\s*월\s*\d{1,2}\s*일|\d{4}-\d{2}-\d{2}|매월\s*\d{1,2}\s*일|[월화수목금토일]요일|[월화수목금토일](·[월화수목금토일])+/,
-  time: /\d{1,2}:\d{2}|\d{1,2}\s*시(\s*\d{1,2}\s*분)?|오전|오후|저녁|\d+\s*분\s*(전|후)|\d{1,2}\s*월\s*\d{1,2}\s*일|[월화수목금토일]요일|매주|평일|주말/,
+  time: /\d{1,2}:\d{2}|\d{1,2}\s*시(\s*\d{1,2}\s*분)?|오전|오후|저녁|\d+\s*분(?!의)|\d{1,2}\s*월\s*\d{1,2}\s*일|[월화수목금토일]요일|매주|평일|주말/,
   count: /\d+\s*(명|개|석|번|회|문항|권|자리|차시)|없(음|습니다)|마감/,
   percent: /\d+(\.\d+)?\s*%|\d+\s*점|\d+\s*문항/,
   place:
@@ -225,6 +227,18 @@ export function evidenceConfidence(
     return { trusted: true, reason: 'dense' };
   if (hits.length >= Math.min(2, keywords.length) && hits.length > 0)
     return { trusted: true, reason: 'lexical' };
+  // 절 제목이 질문 핵심어 하나를 그대로 담고 있으면(“교재비 따로 내요?” → [5. 교재비]) 그 절을 근거로 본다.
+  const heading = compactText(result.chunk.location.section ?? '');
+  if (
+    heading &&
+    keywords.some(
+      (word) =>
+        word.length >= 3 &&
+        heading.includes(word) &&
+        text.split(word).length - 1 >= 2,
+    )
+  )
+    return { trusted: true, reason: 'heading' };
   return {
     trusted: false,
     reason: `keywords ${hits.length}/${keywords.length}`,
@@ -343,14 +357,71 @@ export async function answerFromDocuments(
   const trusted = evidence.filter(
     (result) => evidenceConfidence(ctx.question, result).trusted,
   );
+  // 같은 절의 청크는 한 묶음으로 본다. 절 제목이 없는 문서(게시판 글 모음 등)는 서로 이웃한 청크끼리만 묶는다
+  // (질문 글과 바로 뒤 답변 글 — 같은 문서의 무관한 글이 한 묶음으로 섞이지 않게).
+  const indexOf = (chunk: RagChunk) => Number(chunk.chunkId.split('#').pop());
   const groups: Array<{ key: string; chunks: ScoredChunk[] }> = [];
   for (const result of trusted) {
-    const key = `${result.chunk.sourceId}§${result.chunk.location.section ?? ''}`;
-    const group = groups.find((g) => g.key === key);
+    const section = result.chunk.location.section;
+    const group = section
+      ? groups.find((g) => g.key === `${result.chunk.sourceId}§${section}`)
+      : groups.find(
+          (g) =>
+            g.key === `${result.chunk.sourceId}§` &&
+            g.chunks.some(
+              (entry) =>
+                Math.abs(indexOf(entry.chunk) - indexOf(result.chunk)) <= 1,
+            ),
+        );
     if (group) group.chunks.push(result);
-    else groups.push({ key, chunks: [result] });
+    else
+      groups.push({
+        key: `${result.chunk.sourceId}§${section ?? ''}`,
+        chunks: [result],
+      });
   }
-  for (const group of groups.slice(0, 3)) {
+  // 상위 근거 묶음 중 질문이 요구한 값 종류를 더 많이 갖춘 묶음, 그다음 절 제목에 질문 핵심어가 든 묶음을 먼저 본다
+  // (“교재비 따로 내요?” → [5. 교재비] 절, “몇 번·몇 분?” → 횟수와 분이 모두 있는 표).
+  const keywords = keywordsOf(ctx.question).map(compactText);
+  const groupText = (group: (typeof groups)[number]) =>
+    group.chunks.map((entry) => entry.chunk.text).join('\n');
+  const coverage = (group: (typeof groups)[number]) =>
+    types.filter((type) => TYPE_PATTERNS[type].test(groupText(group))).length;
+  // 반 이름은 절 제목(강사 소개 등)에 흔히 들어가므로 제목 일치에서 뺀다.
+  const classNames = ctx.catalog.classes.flatMap((klass) =>
+    [klass.name, ...klass.aliases].map(compactText),
+  );
+  const isClassWord = (word: string) =>
+    classNames.some(
+      (name) =>
+        name.includes(word) ||
+        word.includes(name) ||
+        (word.length >= 3 && name.includes(word.slice(0, 3))),
+    );
+  const headingHits = (group: (typeof groups)[number]) => {
+    const heading = compactText(group.chunks[0].chunk.location.section ?? '');
+    return keywords.filter(
+      (word) =>
+        word.length >= 2 &&
+        !isClassWord(word) &&
+        (heading.includes(word) ||
+          (word.length > 3 && heading.includes(word.slice(0, 3)))),
+    ).length;
+  };
+  const ordered = groups
+    .slice(0, 5)
+    .map((group, index) => ({
+      group,
+      index,
+      coverage: coverage(group),
+      heading: headingHits(group),
+    }))
+    .sort(
+      (a, b) =>
+        b.coverage - a.coverage || b.heading - a.heading || a.index - b.index,
+    )
+    .map((entry) => entry.group);
+  for (const group of ordered.slice(0, 3)) {
     const chunks = group.chunks
       .map((entry) => entry.chunk)
       .sort(

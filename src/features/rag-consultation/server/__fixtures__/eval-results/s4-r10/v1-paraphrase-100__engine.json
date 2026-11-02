@@ -1,0 +1,2951 @@
+{
+  "summary": {
+    "suite": "v1-paraphrase-100",
+    "variant": "engine",
+    "n": 100,
+    "correct": 70,
+    "accuracy": 70,
+    "answerable": 85,
+    "falseAbstainRate": 9.4,
+    "unanswerable": 15,
+    "falseAnswerRate": 13.3,
+    "citationAccuracy": 88.3,
+    "contentAccuracy": 75.3,
+    "violations": 0,
+    "violatingCases": [],
+    "generationCalls": 0,
+    "latencyMs": {
+      "p50": 2.5,
+      "p95": 7.9
+    },
+    "errorStages": {
+      "binding": 11,
+      "interpretation": 7,
+      "sufficiency": 3,
+      "retrieval": 2,
+      "selection": 4,
+      "over_answer": 2,
+      "guard": 1
+    },
+    "byCategory": {
+      "fee": {
+        "n": 12,
+        "correct": 10,
+        "accuracy": 83.3
+      },
+      "material_fee": {
+        "n": 4,
+        "correct": 4,
+        "accuracy": 100
+      },
+      "schedule": {
+        "n": 11,
+        "correct": 7,
+        "accuracy": 63.6
+      },
+      "teacher": {
+        "n": 5,
+        "correct": 4,
+        "accuracy": 80
+      },
+      "schedule_change": {
+        "n": 9,
+        "correct": 2,
+        "accuracy": 22.2
+      },
+      "makeup_policy": {
+        "n": 4,
+        "correct": 1,
+        "accuracy": 25
+      },
+      "study_room": {
+        "n": 3,
+        "correct": 1,
+        "accuracy": 33.3
+      },
+      "level_test": {
+        "n": 3,
+        "correct": 2,
+        "accuracy": 66.7
+      },
+      "refund": {
+        "n": 3,
+        "correct": 3,
+        "accuracy": 100
+      },
+      "enrollment": {
+        "n": 4,
+        "correct": 4,
+        "accuracy": 100
+      },
+      "location_hours": {
+        "n": 3,
+        "correct": 2,
+        "accuracy": 66.7
+      },
+      "accuracy": {
+        "n": 10,
+        "correct": 8,
+        "accuracy": 80
+      },
+      "weak_area": {
+        "n": 5,
+        "correct": 4,
+        "accuracy": 80
+      },
+      "guidance": {
+        "n": 4,
+        "correct": 2,
+        "accuracy": 50
+      },
+      "abstain": {
+        "n": 15,
+        "correct": 13,
+        "accuracy": 86.7
+      },
+      "shuttle": {
+        "n": 5,
+        "correct": 3,
+        "accuracy": 60
+      }
+    },
+    "byExpectedStatus": {
+      "answered": {
+        "n": 85,
+        "correct": 57,
+        "accuracy": 67.1
+      },
+      "abstained": {
+        "n": 15,
+        "correct": 13,
+        "accuracy": 86.7
+      }
+    },
+    "bySplit": {
+      "dev": {
+        "n": 100,
+        "correct": 70,
+        "accuracy": 70
+      }
+    },
+    "resources": {
+      "indexBuildMs": 122,
+      "cpuMsTotal": 464,
+      "cpuMsPerCase": 5,
+      "rssBeforeMb": 103,
+      "rssPeakMb": 141
+    }
+  },
+  "results": [
+    {
+      "id": "MS-001",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 18.876532999999995,
+      "answer": "2026년 11월 9일 기준 중2 심화반 월 수강료는 320,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-002",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 3.172751000000005,
+      "answer": "2026년 11월 4일 기준 중3 내신집중반 월 수강료는 350,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-003",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.5588240000000155,
+      "answer": "2026년 11월 3일 기준 중1 기본반 월 수강료는 260,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-004",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 3.4815600000000018,
+      "answer": "2026년 11월 5일 기준 중3 심화반 월 수강료는 380,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-005",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.0946800000000394,
+      "answer": "2026년 11월 7일 기준 중2 기본반 월 수강료는 280,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-006",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 13.625271999999995,
+      "answer": "2026년 11월 10일 기준 중1 기본반 월 수강료는 260,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용).\n2026년 11월 10일 기준 중2 기본반 월 수강료는 280,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용).\n2026년 11월 10일 기준 중2 심화반 월 수강료는 320,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용).\n2026년 11월 10일 기준 중3 심화반 월 수강료는 380,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용).\n2026년 11월 10일 기준 중3 내신집중반 월 수강료는 350,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-007",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 3.2269450000000006,
+      "answer": "2026년 11월 2일 기준 중2 심화반 월 수강료는 320,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-008",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "material_fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "material",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 13.06825200000003,
+      "answer": "중2 심화반 교재비는 25,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-009",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "material_fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "material",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 4.461002000000008,
+      "answer": "중3 내신집중반 교재비는 22,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-010",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_SCHEDULE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.3075400000000172,
+      "answer": "2026년 11월 9일 기준 중2 심화반 수업은 월·수·금 19:10~20:50입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용)."
+    },
+    {
+      "id": "MS-011",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "interpretation",
+      "violations": [],
+      "cited": [
+        "GA_INFO:r1:body"
+      ],
+      "goldRetrieved": false,
+      "intent": "hours",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 7.073201999999981,
+      "answer": "[5. 상담 안내] 가온수학학원 학원 소개 및 이용 안내 기준 안내입니다.\n- 상담 가능 시간: 평일 14:00~17:00, 토요일 10:00~13:00\n수업이 이어지는 평일 17:00 이후에는 전화 상담만 가능합니다."
+    },
+    {
+      "id": "MS-012",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_SCHEDULE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.2147350000000188,
+      "answer": "2026년 11월 5일 기준 중1 기본반 수업은 화·목 17:00~19:00입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용)."
+    },
+    {
+      "id": "MS-013",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_SCHEDULE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.1556710000000407,
+      "answer": "2026년 11월 6일 기준 중3 심화반 수업은 화·목 19:10~21:20, 토 10:00~12:10입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용)."
+    },
+    {
+      "id": "MS-014",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "abstained",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "sufficiency",
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": true,
+      "intent": "unknown",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 3.7611239999999952,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-015",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "interpretation",
+      "violations": [],
+      "cited": [
+        "GA_ENROLL_2026_11:r1:body"
+      ],
+      "goldRetrieved": false,
+      "intent": "enrollment",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.2040059999999926,
+      "answer": "중3 내신집중반 모집 현황: 모집 중 (잔여 2석) (2026년 11월 1일 공지 기준)"
+    },
+    {
+      "id": "MS-016",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "teacher",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_TEACHERS:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "teacher",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.9824909999999818,
+      "answer": "중2 심화반 담당 강사는 문태현 강사입니다."
+    },
+    {
+      "id": "MS-017",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "teacher",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "abstained",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "sufficiency",
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": true,
+      "intent": "unknown",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 4.456486000000041,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-018",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "teacher",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_TEACHERS:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "teacher",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.2836530000000153,
+      "answer": "중1 기본반 담당 강사는 오세진 강사입니다."
+    },
+    {
+      "id": "MS-019",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "abstained",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "interpretation",
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "unknown",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 4.871014000000002,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-020",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_NOTICE_2026_1112:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule_change",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.483866999999975,
+      "answer": "2026년 11월 28일(토) 14:00~15:40 [중2 심화반 · 보강] 11월 27일(금) 휴강분 보강"
+    },
+    {
+      "id": "MS-021",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "GA_NOTICE_2026_1112:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule_change",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.2875940000000128,
+      "answer": "2026년 11월 19일(목) [학원 전체 · 휴강] 수능일 전체 휴강\n2026년 12월 25일(금) [학원 전체 · 휴강] 성탄절 전체 휴강"
+    },
+    {
+      "id": "MS-022",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "abstained",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "sufficiency",
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": true,
+      "intent": "unknown",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 2.7321430000000078,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-023",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "abstained",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "retrieval",
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "accuracy_lookup",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 1.64303799999999,
+      "answer": "최지호 학생 2026년 12월에 대한 확정된 학습 분석 자료가 아직 없어 답변드릴 수 없습니다. 자료가 확정되면 다시 확인해 주시거나 담당자 상담을 요청해 주세요."
+    },
+    {
+      "id": "MS-024",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "makeup_policy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "abstained",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "retrieval",
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "schedule_change",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 3.871465999999998,
+      "answer": "요청하신 내용(다음 주(2026년 11월 16일~) 보강 공지)은 등록된 승인 자료에서 확인되지 않아 안내해 드릴 수 없습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-025",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "makeup_policy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "GA_POLICY:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "makeup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.0913449999999898,
+      "answer": "등록된 운영 규정에 따른 보강 기준:\n- 결석 예정일 전날 21:00까지 연락하면 담당 강사가 결석일로부터 2주 이내에 보강 일정을 정해 안내합니다."
+    },
+    {
+      "id": "MS-026",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "study_room",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "selection",
+      "violations": [],
+      "cited": [
+        "GA_SCHEDULE_2026_2:r1:body",
+        "GA_INFO:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule+hours",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.379426000000024,
+      "answer": "2026년 11월 5일 기준 중3 내신집중반 수업은 수·금 18:00~20:30입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용).\n[4. 운영 시간] 가온수학학원 학원 소개 및 이용 안내 기준 안내입니다.\n구분: 평일(월~금) / 시간: 14:00~22:00\n구분: 토요일 / 시간: 10:00~18:00\n구분: 일요일·법정 공휴일 / 시간: 휴무"
+    },
+    {
+      "id": "MS-027",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "study_room",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "GA_FACILITY:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "study_room",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.0073209999999904,
+      "answer": "등록된 안내 자료에 따르면: 자습실 운영: 평일 14:00~22:00, 토요일 10:00~18:00 (좌석 16석)"
+    },
+    {
+      "id": "MS-028",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "level_test",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_INFO:r1:body",
+        "GA_TEACHERS:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "level_test",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 6.420186000000001,
+      "answer": "[6. 무료 레벨테스트] 가온수학학원 학원 소개 및 이용 안내 기준 안내입니다.\n신규 원생은 반 배정을 위해 무료 레벨테스트를 봅니다.\n- 레벨테스트 비용은 없으며, 응시 후 등록 의무도 없습니다.\n- 레벨테스트는 평일 15:00~17:00, 토요일 10:00~13:00에 진행합니다.\n- 정원이 찬 반은 레벨테스트 후 대기 접수를 하며, 자리가 나는 순서대로 연락드립니다.\n단계: ① 예약 / 내용: 대표 전화 또는 문자로 희망 일시 예약 / 소요 시간: —\n단계: ② 진단 평가 / 내용: 학년별 진단 평가(현재 학기 진도까지, 25문항) / 소요 시간: 50분\n단계: ③ 결과 상담 / 내용: 원장이 단원별 결과지를 보며 보호자·학생과 상담 / 소요 시간: 20분\n단계: ④ 반 배정 / 내용: 결과와 희망 시간대를 고려해 반 배정, 첫 수업 일정 안내 / 소요 시간: —\n[윤가람 원장] 가온수학학원 강사 소개(2026년 2학기) 기준 안내입니다.\n- 담당: 학원 운영 총괄, 레벨테스트 결과 상담, 질문 클리닉\n- 한마디: \"틀린 문제를 다시 맞히는 경험이 쌓이면 수학이 달라집니다.\""
+    },
+    {
+      "id": "MS-029",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "level_test",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "selection",
+      "violations": [],
+      "cited": [
+        "GA_SCHEDULE_2026_2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.817076999999983,
+      "answer": "2026년 11월 7일 기준 중1 기본반 수업은 화·목 17:00~19:00입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용).\n2026년 11월 7일 기준 중2 기본반 수업은 월·수 17:00~19:00입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용).\n2026년 11월 7일 기준 중2 심화반 수업은 월·수·금 19:10~20:50입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용).\n2026년 11월 7일 기준 중3 심화반 수업은 화·목 19:10~21:20, 토 10:00~12:10입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용).\n2026년 11월 7일 기준 중3 내신집중반 수업은 수·금 18:00~20:30입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용)."
+    },
+    {
+      "id": "MS-030",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "refund",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_POLICY:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "refund",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.461970000000008,
+      "answer": "[제3조 수강료 반환(환불)] 가온수학학원 운영 규정 기준 안내입니다.\n「학원의 설립·운영 및 과외교습에 관한 법률 시행령」 제18조 [별표 4]의 교습비 반환 기준을 따릅니다.\n교습 기간이 1개월 이내인 경우 아래와 같이 반환합니다.\n반환 금액은 반환 사유가 생긴 날을 기준으로 계산하며, 환불 신청은 데스크 방문 또는 대표 전화로 받습니다.\n반환 금액은 반환 사유가 생긴 날부터 5일 이내에 납부한 방법(카드 결제 취소 또는 계좌 이체)으로 돌려드립니다.\n교재비는 사용하지 않은 교재를 반납하면 환불하며, 이름을 쓰거나 풀이한 교재는 환불하지 않습니다.\n학원 사정으로 수업을 할 수 없게 된 경우에는 수업하지 못한 기간의 교습비를 일할 계산하여 돌려드립니다.\n반환 사유 발생 시점: 교습 시작 전 / 반환 금액: 이미 낸 교습비 전액\n반환 사유 발생 시점: 총 교습시간의 1/3 경과 전 / 반환 금액: 이미 낸 교습비의 2/3 해당액\n반환 사유 발생 시점: 총 교습시간의 1/3 경과 후 ~ 1/2 경과 전 / 반환 금액: 이미 낸 교습비의 1/2 해당액\n반환 사유 발생 시점: 총 교습시간의 1/2 경과 후 / 반환 금액: 반환하지 않음"
+    },
+    {
+      "id": "MS-031",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "refund",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_FEE_2026_2:r1:body",
+        "GA_POLICY:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "material+refund",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 8.617873999999972,
+      "answer": "중2 심화반 교재비는 25,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용).\n[제3조 수강료 반환(환불)] 가온수학학원 운영 규정 기준 안내입니다.\n「학원의 설립·운영 및 과외교습에 관한 법률 시행령」 제18조 [별표 4]의 교습비 반환 기준을 따릅니다.\n교습 기간이 1개월 이내인 경우 아래와 같이 반환합니다.\n반환 금액은 반환 사유가 생긴 날을 기준으로 계산하며, 환불 신청은 데스크 방문 또는 대표 전화로 받습니다.\n반환 금액은 반환 사유가 생긴 날부터 5일 이내에 납부한 방법(카드 결제 취소 또는 계좌 이체)으로 돌려드립니다.\n교재비는 사용하지 않은 교재를 반납하면 환불하며, 이름을 쓰거나 풀이한 교재는 환불하지 않습니다.\n반환 사유 발생 시점: 교습 시작 전 / 반환 금액: 이미 낸 교습비 전액\n반환 사유 발생 시점: 총 교습시간의 1/3 경과 전 / 반환 금액: 이미 낸 교습비의 2/3 해당액\n반환 사유 발생 시점: 총 교습시간의 1/3 경과 후 ~ 1/2 경과 전 / 반환 금액: 이미 낸 교습비의 1/2 해당액\n반환 사유 발생 시점: 총 교습시간의 1/2 경과 후 / 반환 금액: 반환하지 않음"
+    },
+    {
+      "id": "MS-032",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "enrollment",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_ENROLL_2026_11:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "enrollment",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.994668000000047,
+      "answer": "중1 기본반 모집 현황: 모집 중 (잔여 3석) (2026년 11월 1일 공지 기준)"
+    },
+    {
+      "id": "MS-033",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "enrollment",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_ENROLL_2026_11:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "multi(2)",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.1690399999999954,
+      "answer": "중3 내신집중반 모집 현황: 모집 중 (잔여 2석) (2026년 11월 1일 공지 기준)"
+    },
+    {
+      "id": "MS-034",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "location_hours",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "selection",
+      "violations": [],
+      "cited": [
+        "GA_FACILITY:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "evidence",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 3.6597570000000132,
+      "answer": "[4. 주차] 가온수학학원 시설 안내 기준 안내입니다.\n- 건물 지하 주차장 1시간 무료 (데스크에서 차량 번호 등록 시)\n- 1시간이 넘으면 건물 관리사무소 기준 요금이 부과되며, 학원에서 추가 할인은 해 드리지 않습니다.\n- 주차 공간이 넉넉하지 않으니 상담·레벨테스트로 방문하실 때는 가급적 대중교통을 이용해 주세요."
+    },
+    {
+      "id": "MS-035",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "location_hours",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_SCHEDULE_2026_2:r1:body",
+        "GA_INFO:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule+hours",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 4.509771999999998,
+      "answer": "2026년 11월 14일 기준 중3 내신집중반 수업은 수·금 18:00~20:30입니다(2026년 9월 1일 ~ 2026년 12월 6일 적용).\n[4. 운영 시간] 가온수학학원 학원 소개 및 이용 안내 기준 안내입니다.\n구분: 평일(월~금) / 시간: 14:00~22:00\n구분: 토요일 / 시간: 10:00~18:00\n구분: 일요일·법정 공휴일 / 시간: 휴무"
+    },
+    {
+      "id": "MS-036",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S003_202610:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.6520289999999704,
+      "answer": "이도윤 학생 2026년 10월 전체: 56문항 중 38문항 정답(정답률 68%).\n이도윤 학생 2026년 10월 사각형의 성질: 14문항 중 11문항 정답(정답률 79%).\n이도윤 학생 2026년 10월 도형의 닮음: 42문항 중 27문항 정답(정답률 64%).\n근거 숙제(2026년 10월): 10월 1주 여러 가지 사각형 심화 숙제, 10월 2주 닮은 도형과 닮음비 숙제, 10월 3주 삼각형의 닮음 조건 숙제 외 1건"
+    },
+    {
+      "id": "MS-037",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S003_202610:r2:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.1564070000000584,
+      "answer": "이도윤 학생 2026년 10월 전체: 56문항 중 39문항 정답(정답률 70%) (채점 수정 반영본 r2).\n이도윤 학생 2026년 10월 사각형의 성질: 14문항 중 11문항 정답(정답률 79%) (채점 수정 반영본 r2).\n이도윤 학생 2026년 10월 도형의 닮음: 42문항 중 28문항 정답(정답률 67%) (채점 수정 반영본 r2).\n근거 숙제(2026년 10월): 10월 1주 여러 가지 사각형 심화 숙제, 10월 2주 닮은 도형과 닮음비 숙제, 10월 3주 삼각형의 닮음 조건 숙제 외 1건"
+    },
+    {
+      "id": "MS-038",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S003_202609:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.0223499999999603,
+      "answer": "이도윤 학생 2026년 9월 응용 유형: 14문항 중 9문항 정답(정답률 64%).\n근거 숙제(2026년 9월): 9월 1주 이등변삼각형의 성질 숙제, 9월 2주 삼각형의 외심·내심 숙제, 9월 3주 평행사변형의 성질 숙제 외 1건"
+    },
+    {
+      "id": "MS-039",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S005_202610:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.7796099999999342,
+      "answer": "최지호 학생 2026년 10월 원주각: 34문항 중 24문항 정답(정답률 71%).\n근거 숙제(2026년 10월): 10월 2주 원주각 기본 숙제, 10월 3주 원주각 내신 기출 숙제"
+    },
+    {
+      "id": "MS-040",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S005_202609:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.9538750000000391,
+      "answer": "최지호 학생 2026년 9월 전체: 64문항 중 48문항 정답(정답률 75%).\n최지호 학생 2026년 9월 원과 직선: 14문항 중 10문항 정답(정답률 71%).\n최지호 학생 2026년 9월 삼각비: 50문항 중 38문항 정답(정답률 76%).\n근거 숙제(2026년 9월): 9월 1주 삼각비 기본 개념 숙제, 9월 2주 삼각비 내신 기출 숙제, 9월 3주 삼각비 활용 숙제 외 1건"
+    },
+    {
+      "id": "MS-041",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S005_202610:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.2662900000000263,
+      "answer": "최지호 학생 2026년 10월 계산 유형: 22문항 중 20문항 정답(정답률 91%).\n근거 숙제(2026년 10월): 10월 1주 원의 접선 내신 숙제, 10월 2주 원주각 기본 숙제, 10월 3주 원주각 내신 기출 숙제 외 1건"
+    },
+    {
+      "id": "MS-042",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "weak_area",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S003_202610:r2:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "weak_area",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.3776209999999764,
+      "answer": "이도윤 학생 2026년 10월 전체: 56문항 중 39문항 정답(정답률 70%) (채점 수정 반영본 r2).\n이도윤 학생 2026년 10월 리포트의 취약 영역: 도형의 닮음 — 삼각형의 닮음 조건을 근거로 쓰는 서술형 문항에서 닮음 조건 없이 결론만 적은 답안이 반복되었습니다.\n이도윤 학생 2026년 10월 도형의 닮음: 42문항 중 28문항 정답(정답률 67%) (채점 수정 반영본 r2).\n근거 숙제(2026년 10월): 10월 1주 여러 가지 사각형 심화 숙제, 10월 2주 닮은 도형과 닮음비 숙제, 10월 3주 삼각형의 닮음 조건 숙제 외 1건"
+    },
+    {
+      "id": "MS-043",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "weak_area",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S005_202609:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "weak_area",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.142184000000043,
+      "answer": "최지호 학생 2026년 9월 전체: 64문항 중 48문항 정답(정답률 75%).\n최지호 학생 2026년 9월 리포트의 취약 영역: 원과 직선 — 원의 접선과 반지름이 수직이라는 성질을 이용하는 문항에서 직각을 표시하지 않아 식을 세우지 못한 오답이 많았습니다.\n최지호 학생 2026년 9월 원과 직선: 14문항 중 10문항 정답(정답률 71%).\n근거 숙제(2026년 9월): 9월 1주 삼각비 기본 개념 숙제, 9월 2주 삼각비 내신 기출 숙제, 9월 3주 삼각비 활용 숙제 외 1건"
+    },
+    {
+      "id": "MS-044",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "weak_area",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S005_202610:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "weak_area",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.1824479999999085,
+      "answer": "최지호 학생 2026년 10월 전체: 64문항 중 49문항 정답(정답률 77%).\n최지호 학생 2026년 10월 리포트의 취약 영역: 원주각 — 원에 내접하는 사각형의 성질을 이용해야 하는 내신 기출 응용 문항에서 오답이 집중되었습니다.\n최지호 학생 2026년 10월 원주각: 34문항 중 24문항 정답(정답률 71%).\n근거 숙제(2026년 10월): 10월 1주 원의 접선 내신 숙제, 10월 2주 원주각 기본 숙제, 10월 3주 원주각 내신 기출 숙제 외 1건"
+    },
+    {
+      "id": "MS-045",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "guidance",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S003_202610:r2:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "learning_advice",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.9479429999998956,
+      "answer": "이도윤 학생 2026년 10월 분석 리포트 기준입니다.\n· 전체: 56문항 중 39문항 정답(정답률 70%)\n· 도형의 닮음: 42문항 중 28문항 정답(정답률 67%)\n· 취약 영역 도형의 닮음: 삼각형의 닮음 조건을 근거로 쓰는 서술형 문항에서 닮음 조건 없이 결론만 적은 답안이 반복되었습니다.\n담당 강사가 확인한 학습 방향: 10월 3주 삼각형의 닮음 조건 숙제에서 닮음 조건을 쓰지 않고 결론만 적은 서술형 답안이 반복되었습니다. 11월에는 서술형 답안을 '닮음 조건 → 대응변의 비 → 결론' 순서로 쓰는 연습을 수업마다 진행하고, 오답노트에 근거 문장을 함께 정리하도록 하겠습니다."
+    },
+    {
+      "id": "MS-046",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "guidance",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "GA_RPT_S005_202610:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.102455999999961,
+      "answer": "최지호 학생 2026년 10월 전체: 64문항 중 49문항 정답(정답률 77%).\n최지호 학생 2026년 10월 원과 직선: 16문항 중 13문항 정답(정답률 81%).\n최지호 학생 2026년 10월 대푯값과 산포도: 14문항 중 12문항 정답(정답률 86%).\n최지호 학생 2026년 10월 원주각: 34문항 중 24문항 정답(정답률 71%).\n근거 숙제(2026년 10월): 10월 1주 원의 접선 내신 숙제, 10월 2주 원주각 기본 숙제, 10월 3주 원주각 내신 기출 숙제 외 1건"
+    },
+    {
+      "id": "MS-047",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "guidance",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "GA_RPT_S003_202609:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "learning_advice",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.0395049999999628,
+      "answer": "이도윤 학생 2026년 9월 분석 리포트 기준입니다.\n· 전체: 52문항 중 40문항 정답(정답률 77%)\n· 삼각형의 성질: 26문항 중 19문항 정답(정답률 73%)\n· 취약 영역 삼각형의 성질: 삼각형의 외심과 내심의 성질을 구분하지 못해 각의 크기를 구하는 문항에서 오답이 반복되었습니다.\n담당 강사가 확인한 학습 방향: 9월 2주 삼각형의 외심·내심 숙제에서 외심과 내심의 성질을 바꿔 적용한 오답이 여러 번 나왔습니다. 10월에는 외심·내심 비교표를 오답노트 첫 장에 정리하게 하고, 수업 시작 5분 확인 문제로 점검하겠습니다."
+    },
+    {
+      "id": "MS-048",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "unknown",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 4.200238000000013,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-049",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "password",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 2.330775000000017,
+      "answer": "비밀번호 관련 내용은 등록된 승인 자료에서 확인되지 않아 안내해 드릴 수 없습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-050",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "over_answer",
+      "violations": [],
+      "cited": [
+        "GA_POLICY:r1:body"
+      ],
+      "goldRetrieved": false,
+      "intent": "shuttle>evidence",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 7.915071000000012,
+      "answer": "[제1조 출결] 가온수학학원 운영 규정 기준 안내입니다.\n구분: 출석 / 기준: 수업 시작 시각까지 입실"
+    },
+    {
+      "id": "MS-051",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "teacher_personal_contact",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 0.6073139999999739,
+      "answer": "강사 개인 연락처는 안내해 드리지 않습니다. 학원 대표 연락처로 문의해 주시면 전달해 드립니다."
+    },
+    {
+      "id": "MS-052",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "fee",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 0.5432749999999942,
+      "answer": "문의하신 특강 관련 내용은 현재 승인된 안내 자료에서 확인되지 않아 안내해 드릴 수 없습니다. 개설 여부와 비용은 담당자에게 확인해 주세요."
+    },
+    {
+      "id": "MS-053",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "multi(2)",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 1.5712090000000671,
+      "answer": "이도윤 학생 2026년 11월에 대한 확정된 학습 분석 자료가 아직 없어 답변드릴 수 없습니다. 자료가 확정되면 다시 확인해 주시거나 담당자 상담을 요청해 주세요."
+    },
+    {
+      "id": "MS-054",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "unknown",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 3.840404999999919,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-055",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "over_answer",
+      "violations": [],
+      "cited": [
+        "GA_TEACHERS:r1:body"
+      ],
+      "goldRetrieved": false,
+      "intent": "teacher",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.668488000000025,
+      "answer": "중1 기본반 담당 강사는 오세진 강사입니다.\n중2 기본반 담당 강사는 오세진 강사입니다.\n중2 심화반 담당 강사는 문태현 강사입니다.\n중3 심화반 담당 강사는 문태현 강사입니다.\n중3 내신집중반 담당 강사는 배수아 강사입니다."
+    },
+    {
+      "id": "MS-056",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FEE_2026_H2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.5963799999999537,
+      "answer": "2026년 11월 4일 기준 중3 내신·서술형반 월 수강료는 340,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-057",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "native",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.980530000000044,
+      "answer": "[2. 반별 원어민 스피킹 수업 (주 1회)] 새솔영어학원 2026년 2학기 정규 시간표 기준 안내입니다.\n- 중3 내신·서술형반: 원어민 스피킹 토 11:50~12:40\n원어민 스피킹 수업은 다니엘 브룩스(Daniel Brooks) 강사가 204호(스피킹룸)에서 진행하며, 월 수강료에 포함되어 있습니다."
+    },
+    {
+      "id": "MS-058",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FEE_2026_H2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.9000859999999875,
+      "answer": "2026년 11월 2일 기준 중1 문법반 월 수강료는 290,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-059",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FEE_2026_H2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.8519129999999677,
+      "answer": "2026년 11월 6일 기준 중2 내신반 월 수강료는 320,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-060",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FEE_2026_H2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "fee+discount",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 6.777300999999966,
+      "answer": "2026년 11월 9일 기준 초6 리딩반 월 수강료는 240,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용).\n2026년 11월 9일 기준 중1 문법반 월 수강료는 290,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용).\n[2. 형제·자매 할인] 새솔영어학원 2026년 하반기 수강료 안내 기준 안내입니다.\n항목: 대상 / 내용: 형제·자매가 동시에 수강하는 경우\n항목: 할인율 / 내용: 월 수강료의 10%\n항목: 적용 원생 / 내용: 월 수강료가 낮은 원생 1명 (같은 금액이면 동생)\n항목: 제외 항목 / 내용: 교재비, 셔틀버스 이용료\n예) 중2 내신반(320,000원)과 초6 리딩반(240,000원)을 함께 수강하는 경우, 초6 리딩반 수강료에서 10%(24,000원)를 할인하여 216,000원을 납부합니다.\n- 형제 할인은 등록 시 신청서에 형제 원생 이름을 기재하면 다음 납부분부터 자동 적용됩니다.\n- 다른 할인(장기 수강 할인 등)과는 중복 적용되지 않습니다."
+    },
+    {
+      "id": "MS-061",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "material_fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FEE_2026_H2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "material",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 3.3716210000000046,
+      "answer": "중3 내신·서술형반 교재비는 27,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-062",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "material_fee",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FEE_2026_H2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "material",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.724122999999963,
+      "answer": "중1 문법반 교재비는 22,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용)."
+    },
+    {
+      "id": "MS-063",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.7980830000000196,
+      "answer": "2026년 11월 4일 기준 중3 내신·서술형반 수업은 화·목 19:00~20:40, 토 10:00~11:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n2026년 11월 4일 기준 중3 내신·서술형반 수업은 원어민 스피킹 토 11:50~12:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용)."
+    },
+    {
+      "id": "MS-064",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body",
+        "SS_INFO_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule+hours",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 4.208875000000035,
+      "answer": "2026년 11월 10일 기준 중3 내신·서술형반 수업은 화·목 19:00~20:40, 토 10:00~11:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n2026년 11월 10일 기준 중3 내신·서술형반 수업은 원어민 스피킹 토 11:50~12:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n[5. 상담 안내] 새솔영어학원 학원 소개 및 이용 안내 (2026년 하반기) 기준 안내입니다.\n구분: 평일 / 상담 가능 시간: 14:00~19:00\n구분: 토요일 / 상담 가능 시간: 10:00~13:00"
+    },
+    {
+      "id": "MS-065",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.8546649999999545,
+      "answer": "2026년 11월 3일 기준 중1 문법반 수업은 화·목 19:00~20:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n2026년 11월 3일 기준 중1 문법반 수업은 원어민 스피킹 월 19:00~19:50입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용)."
+    },
+    {
+      "id": "MS-066",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "native",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 4.333456000000069,
+      "answer": "[2. 반별 원어민 스피킹 수업 (주 1회)] 새솔영어학원 2026년 2학기 정규 시간표 기준 안내입니다.\n- 초5 리딩반: 원어민 스피킹 금 16:00~16:50\n원어민 스피킹 수업은 다니엘 브룩스(Daniel Brooks) 강사가 204호(스피킹룸)에서 진행하며, 월 수강료에 포함되어 있습니다."
+    },
+    {
+      "id": "MS-067",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "abstained",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "interpretation",
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "unknown",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 3.304130999999984,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-068",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "teacher",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_TEACHER_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "teacher",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.7976740000000291,
+      "answer": "중3 내신·서술형반 담당 강사는 문가람 강사입니다."
+    },
+    {
+      "id": "MS-069",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "teacher",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_TEACHER_2026:r1:body",
+        "SS_TT_2026_REG:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "multi(2)",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.551179000000047,
+      "answer": "중2 내신반 담당 강사는 서동훈 강사입니다.\n[2. 반별 원어민 스피킹 수업 (주 1회)] 새솔영어학원 2026년 2학기 정규 시간표 기준 안내입니다.\n- 중2 내신반: 원어민 스피킹 목 19:00~19:50\n원어민 스피킹 수업은 다니엘 브룩스(Daniel Brooks) 강사가 204호(스피킹룸)에서 진행하며, 월 수강료에 포함되어 있습니다."
+    },
+    {
+      "id": "MS-070",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body",
+        "SS_NOTICE_2026_1112:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule+schedule_change",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.035026000000016,
+      "answer": "2026년 11월 16일 기준 중3 내신·서술형반 수업은 화·목 19:00~20:40, 토 10:00~11:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n2026년 11월 16일 기준 중3 내신·서술형반 수업은 원어민 스피킹 토 11:50~12:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n2026년 11월 19일(목) [학원 전체 · 휴강] 수능일 전 반 휴강"
+    },
+    {
+      "id": "MS-071",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_POLICY_2026:r1:body",
+        "SS_SHUTTLE_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "shuttle+makeup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.125789999999938,
+      "answer": "등록된 운영 규정에 따른 보강 기준:\n- 질병·경조사·학교 공식 행사로 결석하는 경우 수업 시작 전까지 담임 강사에게 알리면 보강을 신청할 수 있습니다.\n- 무단결석·개인 여행으로 인한 결석은 보강 대상이 아니며 수업 자료만 제공합니다.\n- 보강은 담임 강사와 일정을 조율하여 같은 진도의 다른 반 수업 참여 또는 자습실 개별 보강으로 진행합니다.\n[셔틀버스 운행 안내 (2026년 2학기)] 새솔영어학원 셔틀버스 운행 안내 (2026년 2학기) 기준 안내입니다.\n새솔영어학원은 A노선(솔빛동 방면) 과 B노선(해오름동 방면) 2개 노선의 셔틀버스를 평일(월~금)에 운행합니다.\n노선마다 등원 2회, 하원 2회 운행하며, 토요일 수업·보강일에는 운행하지 않습니다.\n[3. 요일·기간별 변경 사항] 새솔영어학원 셔틀버스 운행 안내 (2026년 2학기) 기준 안내입니다.\n구분: 기말 대비 기간(11월 23일~12월 31일) 하원 2회차 / 변경 내용: 중2·중3 수업 연장에 따라 21:10 출발 (정류장 도착 시각 20분씩 늦어짐)\n구분: 토요일 / 변경 내용: 운행하지 않음 (중3 정규 수업, 기말 대비 토요일 수업, 보강 모두 해당)\n구분: 휴강일 / 변경 내용: 전 반 휴강일에는 운행하지 않음"
+    },
+    {
+      "id": "MS-072",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "SS_NOTICE_2026_1112:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule_change",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.0102880000000596,
+      "answer": "2026년 11월 10일(화) [중1 문법반 · 휴강] 중1 문법반 11월 10일(화) 휴강"
+    },
+    {
+      "id": "MS-073",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "schedule_change",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "selection",
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "native",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.068636000000083,
+      "answer": "[2. 반별 원어민 스피킹 수업 (주 1회)] 새솔영어학원 2026년 2학기 정규 시간표 기준 안내입니다.\n- 중2 내신반: 원어민 스피킹 목 19:00~19:50\n원어민 스피킹 수업은 다니엘 브룩스(Daniel Brooks) 강사가 204호(스피킹룸)에서 진행하며, 월 수강료에 포함되어 있습니다."
+    },
+    {
+      "id": "MS-074",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "makeup_policy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body",
+        "SS_POLICY_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "schedule+makeup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.9751190000000634,
+      "answer": "2026년 11월 9일 기준 중3 내신·서술형반 수업은 화·목 19:00~20:40, 토 10:00~11:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n2026년 11월 9일 기준 중3 내신·서술형반 수업은 원어민 스피킹 토 11:50~12:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n등록된 운영 규정에 따른 보강 기준:\n- 질병·경조사·학교 공식 행사로 결석하는 경우 수업 시작 전까지 담임 강사에게 알리면 보강을 신청할 수 있습니다.\n- 무단결석·개인 여행으로 인한 결석은 보강 대상이 아니며 수업 자료만 제공합니다.\n- 보강은 담임 강사와 일정을 조율하여 같은 진도의 다른 반 수업 참여 또는 자습실 개별 보강으로 진행합니다."
+    },
+    {
+      "id": "MS-075",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "makeup_policy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "partial",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "interpretation",
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body"
+      ],
+      "goldRetrieved": false,
+      "intent": "native+schedule_change",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 6.579541000000063,
+      "answer": "[2. 반별 원어민 스피킹 수업 (주 1회)] 새솔영어학원 2026년 2학기 정규 시간표 기준 안내입니다.\n- 중3 내신·서술형반: 원어민 스피킹 토 11:50~12:40\n원어민 스피킹 수업은 다니엘 브룩스(Daniel Brooks) 강사가 204호(스피킹룸)에서 진행하며, 월 수강료에 포함되어 있습니다.\n확인되지 않은 항목: 2026년 11월 14일 보강 공지."
+    },
+    {
+      "id": "MS-076",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "study_room",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FACILITY_2026:r1:body",
+        "SS_TT_2026_REG:r1:body",
+        "SS_INFO_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "multi(2)",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.783244999999965,
+      "answer": "등록된 안내 자료에 따르면: 자습실 운영 (평일 14:00~22:00, 토 10:00~14:00)\n2026년 11월 7일 기준 중3 내신·서술형반 수업은 화·목 19:00~20:40, 토 10:00~11:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n2026년 11월 7일 기준 중3 내신·서술형반 수업은 원어민 스피킹 토 11:50~12:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n[5. 상담 안내] 새솔영어학원 학원 소개 및 이용 안내 (2026년 하반기) 기준 안내입니다.\n구분: 평일 / 상담 가능 시간: 14:00~19:00\n구분: 토요일 / 상담 가능 시간: 10:00~13:00"
+    },
+    {
+      "id": "MS-077",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "shuttle",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": false,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "SS_SHUTTLE_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "shuttle",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.189474000000018,
+      "answer": "[1. A노선 (솔빛동 방면)] 새솔영어학원 셔틀버스 운행 안내 (2026년 2학기) 기준 안내입니다.\n정류장: 솔빛중학교 후문 / 등원 1회차(초등): 15:42 / 등원 2회차(중등): 18:33 / 하원 1회차(초등): 17:44 / 하원 2회차(중등): 20:59"
+    },
+    {
+      "id": "MS-078",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "shuttle",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "interpretation",
+      "violations": [],
+      "cited": [
+        "SS_TT_2026_REG:r1:body"
+      ],
+      "goldRetrieved": false,
+      "intent": "schedule",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.973126000000093,
+      "answer": "2026년 11월 9일 기준 중3 내신·서술형반 수업은 화·목 19:00~20:40, 토 10:00~11:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용).\n2026년 11월 9일 기준 중3 내신·서술형반 수업은 원어민 스피킹 토 11:50~12:40입니다(2026년 9월 1일 ~ 2026년 11월 22일 적용)."
+    },
+    {
+      "id": "MS-079",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "shuttle",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FEE_2026_H2:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "shuttle>evidence",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 7.389970000000062,
+      "answer": "[3. 셔틀버스 이용료 (희망자)] 새솔영어학원 2026년 하반기 수강료 안내 기준 안내입니다.\n구분: 왕복 이용 / 월 이용료: 35,000원"
+    },
+    {
+      "id": "MS-080",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "shuttle",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_SHUTTLE_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "shuttle",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 4.9660089999999855,
+      "answer": "[셔틀버스 운행 안내 (2026년 2학기)] 새솔영어학원 셔틀버스 운행 안내 (2026년 2학기) 기준 안내입니다.\n새솔영어학원은 A노선(솔빛동 방면) 과 B노선(해오름동 방면) 2개 노선의 셔틀버스를 평일(월~금)에 운행합니다.\n노선마다 등원 2회, 하원 2회 운행하며, 토요일 수업·보강일에는 운행하지 않습니다."
+    },
+    {
+      "id": "MS-081",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "shuttle",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_SHUTTLE_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "evidence",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 4.480655999999954,
+      "answer": "[2. B노선 (해오름동 방면)] 새솔영어학원 셔틀버스 운행 안내 (2026년 2학기) 기준 안내입니다.\n- 등원 차량은 위 시각보다 2~3분 일찍 정류장에 도착할 수 있으니 미리 나와 기다려 주세요.\n- 하원 시각은 학원 출발 기준이며, 교통 상황에 따라 정류장 도착이 5분 안팎 늦어질 수 있습니다.\n정류장: 해오름도서관 앞 / 등원 2회차(중등): 18:41 / 하원 2회차(중등): 20:55"
+    },
+    {
+      "id": "MS-082",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "level_test",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_INFO_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "level_test",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 6.086451000000011,
+      "answer": "[6. 무료 레벨테스트] 새솔영어학원 학원 소개 및 이용 안내 (2026년 하반기) 기준 안내입니다.\n처음 등록하는 원생은 반 배정을 위해 레벨테스트를 봅니다.\n- 레벨테스트 결과는 당일 상담 시 안내하며, 결과지는 보호자 휴대전화로 문자 발송합니다.\n- 레벨테스트 후 등록 여부는 자유롭게 결정하실 수 있습니다.\n항목: 비용 / 내용: 무료\n항목: 소요 시간 / 내용: 약 50분 (테스트 35분 + 결과 상담 15분)\n항목: 평가 영역 / 내용: 어휘·문법·독해·듣기 (중등은 서술형 1문항 추가)\n항목: 예약 가능 시간 / 내용: 평일 15:00 / 17:00, 토요일 10:30\n항목: 준비물 / 내용: 필기구 (최근 학교 영어 시험지가 있으면 함께 지참)"
+    },
+    {
+      "id": "MS-083",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "refund",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_FEE_2026_H2:r1:body",
+        "SS_POLICY_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "material+refund",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 8.412024999999971,
+      "answer": "중3 내신·서술형반 교재비는 27,000원입니다(2026년 9월 1일 ~ 2026년 12월 31일 적용).\n[제4장 수강료 환불] 새솔영어학원 운영 규정 (2026년 개정) 기준 안내입니다.\n수강료(교습비) 환불은 「학원의 설립·운영 및 과외교습에 관한 법률 시행령」의 교습비 반환 기준에 따릅니다.\n- 반환 사유가 발생한 날부터 5일 이내에 환불합니다.\n- 교재비는 교재를 지급하기 전이면 전액 환불하며, 지급 후에는 환불하지 않습니다.\n- 셔틀버스 이용료는 이용 시작 전이면 전액, 이용 시작 후에는 위 표와 같은 비율로 환불합니다.\n- 환불 신청은 보호자가 학원 데스크 또는 원장실 전화로 해 주세요.\n반환 사유 발생 시점: 수업 시작 전 / 반환 금액: 이미 낸 수강료 전액\n반환 사유 발생 시점: 총 수업 시간의 1/3 경과 전 / 반환 금액: 이미 낸 수강료의 2/3\n반환 사유 발생 시점: 총 수업 시간의 1/2 경과 전 / 반환 금액: 이미 낸 수강료의 1/2\n반환 사유 발생 시점: 총 수업 시간의 1/2 경과 후 / 반환 금액: 반환하지 않음"
+    },
+    {
+      "id": "MS-084",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "enrollment",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_ENROLL_2026_11:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "enrollment",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.285152999999923,
+      "answer": "중1 문법반 모집 현황: 모집 중 (잔여 2석) (2026년 11월 1일 공지 기준)"
+    },
+    {
+      "id": "MS-085",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "enrollment",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_ENROLL_2026_11:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "enrollment",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.3772689999999557,
+      "answer": "중3 내신·서술형반 모집 현황: 마감 (대기 접수 종료) (2026년 11월 1일 공지 기준)"
+    },
+    {
+      "id": "MS-086",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "location_hours",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_INFO_2026:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "location",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 7.712195000000065,
+      "answer": "[3. 위치 및 연락처] 새솔영어학원 학원 소개 및 이용 안내 (2026년 하반기) 기준 안내입니다.\n항목: 주소 / 내용: 가상시 푸른구 솔빛로 88, 2층 (새솔빌딩)\n항목: 대표 전화 / 내용: 031-0000-8800\n항목: 대중교통 / 내용: 솔빛역 2번 출구에서 도보 약 5분\n항목: 셔틀버스 / 내용: A노선·B노선 2개 노선 운행(「셔틀버스 운행 안내」 참고)"
+    },
+    {
+      "id": "MS-087",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_RPT_STU006_2026_10:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.6969699999999648,
+      "answer": "임준혁 학생 2026년 10월 전체: 80문항 중 65문항 정답(정답률 81%).\n임준혁 학생 2026년 10월 서술형-조건 영작: 10문항 중 7문항 정답(정답률 70%).\n임준혁 학생 2026년 10월 독해-요지·주장 파악: 15문항 중 12문항 정답(정답률 80%).\n임준혁 학생 2026년 10월 문법-수동태: 20문항 중 16문항 정답(정답률 80%).\n임준혁 학생 2026년 10월 문법-관계대명사: 20문항 중 17문항 정답(정답률 85%).\n임준혁 학생 2026년 10월 어휘-중3 교과 어휘: 15문항 중 13문항 정답(정답률 87%).\n근거 숙제(2026년 10월): 10월 2주 관계대명사 심화 숙제, 10월 2주 요지·주장 독해 숙제, 10월 3주 단어 시험 외 2건"
+    },
+    {
+      "id": "MS-088",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_RPT_STU006_2026_09:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.3141349999999647,
+      "answer": "임준혁 학생 2026년 9월 문법-관계대명사: 20문항 중 15문항 정답(정답률 75%).\n근거 숙제(2026년 9월): 9월 1주 관계대명사 숙제"
+    },
+    {
+      "id": "MS-089",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "SS_RPT_STU006_2026_10:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.667528999999945,
+      "answer": "임준혁 학생 2026년 10월 전체: 80문항 중 65문항 정답(정답률 81%).\n임준혁 학생 2026년 10월 서술형-조건 영작: 10문항 중 7문항 정답(정답률 70%).\n임준혁 학생 2026년 10월 독해-요지·주장 파악: 15문항 중 12문항 정답(정답률 80%).\n임준혁 학생 2026년 10월 문법-수동태: 20문항 중 16문항 정답(정답률 80%).\n임준혁 학생 2026년 10월 문법-관계대명사: 20문항 중 17문항 정답(정답률 85%).\n임준혁 학생 2026년 10월 어휘-중3 교과 어휘: 15문항 중 13문항 정답(정답률 87%).\n근거 숙제(2026년 10월): 10월 2주 관계대명사 심화 숙제, 10월 2주 요지·주장 독해 숙제, 10월 3주 단어 시험 외 2건"
+    },
+    {
+      "id": "MS-090",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "accuracy",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": false,
+        "generation": true
+      },
+      "errorStage": "interpretation",
+      "violations": [],
+      "cited": [
+        "SS_BOARD_2026_10:r1:body"
+      ],
+      "goldRetrieved": false,
+      "intent": "retest",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 5.9274370000000545,
+      "answer": "[1. 단어 시험 범위를 미리 알고 싶어요] 학부모 건의 게시판 10월 답변 모음 기준 안내입니다.\n건의 (중1 학부모, 10월 8일) \"아이가 단어 시험 범위를 자꾸 잊어버려서 집에서 챙겨 주기가 어렵습니다.\n- 11월부터 매주 월요일 오후 6시까지 '새솔 알림장' 앱에 그 주의 반별 단어 시험 범위와 시험 요일을 게시합니다.\n- 단어장 PDF도 함께 올려 드리니 가정에서 출력해 활용해 주세요.\n- 재시험 기준(정답률 80% 미만 시 재시험)은 「운영 규정」 제2장과 같습니다."
+    },
+    {
+      "id": "MS-091",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "weak_area",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [
+        "SS_RPT_STU006_2026_10:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 1.6601729999999861,
+      "answer": "임준혁 학생 2026년 10월 전체: 80문항 중 65문항 정답(정답률 81%).\n임준혁 학생 2026년 10월 서술형-조건 영작: 10문항 중 7문항 정답(정답률 70%).\n임준혁 학생 2026년 10월 독해-요지·주장 파악: 15문항 중 12문항 정답(정답률 80%).\n임준혁 학생 2026년 10월 문법-수동태: 20문항 중 16문항 정답(정답률 80%).\n임준혁 학생 2026년 10월 문법-관계대명사: 20문항 중 17문항 정답(정답률 85%).\n임준혁 학생 2026년 10월 어휘-중3 교과 어휘: 15문항 중 13문항 정답(정답률 87%).\n근거 숙제(2026년 10월): 10월 2주 관계대명사 심화 숙제, 10월 2주 요지·주장 독해 숙제, 10월 3주 단어 시험 외 2건"
+    },
+    {
+      "id": "MS-092",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "weak_area",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "abstained",
+      "correct": false,
+      "checks": {
+        "status": false,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "guard",
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "causal_or_attitude",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 0.9676830000000791,
+      "answer": "숙제 정답·오답 기록만으로는 원인이나 학습 태도를 판단할 수 없어 답변드리기 어렵습니다. 담당 강사와 상담해 보시길 권해 드립니다."
+    },
+    {
+      "id": "MS-093",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "guidance",
+      "tags": [],
+      "expectedStatus": "answered",
+      "status": "answered",
+      "correct": false,
+      "checks": {
+        "status": true,
+        "mustInclude": false,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": "binding",
+      "violations": [],
+      "cited": [
+        "SS_RPT_STU006_2026_10:r1:body"
+      ],
+      "goldRetrieved": true,
+      "intent": "accuracy_lookup",
+      "internalErrors": [],
+      "generationCalls": 0,
+      "latencyMs": 2.5358270000000402,
+      "answer": "임준혁 학생 2026년 10월 전체: 80문항 중 65문항 정답(정답률 81%).\n임준혁 학생 2026년 10월 서술형-조건 영작: 10문항 중 7문항 정답(정답률 70%).\n임준혁 학생 2026년 10월 독해-요지·주장 파악: 15문항 중 12문항 정답(정답률 80%).\n임준혁 학생 2026년 10월 문법-수동태: 20문항 중 16문항 정답(정답률 80%).\n임준혁 학생 2026년 10월 문법-관계대명사: 20문항 중 17문항 정답(정답률 85%).\n임준혁 학생 2026년 10월 어휘-중3 교과 어휘: 15문항 중 13문항 정답(정답률 87%).\n근거 숙제(2026년 10월): 10월 2주 관계대명사 심화 숙제, 10월 2주 요지·주장 독해 숙제, 10월 3주 단어 시험 외 2건"
+    },
+    {
+      "id": "MS-094",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "parking",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 3.1190709999999626,
+      "answer": "주차 관련 내용은 등록된 승인 자료에서 확인되지 않아 안내해 드릴 수 없습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-095",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "native",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 0.7814270000000079,
+      "answer": "문의하신 캠프 관련 내용은 현재 승인된 안내 자료에서 확인되지 않아 안내해 드릴 수 없습니다. 개설 여부와 비용은 담당자에게 확인해 주세요."
+    },
+    {
+      "id": "MS-096",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "accuracy_lookup",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 1.0336899999999787,
+      "answer": "임준혁 학생 2026년 11월에 대한 확정된 학습 분석 자료가 아직 없어 답변드릴 수 없습니다. 자료가 확정되면 다시 확인해 주시거나 담당자 상담을 요청해 주세요."
+    },
+    {
+      "id": "MS-097",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "teacher_personal_contact",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 0.8904169999999567,
+      "answer": "강사 개인 연락처는 안내해 드리지 않습니다. 학원 대표 연락처로 문의해 주시면 전달해 드립니다."
+    },
+    {
+      "id": "MS-098",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "evidence",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 4.567138,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-099",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "password",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 3.5403709999999364,
+      "answer": "비밀번호 관련 내용은 등록된 승인 자료에서 확인되지 않아 안내해 드릴 수 없습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    },
+    {
+      "id": "MS-100",
+      "suite": "v1-paraphrase-100",
+      "split": "dev",
+      "category": "abstain",
+      "tags": [],
+      "expectedStatus": "abstained",
+      "status": "abstained",
+      "correct": true,
+      "checks": {
+        "status": true,
+        "mustInclude": true,
+        "mustNotInclude": true,
+        "citation": true,
+        "generation": true
+      },
+      "errorStage": null,
+      "violations": [],
+      "cited": [],
+      "goldRetrieved": false,
+      "intent": "unknown",
+      "internalErrors": [
+        "INSUFFICIENT_EVIDENCE"
+      ],
+      "generationCalls": 0,
+      "latencyMs": 5.352857999999969,
+      "answer": "질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다."
+    }
+  ]
+}

@@ -126,6 +126,61 @@ function datePrefix(effective: EffectiveTime): string {
   return `${formatKstDate(effective.at)} 기준 `;
 }
 
+/** 두 글자 묶음이 하나라도 겹치는지(“재료비” ↔ “실험 재료비(월)”). */
+function sharesBigram(a: string, b: string): boolean {
+  const x = compactText(a);
+  const y = compactText(b);
+  for (let i = 0; i + 2 <= x.length; i += 1)
+    if (y.includes(x.slice(i, i + 2))) return true;
+  return false;
+}
+
+/**
+ * 금액 사실의 원문 이름: 사실이 나온 문서의 표에서 그 금액이 든 칸의 머리글(예: "실험 재료비(월)" → "실험 재료비").
+ * 원문에서 찾지 못한 사실은 이름을 비워 두고 주제 이름을 쓴다.
+ */
+async function sourceLabels(
+  ctx: AnswerContext,
+  factType: FactType,
+  at: number,
+): Promise<Map<string, string>> {
+  const facts = (await loadFacts(ctx, [factType], at)).filter(
+    (fact) => fact.value.kind === 'money',
+  );
+  const labels = new Map<string, string>();
+  if (facts.length === 0) return labels;
+  const amounts = [...new Set(facts.map((fact) => formatKrw(amountOf(fact))))];
+  const results = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    query: amounts.join(' '),
+    limit: 40,
+  });
+  for (const fact of facts) {
+    const amount = compactText(formatKrw(amountOf(fact)));
+    for (const { chunk } of results) {
+      if (chunk.documentId !== fact.documentId) continue;
+      const cells = chunk.location.cells ?? [];
+      const header = chunk.location.header ?? [];
+      const index = cells.findIndex(
+        (cell, i) => i > 0 && compactText(cell).includes(amount),
+      );
+      const name = index > 0 ? header[index] : undefined;
+      if (!name) continue;
+      const label = name
+        .replace(/\(.*?\)/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (label.length >= 2 && !/^\d/.test(label)) {
+        labels.set(fact.factId, label);
+        break;
+      }
+    }
+  }
+  return labels;
+}
+
 function amountOf(fact: ApprovedFact): number {
   return fact.value.kind === 'money' ? fact.value.amount : 0;
 }
@@ -1165,16 +1220,47 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
       case 'fee':
         parts.push(await answerFee(ctx, effective));
         break;
-      case 'material':
+      case 'material': {
+        // 같은 사실 유형이라도 학원마다 원문 이름이 다르다(교재비 / 실험 재료비). 원문 표 머리글을 이름으로 쓰고,
+        // 질문이 가리킨 비용 이름과 원문 이름이 다르면(교재비를 물었는데 원문은 실험 재료비) 정형 값으로 답하지 않는다.
+        const labels = await sourceLabels(ctx, 'material_fee', effective.at);
+        const asked = topic.terms.filter((term) =>
+          ctx.frame.compact.includes(compactText(term)),
+        );
+        const known = [...labels.values()];
+        // 원문 이름과 겹치지 않는 비용 이름 중 승인 자료에 따로 나오는 말(예: "교재비" 절)이 있으면 다른 비용을 물은 것이다.
+        // 자료에 없는 구어 표현(“책값”)은 원문 이름과 달라도 같은 비용으로 본다.
+        const unmatched = asked.filter(
+          (term) => !known.some((label) => sharesBigram(term, label)),
+        );
+        let otherCost = false;
+        if (known.length > 0 && unmatched.length === asked.length) {
+          for (const term of unmatched) {
+            if (
+              await ctx.documents.corpusContains?.({
+                access: ctx.access,
+                studentIds: [],
+                asOf: ctx.asOf,
+                term,
+              })
+            )
+              otherCost = true;
+          }
+        }
+        if (otherCost) {
+          parts.push(emptyPart('missing', [topic.label]));
+          break;
+        }
         parts.push(
           await answerClassFacts(ctx, effective, {
             factType: 'material_fee',
-            label: '교재비',
+            label: topic.label,
             render: (fact, name) =>
-              `${name} 교재비는 ${formatKrw(amountOf(fact))}입니다(${formatValidity(fact.validFrom, fact.validTo)}).`,
+              `${name} ${labels.get(fact.factId) ?? topic.label}는 ${formatKrw(amountOf(fact))}입니다(${formatValidity(fact.validFrom, fact.validTo)}).`,
           }),
         );
         break;
+      }
       case 'schedule':
         parts.push(
           await answerClassFacts(ctx, effective, {

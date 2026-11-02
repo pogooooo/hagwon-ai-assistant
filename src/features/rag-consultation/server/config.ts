@@ -62,9 +62,10 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
   },
   {
     id: 'material',
-    label: '교재비',
+    label: '교재·재료비',
     kind: 'structured',
-    terms: ['교재비', '교재', '책값'],
+    // 사실 유형 material_fee(교재·재료비)의 이름. 학원별 원문 이름(교재비/실험 재료비)은 답할 때 원문 표 머리글을 따른다.
+    terms: ['교재비', '교재', '책값', '재료비'],
     factTypes: ['material_fee'],
   },
   {

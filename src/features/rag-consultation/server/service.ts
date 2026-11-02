@@ -524,6 +524,14 @@ export function createRagConsultationService(
    * 1) 규칙이 뚜렷한 주제를 찾았으면 정형 조회·절 인용으로 답하고, 의문사가 요구하는 값이 없거나 자료 없음이면 2)로
    * 2) 주제가 없거나 일반어(얼마·언제)로만 잡혔으면 원문 검색 근거로 경로를 정한다.
    */
+  const CLASS_FACT_TOPICS = [
+    'fee',
+    'material',
+    'schedule',
+    'teacher',
+    'enrollment',
+  ];
+
   async function routeInfo(
     ctx: AnswerContext,
     studentIdHint: string | undefined,
@@ -648,6 +656,35 @@ export function createRagConsultationService(
       )
         return viaEvidence;
       return answerInfo(ctx);
+    }
+    // 반을 정하지 않은 반별 정형 질문은 전체 반 목록을 그대로 내기 전에 가장 믿을 만한 근거의 자리를 먼저 본다.
+    // 근거가 그 정형 사실 자리가 아니라 다른 문서 내용이면(“상 받은 학생 몇 명?” → 소식지) 그 문서로 답한다.
+    const unbound =
+      explicitClassIds(ctx).length === 0 &&
+      frame.topics.every((topic) => CLASS_FACT_TOPICS.includes(topic.id)) &&
+      ctx.catalog.classes.length > 3;
+    if (unbound) {
+      const evidence = await retrieveEvidence(ctx);
+      const plan = planFromEvidence(ctx, evidence);
+      if (
+        plan.kind === 'document' ||
+        (plan.kind === 'facts' &&
+          !plan.topics.some((topic) =>
+            frame.topics.some((asked) => asked.id === topic.id),
+          ))
+      ) {
+        const viaEvidence = await answerByPlan(
+          ctx,
+          evidence,
+          plan,
+          studentIdHint,
+        );
+        if (
+          viaEvidence.status === 'answered' ||
+          viaEvidence.status === 'partial'
+        )
+          return viaEvidence;
+      }
     }
     const draft = await answerInfo(ctx);
     // 속성 주제(와이파이·연락처 등)가 자료에 "없다"는 판정은 그대로 따른다(다른 문서로 대신 답하지 않음).
