@@ -46,11 +46,25 @@ export interface ChunkSearchQuery {
   documentTypes?: readonly string[];
   /** 프롬프트 인젝션 의심 청크 포함 여부(기본 false). */
   includeSuspicious?: boolean;
+  /**
+   * 사용자 원문 질문. 의미 검색(임베딩)과 재정렬은 키워드 묶음(query)이 아니라 이 원문을 쓴다.
+   * 비어 있으면 query 를 쓴다.
+   */
+  question?: string;
+  /** 재정렬 사용: never(기본) | auto(검색 순위가 애매할 때만) | always */
+  rerank?: 'never' | 'auto' | 'always';
 }
 
 export interface ScoredChunk {
   chunk: RagChunk;
   score: number;
+  /** 순위 신호(하이브리드·재정렬 사용 시): 근거 신뢰도 판단용 */
+  signals?: {
+    lexicalRank?: number;
+    denseRank?: number;
+    denseScore?: number;
+    rerankScore?: number;
+  };
 }
 
 export interface IndexRevisionResult {
@@ -92,6 +106,26 @@ export interface RagDocumentsPort {
     revision?: number;
     reason: 'deleted' | 'revoked';
   }): Promise<void>;
+  /**
+   * (선택) 청크 위치에서 확인되는 정형 사실의 종류·대상. 검색 기반 의도 판별에 쓴다(값은 주지 않음 —
+   * 값은 반드시 ApprovedFactsPort 로 권한·유효기간을 거쳐 조회).
+   */
+  /**
+   * (선택) 권한 범위 안의 승인 자료에 이 낱말(공백 무시)이 한 번이라도 나오는지.
+   * "자료에 전혀 없는 개념"을 묻는 질문을 보류할 때 쓴다.
+   */
+  corpusContains?(input: {
+    access: RagAccessScope;
+    studentIds: readonly string[];
+    asOf: number;
+    term: string;
+  }): Promise<boolean>;
+  factRefsAtChunk?(chunkId: string): Array<{
+    factType: FactType;
+    subjectType: 'student' | 'class' | 'academy';
+    subjectId: string;
+    period: string | null;
+  }>;
 }
 
 /** 5번 기능: 학원·반·단원 카탈로그(현재 학원 한정). */

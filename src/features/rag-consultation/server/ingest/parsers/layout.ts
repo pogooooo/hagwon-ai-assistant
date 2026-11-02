@@ -225,7 +225,11 @@ function joinLines(
   return `${previous} ${next}`;
 }
 
-function buildTable(lines: Line[], tolerance: number): string[][] {
+function buildTable(
+  lines: Line[],
+  tolerance: number,
+  ocr: boolean,
+): string[][] {
   const x0s = lines
     .flatMap((l) => l.segments.map((s) => s.x0))
     .sort((a, b) => a - b);
@@ -249,24 +253,34 @@ function buildTable(lines: Line[], tolerance: number): string[][] {
     });
     return index;
   };
+  // 행 경계: 셀 안 줄바꿈(줄 간격)과 행 사이(셀 여백·테두리)의 세로 간격이 두 무리로 나뉘면 그 중간값을 경계로 쓴다.
+  const gaps = lines.slice(1).map((line, i) => line.top - lines[i].bottom);
+  const size = median(lines.map((l) => l.size));
+  const minGap = Math.min(...gaps);
+  const maxGap = Math.max(...gaps);
+  const bimodal = gaps.length >= 2 && maxGap - minGap > 0.3 * size;
+  const rowBreak = (minGap + maxGap) / 2;
+  const join = (a: string, b: string) => (a ? joinLines(a, b, false, ocr) : b);
   const rows: string[][] = [];
-  for (const line of lines) {
+  lines.forEach((line, index) => {
     const cells = new Array(anchors.length).fill('');
     for (const segment of line.segments) {
-      const index = anchorOf(segment.x0);
-      cells[index] = cells[index]
-        ? `${cells[index]} ${segment.text}`
+      const column = anchorOf(segment.x0);
+      cells[column] = cells[column]
+        ? `${cells[column]} ${segment.text}`
         : segment.text;
     }
-    const startsRow = cells[0] !== '' || rows.length === 0;
+    const startsRow =
+      rows.length === 0 ||
+      (bimodal ? gaps[index - 1] > rowBreak : cells[0] !== '');
     if (startsRow) rows.push(cells);
     else {
       const row = rows[rows.length - 1];
-      cells.forEach((cell, index) => {
-        if (cell) row[index] = row[index] ? `${row[index]} ${cell}` : cell;
+      cells.forEach((cell, column) => {
+        if (cell) row[column] = join(row[column], cell);
       });
     }
-  }
+  });
   return rows;
 }
 
@@ -320,7 +334,7 @@ export function analyzePage(
         ).length;
         if (multiCount >= 2) {
           flushParagraph();
-          const rows = buildTable(collected, line.size * 1.0);
+          const rows = buildTable(collected, line.size * 1.0, options.ocr);
           if (rows[0]?.length >= 2) {
             blocks.push({
               kind: 'table',

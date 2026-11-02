@@ -120,7 +120,22 @@ export function resolveEffectiveTime(
   asOf: number,
 ): EffectiveTime {
   const date = frame.explicitDates[0];
-  if (!date) return { at: asOf, explicitDay: null };
+  if (!date) {
+    // 날짜는 없지만 미래 시점을 묻는 경우: "1월부터 얼마"·"다음 달 수강료" → 그 달 1일 기준 값
+    const now = toKstDate(asOf);
+    const month =
+      frame.relativePeriod === 'next_month'
+        ? (now.month % 12) + 1
+        : frame.futureCue && frame.months.length === 1
+          ? frame.months[0]
+          : null;
+    if (month !== null && month !== now.month) {
+      const year = month < now.month ? now.year + 1 : now.year;
+      const start = kstStartOfDay({ year, month, day: 1 });
+      return { at: start, explicitDay: null };
+    }
+    return { at: asOf, explicitDay: null };
+  }
   const year = Number.isNaN(date.year) ? toKstDate(asOf).year : date.year;
   const start = kstStartOfDay({ year, month: date.month, day: date.day });
   if (date.operator === 'before') return { at: start - 1, explicitDay: start };

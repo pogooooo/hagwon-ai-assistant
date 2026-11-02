@@ -78,7 +78,9 @@ export interface QueryFrame {
   relativeDay: number | null;
   relativeWeek: 'last_week' | 'this_week' | 'next_week' | null;
   months: number[];
-  relativePeriod: 'last_month' | 'this_month' | null;
+  relativePeriod: 'last_month' | 'this_month' | 'next_month' | null;
+  /** 질문이 미래 시점의 값을 묻는지("1월부터"·"내년"·"다음 달부터"·"오른다던데") — 학원 정보의 적용 시점 계산용 */
+  futureCue: boolean;
   units: string[];
   questionTypes: string[];
   /** 질문에 나온 과목(카탈로그 반의 과목명) */
@@ -239,6 +241,80 @@ function matchClasses(compact: string, catalog: AcademyCatalog) {
   };
 }
 
+const NON_CLASS_PREFIXES = new Set([
+  '우리',
+  '저희',
+  '제',
+  '내',
+  '이',
+  '그',
+  '저',
+  '같은',
+  '무슨',
+  '어느',
+  '어떤',
+  '다른',
+  '몇',
+  '두',
+  '각',
+  '모든',
+  '학원',
+  '수업',
+  '전',
+  '새',
+  '윗',
+  '아랫',
+  '옆',
+  '합',
+  '분',
+]);
+
+/** 글자들이 같은 순서로 들어 있는지("과고" ⊂ "과학고대비반"). */
+function isSubsequence(needle: string, haystack: string): boolean {
+  let index = 0;
+  for (const char of haystack) {
+    if (char === needle[index]) index += 1;
+    if (index === needle.length) return true;
+  }
+  return needle.length === 0;
+}
+
+export function abbreviatedClasses(
+  normalized: string,
+  catalog: AcademyCatalog,
+): string[] {
+  const grades = unique(
+    [...normalized.replace(/\s+/g, '').matchAll(/(초|중|고)[1-6]/g)].map(
+      (m) => m[0],
+    ),
+  );
+  const found = new Set<string>();
+  for (const match of normalized.matchAll(
+    /([가-힣a-z0-9]{2,8})반(?![가-힣])/g,
+  )) {
+    const word = match[1].replace(/^(초|중|고)[1-6]/, '');
+    if (word.length < 2 || NON_CLASS_PREFIXES.has(word)) continue;
+    const candidates = catalog.classes.filter((klass) => {
+      const name = compactText(klass.name).replace(/^(초|중|고)[1-6]/, '');
+      const names = [
+        name,
+        ...klass.aliases.map((a) =>
+          compactText(a).replace(/^(초|중|고)[1-6]/, ''),
+        ),
+      ];
+      if (!names.some((n) => n.startsWith(word[0]) && isSubsequence(word, n)))
+        return false;
+      const grade = klass.grade
+        ? compactText(klass.grade)
+        : (compactText(klass.name).match(/^(초|중|고)[1-6]/)?.[0] ?? null);
+      return grades.length === 0 || !grade || grades.includes(grade);
+    });
+    if (candidates.length > 0 && candidates.length <= 4)
+      candidates.forEach((klass) => found.add(klass.classId));
+  }
+  return [...found];
+}
+
 function matchAcademies(normalized: string, catalog: AcademyCatalog): boolean {
   const own = new Set(
     [catalog.displayName, ...catalog.aliases].map((name) =>
@@ -390,11 +466,13 @@ export function parseQuery(
       .map((match) => Number(match[1]))
       .filter((month) => month >= 1 && month <= 12),
   );
-  const relativePeriod = test(/지난\s*달|저번\s*달|전월/g, normalized)
-    ? 'last_month'
-    : test(/이번\s*달|이달|금월/g, normalized)
-      ? 'this_month'
-      : null;
+  const relativePeriod = test(/다음\s*달|담달|내달|다음달/g, normalized)
+    ? 'next_month'
+    : test(/지난\s*달|저번\s*달|전월/g, normalized)
+      ? 'last_month'
+      : test(/이번\s*달|이달|금월/g, normalized)
+        ? 'this_month'
+        : null;
   const relativeWeek = test(/이번\s*주|금주|이번주/g, normalized)
     ? 'this_week'
     : test(/다음\s*주|차주/g, normalized)
@@ -412,7 +490,13 @@ export function parseQuery(
 
   // 5) 반 → (반 이름을 지운 문장에서) 단원·유형 → 주제
   const stripped = compact.replace(/[^0-9a-z가-힣]/g, '');
-  const { positive, negated, spans } = matchClasses(stripped, catalog);
+  const matched = matchClasses(stripped, catalog);
+  const { negated, spans } = matched;
+  // 반 이름 줄임말("과고반"·"영재원반"·"실험반"·"내신반"): 정확히 맞는 반이 없을 때만, 학년이 맞고 글자 순서가 같은 반들
+  const positive =
+    matched.positive.length > 0
+      ? matched.positive
+      : abbreviatedClasses(normalized, catalog);
   let withoutClasses = stripped;
   for (const [start, end] of spans) {
     withoutClasses = `${withoutClasses.slice(0, start)}${' '.repeat(end - start)}${withoutClasses.slice(end)}`;
@@ -467,6 +551,42 @@ export function parseQuery(
   );
 
   let topics = selectTopics(compact, config);
+  const makeupClassContext =
+    test(/보충/g, normalized) &&
+    (dates.length > 0 ||
+      relativeDay !== null ||
+      relativeWeek !== null ||
+      test(
+        /언제|몇\s*시|요일|수업\s*(있|없|해|하)|쉬|휴강|빠지|빠졌|못\s*(가|갔)|결석|보충\s*수업|날짜/g,
+        normalized,
+      ));
+  if (
+    makeupClassContext &&
+    !topics.some(
+      (topic) => topic.id === 'makeup' || topic.id === 'schedule_change',
+    )
+  ) {
+    const makeup = config.topics.find((topic) => topic.id === 'makeup');
+    if (makeup) topics = [...topics, makeup];
+  }
+  // "수업 있어요/해요"는 날짜·행사 단서가 있을 때만 휴강 질문으로 본다("한 번에 몇 분 수업해요?"는 수업 정보).
+  const changeTopic = topics.find((topic) => topic.id === 'schedule_change');
+  if (changeTopic) {
+    const matchedTerms = changeTopic.terms.filter((term) =>
+      compact.includes(compactText(term)),
+    );
+    const verbOnly = matchedTerms.every((term) => /^수업/.test(term));
+    const dateAnchor =
+      dates.length > 0 ||
+      relativeDay !== null ||
+      relativeWeek !== null ||
+      months.length > 0 ||
+      /수능|명절|방학|연휴|공휴일|설날|추석|크리스마스|성탄|어린이날|기념일|휴일|시험\s*기간|기말|중간고사|[월화수목금토일]요일|주말/.test(
+        normalized,
+      );
+    if (verbOnly && !dateAnchor)
+      topics = topics.filter((topic) => topic !== changeTopic);
+  }
   const policyWords = test(
     /규정|기준|받을\s*수|신청|무조건|횟수|조건|어떻게|되나요|돼요|가능한가|가능해요/g,
     normalized,
@@ -571,10 +691,13 @@ export function parseQuery(
         /이전\s*(가격|요금|수강료|시간표)|예전|원래|전에는|종전/g,
         normalized,
       ),
-    generationRequest: test(
-      /학습\s*방향|공부\s*방향|방향으로|방향\s*(좀|을|잡)|공부\s*방법|보완|보충|조언|어떻게\s*(하면|공부|해야)|공부\s*(하면|시키면|해야)\s*(좋|될|할)|뭘\s*(더\s*)?(해야|공부)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
-      normalized,
-    ),
+    generationRequest:
+      test(
+        /학습\s*방향|공부\s*방향|방향으로|방향\s*(좀|을|잡)|공부\s*방법|보완|조언|어떻게\s*(하면|공부|해야)|공부\s*(하면|시키면|해야)\s*(좋|될|할)|뭘\s*(더\s*)?(해야|공부)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
+        normalized,
+      ) ||
+      // "보충"은 날짜·요일·수업 일정 맥락이면 보충 수업(보강), 아니면 보충 학습(학습 상담)
+      (test(/보충/g, normalized) && !makeupClassContext),
     countLimit: test(/\d+\s*(번|회)|횟수|몇\s*번|한도|제한/g, normalized),
     unconditional: test(
       /무조건|자동으로|자동\s*승인|항상|반드시|언제나/g,
@@ -615,6 +738,10 @@ export function parseQuery(
     relativeWeek,
     months,
     relativePeriod,
+    futureCue: test(
+      /내년|다음\s*(달|학기|해)|담달|(\d{1,2})\s*월\s*부터|오른다|오르나|오른대|인상|바뀐다|바뀌나요|바뀐대|달라지/g,
+      normalized,
+    ),
     units,
     questionTypes,
     subjects,

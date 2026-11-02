@@ -17,6 +17,8 @@ export function normalizeText(input: string): string {
   for (const [pattern, replacement] of GRADE_RULES) {
     text = text.replace(pattern, replacement);
   }
+  // 요일 줄임말(월욜·토욜 → 월요일·토요일): 학원과 무관한 일반 구어 정규화
+  text = text.replace(/([월화수목금토일])욜/g, '$1요일');
   return text.replace(/\s+/g, ' ').trim();
 }
 

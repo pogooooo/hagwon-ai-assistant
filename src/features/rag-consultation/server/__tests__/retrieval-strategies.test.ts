@@ -134,7 +134,7 @@ describe('검색 순위 전략', () => {
       fixedRanker('base', ['route', 'study', 'fee']),
       encoder,
       2,
-    ).rank(candidates, '셔틀 요금');
+    ).rank(candidates, '셔틀 요금', { rerank: 'always' });
     assert.deepEqual(
       reranked.map((entry) => entry.chunk.chunkId),
       ['route', 'study', 'fee'],
@@ -143,8 +143,18 @@ describe('검색 순위 전략', () => {
       fixedRanker('base', ['route', 'study', 'fee']),
       encoder,
       3,
-    ).rank(candidates, '셔틀 요금');
+    ).rank(candidates, '셔틀 요금', { rerank: 'always' });
     assert.equal(all[0].chunk.chunkId, 'fee');
+    const skipped = await new RerankRanker(
+      fixedRanker('base', ['route', 'study', 'fee']),
+      encoder,
+      3,
+    ).rank(candidates, '셔틀 요금');
+    assert.equal(
+      skipped[0].chunk.chunkId,
+      'route',
+      '기본값(never)은 재정렬하지 않음',
+    );
   });
 
   test('점수 기반 보류: 결과 없음은 항상 보류, 절대값·상대 간격 규칙', () => {

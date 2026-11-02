@@ -211,6 +211,7 @@ export function parseFrontMatter(raw: string): {
 
 export function readAcademiesDataset(
   dir: string = ACADEMIES_DIR,
+  options: { folders?: readonly string[] } = {},
 ): AcademiesDataset {
   const dataset: AcademiesDataset = {
     academies: [],
@@ -229,6 +230,7 @@ export function readAcademiesDataset(
         return false;
       }
     })
+    .filter((name) => !options.folders || options.folders.includes(name))
     .sort();
   for (const folder of folders) {
     const base = join(dir, folder);

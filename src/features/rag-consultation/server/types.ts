@@ -311,6 +311,10 @@ export interface ConversationState {
     domain: 'analysis' | 'info';
     units: string[];
     periods: string[];
+    /** 학원 정보 질문의 주제·반(후속 질문 "그럼 B반은요?"·"둘째도요?"에 이어 쓰기) */
+    topicIds?: string[];
+    classIds?: string[];
+    question?: string;
   };
 }
 

@@ -75,7 +75,7 @@ async function loadFacts(
 }
 
 /** 질문이 특정한 반(반 이름 또는 학생의 반). 없으면 빈 배열. */
-function explicitClassIds(ctx: AnswerContext): string[] {
+export function explicitClassIds(ctx: AnswerContext): string[] {
   if (ctx.frame.classIds.length > 0) return ctx.frame.classIds;
   return ctx.studentClassIds.filter(
     (id) => !ctx.frame.negatedClassIds.includes(id),
@@ -431,20 +431,65 @@ async function answerScheduleChange(
     );
     const { month, day: dom } = toKstDate(day);
     const mention = `${month}월${dom}일`;
-    const cancelClasses = new Set(
-      cancels
+    // 휴강 대상 반: 반 휴강이면 그 반, 학원 전체 휴강이면 질문한 반(없으면 모든 반)
+    const academyWide = cancels.some((fact) => fact.subjectType !== 'class');
+    const cancelClasses = new Set([
+      ...cancels
         .filter((fact) => fact.subjectType === 'class')
         .map((fact) => fact.subjectId),
-    );
-    const makeups = candidates.filter(
+      ...(academyWide
+        ? classIds.length > 0
+          ? classIds
+          : ctx.catalog.classes.map((klass) => klass.classId)
+        : []),
+    ]);
+    const later = candidates.filter(
       (fact) =>
         fact.value.kind === 'schedule_change' &&
         fact.value.changeType === 'makeup' &&
         dayOf(fact.value.date) >= day &&
-        dayOf(fact.value.date) < day + 31 * DAY_MS &&
-        (compactText(fact.value.text).includes(mention) ||
-          (fact.subjectType === 'class' && cancelClasses.has(fact.subjectId))),
+        dayOf(fact.value.date) < day + 31 * DAY_MS,
     );
+    // 공지에 그 휴강 날짜("11월 10일 휴강분")가 적힌 보강을 우선하고, 없을 때만 각 보강을
+    // "그 반에 적용되는 가장 가까운 이전 휴강(반 휴강 또는 학원 전체 휴강)"의 보강으로 본다(다른 휴강분 보강이 섞이지 않게).
+    const mentioned = later.filter(
+      (fact) =>
+        fact.value.kind === 'schedule_change' &&
+        compactText(fact.value.text).includes(mention) &&
+        (fact.subjectType !== 'class' || cancelClasses.has(fact.subjectId)),
+    );
+    const allCancels = facts.filter(
+      (fact) =>
+        fact.value.kind === 'schedule_change' &&
+        fact.value.changeType === 'cancel',
+    );
+    const ownerDay = (makeup: ApprovedFact): number | null => {
+      if (makeup.value.kind !== 'schedule_change') return null;
+      const makeupDay = dayOf(makeup.value.date);
+      const prior = allCancels
+        .filter(
+          (cancel) =>
+            cancel.value.kind === 'schedule_change' &&
+            (cancel.subjectType !== 'class' ||
+              cancel.subjectId === makeup.subjectId) &&
+            dayOf(cancel.value.date) <= makeupDay,
+        )
+        .map((cancel) =>
+          cancel.value.kind === 'schedule_change'
+            ? dayOf(cancel.value.date)
+            : 0,
+        );
+      return prior.length > 0 ? Math.max(...prior) : null;
+    };
+    const makeups =
+      mentioned.length > 0
+        ? mentioned
+        : later.filter(
+            (fact) =>
+              fact.subjectType === 'class' &&
+              cancelClasses.has(fact.subjectId) &&
+              ownerDay(fact) === day,
+          );
     candidates = [...cancels, ...makeups];
   } else if (range) {
     candidates = candidates.filter((fact) => {
@@ -656,7 +701,7 @@ const STOPWORDS = new Set([
   '거예요',
 ]);
 
-function contentWords(question: string): string[] {
+export function contentWords(question: string): string[] {
   const words = normalizeText(question)
     .split(/[^0-9a-z가-힣]+/)
     .map((word) =>
@@ -682,7 +727,7 @@ interface SectionCandidate {
  * 질문 대상 반이 정해져 있으면 다른 반 이름만 언급하는 문장·행은 빼고(반 사이 값 혼동 방지),
  * 대상 반이나 반 이름이 없는 문장은 남긴다.
  */
-function classFilter(ctx: AnswerContext): (text: string) => boolean {
+export function classFilter(ctx: AnswerContext): (text: string) => boolean {
   const targets = explicitClassIds(ctx);
   if (targets.length === 0) return () => true;
   const names = (classId: string) => {
@@ -705,11 +750,12 @@ function classFilter(ctx: AnswerContext): (text: string) => boolean {
 }
 
 /** 표 행 청크에서 질문과 관련된 행·열만 골라 "헤더: 값" 형태로 만든다(다른 칸 값이 섞이지 않게). */
-function renderTableRows(
+export function renderTableRows(
   chunks: RagChunk[],
   words: string[],
   evidenceTerms: readonly string[],
   keepText: (text: string) => boolean,
+  targetNames: readonly string[] = [],
 ): string[] {
   const has = (text: string) =>
     words.filter((word) => compactText(text).includes(compactText(word)))
@@ -737,18 +783,32 @@ function renderTableRows(
   const keep = header.map(
     (_, index) => index === 0 || best === 0 || headerScores[index] === best,
   );
-  return selectedRows.map((chunk) =>
-    (chunk.location.header ?? [])
+  // 요일×교시 격자처럼 한 행에 여러 반이 있는 표: 대상 반 이름이 든 칸(과 첫 칸)만 보여 준다.
+  const targets = targetNames.map(compactText).filter((n) => n.length >= 2);
+  return selectedRows.map((chunk) => {
+    const cells = chunk.location.cells ?? [];
+    const targetColumns = cells
+      .map((cell, index) =>
+        index > 0 && targets.some((t) => compactText(cell).includes(t))
+          ? index
+          : -1,
+      )
+      .filter((index) => index > 0);
+    const keepRow =
+      targetColumns.length > 0 && targetColumns.length < cells.length - 1
+        ? cells.map((_, index) => index === 0 || targetColumns.includes(index))
+        : keep;
+    return (chunk.location.header ?? [])
       .map((name, index) =>
-        keep[index] ? `${name}: ${chunk.location.cells?.[index] ?? ''}` : null,
+        keepRow[index] ? `${name}: ${cells[index] ?? ''}` : null,
       )
       .filter(Boolean)
-      .join(' / '),
-  );
+      .join(' / ');
+  });
 }
 
 /** 문단 청크에서 질문 단어·근거어가 들어간 문장을 고른다(없으면 앞 3문장). */
-function renderParagraphs(
+export function renderParagraphs(
   chunks: RagChunk[],
   words: string[],
   evidenceTerms: readonly string[],
@@ -1079,7 +1139,13 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
       ...answered.flatMap((part) => part.instants),
     ].filter((v): v is number => v !== null),
     conversationUpdate: {
-      previousFrame: { domain: 'info', units: [], periods: [] },
+      previousFrame: {
+        domain: 'info',
+        units: [],
+        periods: [],
+        topicIds: selectedTopics.map((topic) => topic.id),
+        classIds: explicitClassIds(ctx),
+      },
     },
   };
 }

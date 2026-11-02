@@ -73,6 +73,18 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   private readonly logger: RagLogger | undefined;
   private readonly maxDocumentChars: number;
   private readonly ranker: ChunkRanker;
+  private readonly factChunkIndex = new Map<
+    string,
+    Map<
+      string,
+      Array<{
+        factType: ApprovedFact['factType'];
+        subjectType: ApprovedFact['subjectType'];
+        subjectId: string;
+        period: string | null;
+      }>
+    >
+  >();
   /** revision 키 → 정규화 본문 해시(중복 업로드 감지) */
   private readonly textHashes = new Map<string, string>();
   private readonly failIndexing:
@@ -128,6 +140,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       // 색인 실패한 revision 의 재시도: 이전 시도 흔적을 지우고 다시 색인한다.
       for (const chunkId of existing.chunkIds) this.chunks.delete(chunkId);
       this.factsByRevision.delete(key);
+      this.factChunkIndex.delete(key);
       this.revisions.delete(key);
     } else if (existing) {
       if (existing.contentHash !== hash) {
@@ -460,10 +473,15 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         candidates.push(chunk);
       }
     }
-    const ranked = await this.ranker.rank(candidates, query.query);
-    return ranked
-      .slice(0, query.limit)
-      .map(({ chunk, score }) => ({ chunk, score }));
+    const ranked = await this.ranker.rank(candidates, query.query, {
+      question: query.question,
+      rerank: query.rerank,
+    });
+    return ranked.slice(0, query.limit).map(({ chunk, score, signals }) => ({
+      chunk,
+      score,
+      ...(signals ? { signals } : {}),
+    }));
   }
 
   async getCitableSource(input: {
@@ -498,6 +516,62 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       };
     }
     return null;
+  }
+
+  async corpusContains(input: {
+    access: RagAccessScope;
+    studentIds: readonly string[];
+    asOf: number;
+    term: string;
+  }): Promise<boolean> {
+    const needle = input.term.replace(/\s/g, '').toLowerCase();
+    if (!needle) return false;
+    const targets = restrictToAllowedStudents(input.access, input.studentIds);
+    for (const stored of this.activeRevisions(input.asOf)) {
+      if (!canReadRecord(input.access, stored, targets)) continue;
+      for (const chunkId of stored.chunkIds) {
+        const chunk = this.chunks.get(chunkId);
+        if (
+          chunk &&
+          chunk.contextualText.replace(/\s/g, '').toLowerCase().includes(needle)
+        )
+          return true;
+      }
+    }
+    return false;
+  }
+
+  /** 청크 위치에서 확인되는 정형 사실의 종류·대상(값 제외). 같은 revision 의 사실 위치를 한 번만 계산해 둔다. */
+  factRefsAtChunk(chunkId: string): Array<{
+    factType: ApprovedFact['factType'];
+    subjectType: ApprovedFact['subjectType'];
+    subjectId: string;
+    period: string | null;
+  }> {
+    const sourceId = chunkId.split('#')[0];
+    const stored = [...this.revisions.values()].find(
+      (r) => r.sourceId === sourceId,
+    );
+    if (!stored) return [];
+    const key = keyOf(stored.documentId, stored.revision);
+    let index = this.factChunkIndex.get(key);
+    if (!index) {
+      index = new Map();
+      for (const fact of this.factsByRevision.get(key) ?? []) {
+        const chunk = this.locateFact(fact);
+        if (!chunk) continue;
+        const list = index.get(chunk.chunkId) ?? [];
+        list.push({
+          factType: fact.factType,
+          subjectType: fact.subjectType,
+          subjectId: fact.subjectId,
+          period: fact.period,
+        });
+        index.set(chunk.chunkId, list);
+      }
+      this.factChunkIndex.set(key, index);
+    }
+    return index.get(chunkId) ?? [];
   }
 
   /** 사실 값이 실제로 등장하는 청크 위치(표 행 등)를 찾는다. */

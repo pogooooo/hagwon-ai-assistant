@@ -19,7 +19,7 @@ import {
 export * from './types.ts';
 
 /** 파서 동작이 바뀌면 올린다(파싱 결과 캐시 무효화). */
-export const PARSER_VERSION = 'parsers-2026-11-02.1';
+export const PARSER_VERSION = 'parsers-2026-11-02.2';
 export { createTesseractOcr } from './ocr.ts';
 export { PII_MASK } from './pii.ts';
 

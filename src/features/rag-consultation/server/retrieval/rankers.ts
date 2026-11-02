@@ -13,15 +13,36 @@ import { tokenize } from '../text/normalize.ts';
 import type { RagChunk } from '../types.ts';
 import { bm25Rank } from './bm25.ts';
 
+/** 순위를 정한 근거 신호(근거 신뢰도 판단용). */
+export interface RankSignals {
+  lexicalRank?: number;
+  denseRank?: number;
+  /** 임베딩 코사인 유사도 */
+  denseScore?: number;
+  /** Cross-Encoder 로짓 */
+  rerankScore?: number;
+}
+
 export interface RankedChunk {
   chunk: RagChunk;
   score: number;
+  signals?: RankSignals;
+}
+
+/** 검색 호출 맥락: 의미 검색·재정렬은 사용자 원문(question)을, BM25 는 키워드 질의(query)를 쓴다. */
+export interface RankContext {
+  question?: string;
+  rerank?: 'never' | 'auto' | 'always';
 }
 
 export interface ChunkRanker {
   /** 실험 기록용 이름 */
   readonly id: string;
-  rank(candidates: readonly RagChunk[], query: string): Promise<RankedChunk[]>;
+  rank(
+    candidates: readonly RagChunk[],
+    query: string,
+    context?: RankContext,
+  ): Promise<RankedChunk[]>;
 }
 
 export interface TextTokenizer {
@@ -94,6 +115,7 @@ export class DenseRanker implements ChunkRanker {
   async rank(
     candidates: readonly RagChunk[],
     query: string,
+    context?: RankContext,
   ): Promise<RankedChunk[]> {
     if (candidates.length === 0) return [];
     const missing = candidates.filter(
@@ -107,7 +129,9 @@ export class DenseRanker implements ChunkRanker {
         this.cache.set(chunk.chunkId, vectors[index]),
       );
     }
-    const queryVector = await this.embedder.embedQuery(query);
+    const queryVector = await this.embedder.embedQuery(
+      context?.question ?? query,
+    );
     return candidates
       .map((chunk) => ({
         chunk,
@@ -135,10 +159,11 @@ export class RrfRanker implements ChunkRanker {
   async rank(
     candidates: readonly RagChunk[],
     query: string,
+    context?: RankContext,
   ): Promise<RankedChunk[]> {
     const fused = new Map<string, RankedChunk>();
     for (const ranker of this.rankers) {
-      const ranked = await ranker.rank(candidates, query);
+      const ranked = await ranker.rank(candidates, query, context);
       ranked.forEach((entry, index) => {
         const previous = fused.get(entry.chunk.chunkId);
         const add = 1 / (this.k + index + 1);
@@ -161,6 +186,23 @@ export interface CrossEncoder {
   score(query: string, passages: readonly string[]): Promise<number[]>;
 }
 
+/**
+ * 1차 순위가 애매한지(1·2위 점수 차가 작음): auto 재정렬은 이때만 무거운 Cross-Encoder 를 돌린다.
+ * RRF 점수 기준 차이 0.002 ≈ 두 목록 순위가 한두 칸 차이인 경우.
+ */
+export function isAmbiguous(ranked: readonly RankedChunk[]): boolean {
+  if (ranked.length < 2) return false;
+  const [first, second] = ranked;
+  if (
+    first.chunk.sourceId === second.chunk.sourceId &&
+    first.chunk.location.section === second.chunk.location.section
+  )
+    return false;
+  return (
+    first.score - second.score < Math.max(0.002, Math.abs(first.score) * 0.08)
+  );
+}
+
 /** 앞 단계 상위 topN 만 Cross-Encoder 로 재정렬하고, 나머지는 원래 순서대로 뒤에 둔다. */
 export class RerankRanker implements ChunkRanker {
   readonly id: string;
@@ -178,20 +220,100 @@ export class RerankRanker implements ChunkRanker {
   async rank(
     candidates: readonly RagChunk[],
     query: string,
+    context?: RankContext,
   ): Promise<RankedChunk[]> {
-    const ranked = await this.base.rank(candidates, query);
+    const ranked = await this.base.rank(candidates, query, context);
+    const mode = context?.rerank ?? 'never';
+    if (mode === 'never') return ranked;
+    if (mode === 'auto' && !isAmbiguous(ranked)) return ranked;
     const head = ranked.slice(0, this.topN);
     if (head.length === 0) return ranked;
+    // 재정렬 모델에는 키워드 묶음이 아니라 사용자 원문을 넣는다.
     const scores = await this.encoder.score(
-      query,
-      head.map((entry) => entry.chunk.text),
+      context?.question ?? query,
+      head.map((entry) => entry.chunk.contextualText),
     );
     const reranked = head
-      .map((entry, index) => ({ chunk: entry.chunk, score: scores[index] }))
+      .map((entry, index) => ({
+        chunk: entry.chunk,
+        score: scores[index],
+        signals: { ...entry.signals, rerankScore: scores[index] },
+      }))
       .sort(
         (a, b) =>
           b.score - a.score || a.chunk.chunkId.localeCompare(b.chunk.chunkId),
       );
     return [...reranked, ...ranked.slice(this.topN)];
+  }
+}
+
+/**
+ * 하이브리드 순위(운영 기본 후보): 사용자 원문이 있는 호출(검색 기반 의도 판별·근거 답변)에서만 BM25(키워드)와
+ * 임베딩(원문)을 가중 RRF 로 합친다. 원문이 없는 내부 키워드 검색은 BM25 그대로(기존 동작 유지).
+ */
+export class HybridRanker implements ChunkRanker {
+  readonly id: string;
+  private readonly lexical: ChunkRanker;
+  private readonly semantic: ChunkRanker;
+  private readonly semanticWeight: number;
+  private readonly k: number;
+
+  constructor(
+    lexical: ChunkRanker,
+    semantic: ChunkRanker,
+    options: { semanticWeight?: number; k?: number } = {},
+  ) {
+    this.lexical = lexical;
+    this.semantic = semantic;
+    this.semanticWeight = options.semanticWeight ?? 1;
+    this.k = options.k ?? 60;
+    this.id = `hybrid(${lexical.id}+${semantic.id}×${this.semanticWeight};k=${this.k})`;
+  }
+
+  async rank(
+    candidates: readonly RagChunk[],
+    query: string,
+    context?: RankContext,
+  ): Promise<RankedChunk[]> {
+    if (!context?.question)
+      return this.lexical.rank(candidates, query, context);
+    const fused = new Map<string, RankedChunk>();
+    const add = (
+      ranked: RankedChunk[],
+      weight: number,
+      kind: 'lexical' | 'dense',
+    ) =>
+      ranked.forEach((entry, index) => {
+        const previous = fused.get(entry.chunk.chunkId);
+        const signals: RankSignals = { ...previous?.signals };
+        if (kind === 'lexical') signals.lexicalRank = index + 1;
+        else {
+          signals.denseRank = index + 1;
+          signals.denseScore = entry.score;
+        }
+        fused.set(entry.chunk.chunkId, {
+          chunk: entry.chunk,
+          score: (previous?.score ?? 0) + weight / (this.k + index + 1),
+          signals,
+        });
+      });
+    add(
+      await this.lexical.rank(
+        candidates,
+        `${query} ${context.question}`,
+        context,
+      ),
+      1,
+      'lexical',
+    );
+    add(
+      await this.semantic.rank(candidates, query, context),
+      this.semanticWeight,
+      'dense',
+    );
+    return [...fused.values()].sort(
+      (a, b) =>
+        b.score - a.score || a.chunk.chunkId.localeCompare(b.chunk.chunkId),
+    );
   }
 }

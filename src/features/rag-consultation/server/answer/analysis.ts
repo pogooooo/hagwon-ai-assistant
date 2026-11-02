@@ -68,6 +68,14 @@ function resolvePeriods(ctx: AnswerContext): string[] {
     explicit.push(shiftPeriod(makePeriod(year, month), -1));
   if (frame.relativePeriod === 'this_month')
     explicit.push(makePeriod(year, month));
+  // "9월보다 떨어졌어요?"처럼 비교 대상 한쪽만 말하면 직전 대화에서 본 기간과 비교한다.
+  if (
+    explicit.length === 1 &&
+    (frame.flags.compare || frame.flags.trend) &&
+    state?.selectedPeriod &&
+    state.selectedPeriod !== explicit[0]
+  )
+    explicit.push(state.selectedPeriod);
   if (explicit.length > 0) return [...new Set(explicit)].sort(comparePeriods);
   if (frame.flags.elliptical || frame.anaphora) {
     if (frame.flags.elliptical && state?.previousFrame?.periods.length)

@@ -15,7 +15,19 @@ import {
   type AnswerContext,
   type AnswerDraft,
 } from './answer/context.ts';
-import { answerInfo } from './answer/info.ts';
+import {
+  answerFromDocuments,
+  documentTypesFor,
+  expectedAnswerTypes,
+  hasOnlyGenericTopics,
+  keywordsOf,
+  namedTeacher,
+  planFromEvidence,
+  TEACHER_WHO,
+  retrieveEvidence,
+  satisfiesAnswerTypes,
+} from './answer/evidence.ts';
+import { answerInfo, explicitClassIds } from './answer/info.ts';
 import {
   allowedNumbersFor,
   extractNumbers,
@@ -107,6 +119,92 @@ function studentClassIdsFor(
   return [...new Set(classIds)];
 }
 
+/** 질문을 물음표·마침표 경계로 나눈다(내용어가 있는 부분이 둘 이상일 때만). */
+export function splitQuestion(question: string): string[] {
+  const parts = question
+    .split(/(?<=[?？])\s*|(?<=[다요]\.)\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const meaningful = parts.filter((part) => keywordsOf(part).length > 0);
+  return meaningful.length >= 2 && meaningful.length <= 4 ? meaningful : [];
+}
+
+/** 부분 질문이 대상(학생·반)·시점을 말하지 않으면 전체 문장의 것을 이어받는다. */
+function inheritAnchors(part: QueryFrame, full: QueryFrame): QueryFrame {
+  const out: QueryFrame = { ...part };
+  const ownTarget =
+    part.matchedStudentIds.length > 0 ||
+    part.unresolvedRelationWords.length > 0 ||
+    part.classIds.length > 0 ||
+    part.selfReference ||
+    part.groupReference;
+  if (!ownTarget) {
+    out.matchedStudentIds = full.matchedStudentIds;
+    out.unresolvedRelationWords = full.unresolvedRelationWords;
+    out.classIds = full.classIds;
+    out.negatedClassIds = full.negatedClassIds;
+    out.selfReference = full.selfReference;
+    out.groupReference = full.groupReference;
+    out.subjects = part.subjects.length ? part.subjects : full.subjects;
+  }
+  const ownTime =
+    part.explicitDates.length > 0 ||
+    part.months.length > 0 ||
+    part.relativeDay !== null ||
+    part.relativeWeek !== null ||
+    part.relativePeriod !== null;
+  if (!ownTime) {
+    out.explicitDates = full.explicitDates;
+    out.months = full.months;
+    out.relativeDay = full.relativeDay;
+    out.relativeWeek = full.relativeWeek;
+    out.relativePeriod = full.relativePeriod;
+  }
+  if (part.units.length === 0) out.units = full.units;
+  return out;
+}
+
+/** 부분 답변 합치기: 거부가 하나라도 있으면 거부(fail-closed), 확인 질문이 있으면 확인 질문, 일부만 답하면 일부 답변. */
+function mergeDrafts(drafts: AnswerDraft[], parts: string[]): AnswerDraft {
+  const denied = drafts.find((d) => d.status === 'denied');
+  if (denied) return denied;
+  const clarify = drafts.find((d) => d.status === 'clarify');
+  if (clarify) return clarify;
+  const gave = drafts.filter(
+    (d) => d.status === 'answered' || d.status === 'partial',
+  );
+  if (gave.length === 0)
+    return drafts.find((d) => d.status === 'handoff') ?? drafts[0];
+  const missing = drafts.flatMap((d, i) =>
+    d.status === 'answered'
+      ? []
+      : d.status === 'partial'
+        ? (d.missingFields ?? [])
+        : d.missingFields?.length
+          ? d.missingFields
+          : [parts[i].replace(/[?？]$/, '')],
+  );
+  const lines = [...new Set(gave.flatMap((d) => d.text.split('\n')))];
+  if (
+    missing.length > 0 &&
+    !gave.some((d) => d.text.includes('확인되지 않은 항목'))
+  )
+    lines.push(`확인되지 않은 항목: ${missing.join(', ')}.`);
+  return {
+    status: missing.length > 0 ? 'partial' : 'answered',
+    text: lines.join('\n'),
+    citations: gave.flatMap((d) => d.citations),
+    usedFacts: gave.flatMap((d) => d.usedFacts),
+    missingFields: missing.length > 0 ? missing : undefined,
+    reasonCode: missing.length > 0 ? 'PARTIAL_EVIDENCE' : undefined,
+    derivedNumbers: gave.flatMap((d) => d.derivedNumbers ?? []),
+    instants: gave.flatMap((d) => d.instants ?? []),
+    generated: gave.some((d) => d.generated),
+    internalErrors: drafts.flatMap((d) => d.internalErrors ?? []),
+    conversationUpdate: gave.at(-1)?.conversationUpdate,
+  };
+}
+
 export function createRagConsultationService(
   deps: RagConsultationDeps,
 ): RagConsultationService {
@@ -148,7 +246,18 @@ export function createRagConsultationService(
     }
 
     // 2) 학습 분석 vs 학원 정보
-    const hasInfoTopics = frame.topics.length > 0;
+    // "선생님이 어떻게 지도해 주신대요?"처럼 원생을 가리키며 강사의 지도·연습을 묻는 말은 강사 정보가 아니라 학습 방향 질문이다.
+    const teacherGuidance =
+      frame.topics.length > 0 &&
+      frame.topics.every((topic) => topic.id === 'teacher') &&
+      (frame.matchedStudentIds.length > 0 ||
+        frame.selfReference ||
+        frame.unresolvedRelationWords.length > 0) &&
+      /지도|연습|시키|하라고|하래|봐\s*주|챙겨|도와/.test(frame.normalized) &&
+      !/누구|누가|담당|이름|성함|바뀌|교체|어떤\s*분/.test(frame.normalized);
+    if (teacherGuidance) ctx.frame = { ...frame, topics: [] };
+    carryOverFollowUp(ctx);
+    const hasInfoTopics = ctx.frame.topics.length > 0;
     const hasStudentReference =
       frame.matchedStudentIds.length > 0 ||
       frame.unresolvedRelationWords.length > 0 ||
@@ -163,20 +272,125 @@ export function createRagConsultationService(
       (frame.months.length > 0 || frame.relativePeriod !== null) &&
       (state?.selectedStudentId !== undefined ||
         access.allowedStudentIds.length > 0);
+    // 원생 권한이 없는 계정(비회원)이 학생을 가리키지 않고 "리포트·성적"을 물으면 학원 서비스 안내 질문으로 본다.
+    // 단, 정답률·점수 같은 결과 값을 달라는 요청은 분석 경로로 보내 권한 판정(거부)을 받게 한다.
+    const asksResultValues =
+      /정답률|점수|성적|몇\s*(문제|개|점|문항)|맞았|맞혔|틀렸|틀린|등수|결과\s*(알려|좀)/.test(
+        frame.normalized,
+      ) &&
+      !/보내\s*주|받을\s*수|받아\s*볼|주나요|주시나요|와요|오나요|나오나요|방식|어떻게\s*(받|확인|보)/.test(
+        frame.normalized,
+      );
+    const canHaveAnalysis =
+      access.allowedStudentIds.length > 0 ||
+      hasStudentReference ||
+      asksResultValues;
     const isAnalysis =
-      frame.hasAnalysisTerms ||
-      flags.generationRequest ||
-      periodOnlyQuestion ||
-      (hasStudentReference && !hasInfoTopics) ||
-      (flags.elliptical &&
-        state?.previousFrame?.domain === 'analysis' &&
-        !hasInfoTopics);
+      canHaveAnalysis &&
+      (frame.hasAnalysisTerms ||
+        flags.generationRequest ||
+        periodOnlyQuestion ||
+        (hasStudentReference && !hasInfoTopics) ||
+        (flags.elliptical &&
+          state?.previousFrame?.domain === 'analysis' &&
+          !hasInfoTopics));
 
     if (!isAnalysis) {
       trace.domain = 'info';
-      return answerInfo(ctx);
+      return routeInfo(ctx, studentIdHint);
     }
 
+    // 학습 분석을 "애매한 단서"로만 정한 경우(분석 용어·학생 지칭·기간 없이 '보충·방향' 같은 말이나 '제/내'만 있음):
+    // 원문으로 근거를 찾아 그 근거가 원생 리포트가 아니면 학원 정보로 답한다(계층적 라우팅).
+    const weakAnalysis =
+      !frame.hasAnalysisTerms &&
+      !periodOnlyQuestion &&
+      frame.matchedStudentIds.length === 0 &&
+      frame.unresolvedRelationWords.length === 0 &&
+      !frame.groupReference &&
+      !frame.anaphora &&
+      studentIdHint === undefined &&
+      !(flags.elliptical && state?.previousFrame?.domain === 'analysis');
+    if (weakAnalysis) {
+      const evidence = await retrieveEvidence(ctx);
+      const plan = planFromEvidence(ctx, evidence);
+      if (plan.kind === 'facts' || plan.kind === 'document') {
+        trace.domain = 'info';
+        trace.intent = 'weak_analysis>info';
+        return answerByPlan(ctx, evidence, plan, studentIdHint);
+      }
+    }
+    return routeAnalysis(ctx, studentIdHint);
+  }
+
+  /**
+   * 후속 질문(“그럼 B반은요?”·“둘째도 시간 바뀌어요?”): 직전 학원 정보 질문의 주제와 반을 이어 쓴다.
+   * - 주제: 이번 질문에 주제·분석 용어가 없고, 새로 나온 내용어가 거의 없을 때만(새 내용이 있으면 근거 검색에 맡김)
+   * - 반: 이번 질문이 반·학생을 따로 말하지 않았을 때
+   */
+  function carryOverFollowUp(ctx: AnswerContext) {
+    const previous = ctx.state?.previousFrame;
+    if (previous?.domain !== 'info') return;
+    const frame = ctx.frame;
+    const followUp =
+      frame.flags.elliptical ||
+      /(은|는)요\s*\??$|도요|그럼|그러면|그건|그거|거기/.test(
+        frame.normalized,
+      ) ||
+      /[가-힣]도\s/.test(frame.normalized) ||
+      keywordsOf(ctx.question).length <= 2;
+    if (!followUp) return;
+    const entityWords = [
+      ...ctx.access.studentRefs.flatMap((ref) => [
+        ref.displayLabel,
+        ...ref.aliases,
+      ]),
+      ...ctx.catalog.classes.flatMap((klass) => [klass.name, ...klass.aliases]),
+    ].map((word) => word.replace(/\s/g, ''));
+    const previousWords = keywordsOf(previous.question ?? '');
+    const fresh = keywordsOf(ctx.question).filter(
+      (word) =>
+        !previousWords.some((p) => p.startsWith(word.slice(0, 2))) &&
+        !entityWords.some(
+          (entity) => entity.includes(word) || word.includes(entity),
+        ),
+    );
+    let next = frame;
+    if (
+      frame.topics.length === 0 &&
+      !frame.hasAnalysisTerms &&
+      previous.topicIds?.length &&
+      fresh.length <= 1
+    ) {
+      next = {
+        ...next,
+        topics: ctx.config.topics.filter((topic) =>
+          previous.topicIds?.includes(topic.id),
+        ),
+      };
+    }
+    const mentionsTarget =
+      frame.classIds.length > 0 ||
+      frame.matchedStudentIds.length > 0 ||
+      frame.unresolvedRelationWords.length > 0 ||
+      frame.groupReference;
+    if (
+      !mentionsTarget &&
+      previous.classIds?.length &&
+      ctx.studentClassIds.length === 0
+    ) {
+      next = { ...next, classIds: previous.classIds };
+    }
+    if (next !== frame) ctx.frame = next;
+  }
+
+  async function routeAnalysis(
+    ctx: AnswerContext,
+    studentIdHint: string | undefined,
+    options: { forceAdvice?: boolean } = {},
+  ): Promise<AnswerDraft> {
+    const { frame, access, state, trace } = ctx;
+    const flags = frame.flags;
     trace.domain = 'analysis';
     const resolution = resolveSubjects({ access, frame, state, studentIdHint });
     if (resolution.kind === 'denied') return deny('ACCESS_DENIED');
@@ -203,10 +417,201 @@ export function createRagConsultationService(
       flags.attitude ||
       flags.prediction ||
       flags.misattribution;
-    if (flags.generationRequest && !blocksGeneration) {
+    if ((flags.generationRequest || options.forceAdvice) && !blocksGeneration) {
       return answerAdvice(ctx, resolution.studentIds);
     }
     return answerAnalysis(ctx, resolution.studentIds);
+  }
+
+  /** 검색 근거의 자리에 따라 답변 경로를 고른다(evidence.ts 의 planFromEvidence). */
+  async function answerByPlan(
+    ctx: AnswerContext,
+    evidence: Awaited<ReturnType<typeof retrieveEvidence>>,
+    plan: ReturnType<typeof planFromEvidence>,
+    studentIdHint: string | undefined,
+  ): Promise<AnswerDraft> {
+    const types = expectedAnswerTypes(ctx.question);
+    if (plan.kind === 'analysis') {
+      return routeAnalysis(
+        ctx,
+        studentIdHint ??
+          (plan.studentIds.length === 1 &&
+          ctx.access.allowedStudentIds.length > 1
+            ? undefined
+            : undefined),
+        {
+          forceAdvice: plan.guidance,
+        },
+      );
+    }
+    if (plan.kind === 'facts') {
+      // 대상 반: 질문·계정에서 정해진 반이 우선, 없으면 근거 행의 반
+      const bound = explicitClassIds(ctx);
+      const sub: AnswerContext = {
+        ...ctx,
+        frame: {
+          ...ctx.frame,
+          topics: plan.topics,
+          classIds: bound.length > 0 ? ctx.frame.classIds : plan.classIds,
+        },
+      };
+      ctx.trace.intent = `evidence>${plan.topics.map((t) => t.id).join('+')}`;
+      const draft = await answerInfo(sub);
+      if (
+        (draft.status === 'answered' || draft.status === 'partial') &&
+        satisfiesAnswerTypes(draft.text, types)
+      )
+        return draft;
+    }
+    if (plan.kind === 'none') {
+      return {
+        status: 'abstained',
+        text: '질문하신 내용을 등록된 승인 자료에서 확인할 수 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다.',
+        citations: [],
+        usedFacts: [],
+        reasonCode: 'INSUFFICIENT_EVIDENCE',
+        internalErrors: ['INSUFFICIENT_EVIDENCE'],
+      };
+    }
+    return answerFromDocuments(ctx, evidence);
+  }
+
+  /**
+   * 학원 정보 경로(계층적 라우팅)
+   * 1) 규칙이 뚜렷한 주제를 찾았으면 정형 조회·절 인용으로 답하고, 의문사가 요구하는 값이 없거나 자료 없음이면 2)로
+   * 2) 주제가 없거나 일반어(얼마·언제)로만 잡혔으면 원문 검색 근거로 경로를 정한다.
+   */
+  async function routeInfo(
+    ctx: AnswerContext,
+    studentIdHint: string | undefined,
+  ): Promise<AnswerDraft> {
+    const { frame, access } = ctx;
+    if (frame.unknownPrograms.length > 0) return answerInfo(ctx);
+    // 자녀가 둘 이상인 보호자가 "우리 애"처럼 한 명을 가리키며 반마다 다른 정보를 물으면 누구인지 먼저 확인한다.
+    const singleChild =
+      /(우리|저희|제|내)\s*(아이|애|자녀|딸|아들)(?!들)|(^|\s)(애|아이)(가|는|이|도|의)?\s/.test(
+        frame.normalized,
+      ) && !frame.groupReference;
+    const classSpecific =
+      frame.topics.some((topic) =>
+        [
+          'fee',
+          'material',
+          'schedule',
+          'teacher',
+          'enrollment',
+          'schedule_change',
+        ].includes(topic.id),
+      ) ||
+      (frame.topics.length === 0 &&
+        expectedAnswerTypes(ctx.question).length > 0);
+    const childClasses = access.studentRefs
+      .filter((ref) => access.allowedStudentIds.includes(ref.studentId))
+      .map((ref) => (ref.classIds ?? []).slice().sort().join(','));
+    if (
+      access.role === 'guardian' &&
+      access.allowedStudentIds.length >= 2 &&
+      new Set(childClasses).size >= 2 &&
+      singleChild &&
+      classSpecific &&
+      frame.matchedStudentIds.length === 0 &&
+      frame.unresolvedRelationWords.length === 0 &&
+      frame.classIds.length === 0 &&
+      studentIdHint === undefined &&
+      !ctx.state?.selectedStudentId
+    ) {
+      ctx.trace.intent = 'clarify_child';
+      return {
+        status: 'clarify',
+        text: `어느 자녀에 대한 질문인지 알려 주세요: ${access.allowedStudentIds.map((id) => studentLabel(access, id)).join(', ')}`,
+        citations: [],
+        usedFacts: [],
+        reasonCode: 'AMBIGUOUS_SUBJECT',
+        clarifyOptionStudentIds: [...access.allowedStudentIds],
+        conversationUpdate: {
+          candidateStudentIds: [...access.allowedStudentIds],
+        },
+      };
+    }
+    const types = expectedAnswerTypes(ctx.question);
+    const noTopic = frame.topics.length === 0;
+    const weak = noTopic || hasOnlyGenericTopics(ctx);
+    // (시험 후 제외) 자료에 없는 낱말을 묻는 질문을 보류하는 규칙(unknownConcepts)은 형태소 분석 없이
+    // 기능어·활용형·구어 동의어까지 잡아 잘못된 보류가 48%로 늘어 기본 경로에서 뺐다. REPORT.md 참고.
+    // 강사를 이름으로 부른 경우: 개인 연락처는 안내하지 않고, "누구·담당" 외 개인 속성(나이·학력 등)은 문서 근거가 있을 때만
+    const teacherName = namedTeacher(frame.normalized);
+    if (teacherName && frame.topics.some((topic) => topic.id === 'contact')) {
+      ctx.trace.intent = 'teacher_personal_contact';
+      return {
+        status: 'abstained',
+        text: '강사 개인 연락처는 안내해 드리지 않습니다. 학원 대표 연락처로 문의해 주시면 전달해 드립니다.',
+        citations: [],
+        usedFacts: [],
+        reasonCode: 'INSUFFICIENT_EVIDENCE',
+        missingFields: ['강사 개인 연락처'],
+        internalErrors: ['INSUFFICIENT_EVIDENCE'],
+      };
+    }
+    if (
+      teacherName &&
+      frame.topics.length > 0 &&
+      frame.topics.every((topic) => topic.id === 'teacher') &&
+      !TEACHER_WHO.test(frame.normalized)
+    ) {
+      const evidence = await retrieveEvidence(ctx);
+      return answerFromDocuments(ctx, evidence);
+    }
+    // "중2 심화반은요?"처럼 반 이름만 말한 질문은 반 요약(수강료·시간표·강사)
+    const classNames = ctx.catalog.classes
+      .filter((klass) => frame.classIds.includes(klass.classId))
+      .flatMap((klass) => [klass.name, ...klass.aliases]);
+    const leftover = keywordsOf(ctx.question).filter(
+      (word) =>
+        !classNames.some(
+          (name) =>
+            name.replace(/\s/g, '').includes(word) ||
+            word.includes(name.replace(/\s/g, '')),
+        ),
+    );
+    if (noTopic && frame.classIds.length > 0 && leftover.length === 0)
+      return answerInfo(ctx);
+
+    const tryEvidence = async (topicIds: string[] = []) => {
+      const evidence = await retrieveEvidence(ctx, {
+        documentTypes: documentTypesFor(topicIds),
+      });
+      return answerByPlan(
+        ctx,
+        evidence,
+        planFromEvidence(ctx, evidence),
+        studentIdHint,
+      );
+    };
+    if (weak) {
+      const viaEvidence = await tryEvidence();
+      if (
+        viaEvidence.status === 'answered' ||
+        viaEvidence.status === 'partial' ||
+        noTopic
+      )
+        return viaEvidence;
+      return answerInfo(ctx);
+    }
+    const draft = await answerInfo(ctx);
+    // 속성 주제(와이파이·연락처 등)가 자료에 "없다"는 판정은 그대로 따른다(다른 문서로 대신 답하지 않음).
+    if (frame.topics.some((topic) => topic.kind === 'attribute')) return draft;
+    const gave = draft.status === 'answered' || draft.status === 'partial';
+    const insufficient =
+      (draft.status === 'abstained' &&
+        draft.reasonCode === 'INSUFFICIENT_EVIDENCE') ||
+      (gave && !satisfiesAnswerTypes(draft.text, types));
+    if (!insufficient) return draft;
+    const alternative = await tryEvidence(
+      frame.topics.map((topic) => topic.id),
+    );
+    if (alternative.status === 'answered' || alternative.status === 'partial')
+      return alternative;
+    return draft;
   }
 
   async function finalize(
@@ -407,7 +812,70 @@ export function createRagConsultationService(
               clock: deps.clock,
               trace,
             };
-            final = await finalize(ctx, await route(ctx, input.studentIdHint));
+            const parts = splitQuestion(question);
+            // 문장 전체에 적용되는 보안·정책 판단(다른 학원·전체 명단·원인/예측·미승인 프로그램)이 있으면 나누지 않는다.
+            const blocked =
+              frame.flags.crossTenant ||
+              frame.flags.bulkStudent ||
+              frame.flags.shareOrPermission ||
+              frame.flags.sessionChange ||
+              frame.flags.citationForgery ||
+              frame.flags.causal ||
+              frame.flags.attitude ||
+              frame.flags.prediction ||
+              frame.flags.misattribution ||
+              frame.unknownPrograms.length > 0 ||
+              frame.unauthorizedStudentRefs.length > 0;
+            const partFrames = parts.map((part) =>
+              inheritAnchors(
+                parseQuery(part, { access: input.access, catalog, config }),
+                frame,
+              ),
+            );
+            // 부분마다 스스로 해석 가능한 주제(일반어가 아닌 주제어)나 분석 용어가 있을 때만 나눈다
+            // ("셔틀 몇 시에 와요? 이용료도 알려주세요"의 뒤 문장처럼 앞 문장에 기대는 경우는 통째로 처리).
+            const selfContained = (part: QueryFrame) =>
+              part.hasAnalysisTerms ||
+              part.topics.some((topic) => {
+                const matched = topic.terms.filter((term) =>
+                  part.compact.includes(term.replace(/\s/g, '')),
+                );
+                return matched.some(
+                  (term) => !topic.genericTerms?.includes(term),
+                );
+              });
+            let draft: AnswerDraft;
+            if (
+              parts.length >= 2 &&
+              !blocked &&
+              partFrames.every(selfContained)
+            ) {
+              // 여러 질문이 섞인 문장: 부분마다 따로 해석·답변하고 합친다(학생·반·날짜는 전체 문장에서 이어받음).
+              const drafts: AnswerDraft[] = [];
+              for (const [index, part] of parts.entries()) {
+                const partFrame = partFrames[index];
+                drafts.push(
+                  await route(
+                    {
+                      ...ctx,
+                      frame: partFrame,
+                      question: part,
+                      studentClassIds: studentClassIdsFor(
+                        input.access,
+                        partFrame,
+                        input.studentIdHint,
+                      ),
+                    },
+                    input.studentIdHint,
+                  ),
+                );
+              }
+              trace.intent = `multi(${parts.length})`;
+              draft = mergeDrafts(drafts, parts);
+            } else {
+              draft = await route(ctx, input.studentIdHint);
+            }
+            final = await finalize(ctx, draft);
           }
         }
       } catch {
@@ -464,15 +932,27 @@ export function createRagConsultationService(
 
       if (
         input.conversationId &&
-        final.conversationUpdate &&
         (final.status === 'answered' ||
           final.status === 'partial' ||
           final.status === 'clarify')
       ) {
         const next: ConversationState = { ...(state ?? {}) };
-        for (const [key, value] of Object.entries(final.conversationUpdate)) {
+        for (const [key, value] of Object.entries(
+          final.conversationUpdate ?? {},
+        )) {
           if (value !== undefined)
             (next as Record<string, unknown>)[key] = value;
+        }
+        // 직전 질문 원문과 영역을 남긴다(후속 질문 해석용).
+        if (final.status !== 'clarify') {
+          next.previousFrame = {
+            ...(final.conversationUpdate?.previousFrame ?? {
+              domain: trace.domain === 'analysis' ? 'analysis' : 'info',
+              units: [],
+              periods: [],
+            }),
+            question: input.question,
+          };
         }
         await deps.conversations.save(
           input.access.actorId,

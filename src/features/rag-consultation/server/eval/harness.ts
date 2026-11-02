@@ -12,7 +12,7 @@
  *  sufficiency(근거를 찾고도 보류), selection(다른 문서 인용), binding(정답 문서지만 다른 행·반·기간 값),
  *  over_answer(답하면 안 되는데 답함), status(상태만 다름), verification(사후 검사 차단), generation(생성 예산).
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -173,20 +173,27 @@ export function loadSuite(name: string): Suite {
     };
   }
   if (name.startsWith('v2-')) {
-    // v2-dev = 개발용 학원, v2-test = 미공개 평가 학원, v2-<ACADEMY_ID> = 학원 하나
-    const dataset = readAcademiesDataset(V2_DIR);
+    // v2-dev = 개발용 학원, v2-test = 미공개 평가 학원, v2-<ACADEMY_ID> = 학원 하나.
+    // 다른 split 의 학원 폴더는 읽지도 않는다(개발 중 미공개 평가 자료를 건드리지 않기 위해).
     const split =
       name === 'v2-dev' ? 'dev' : name === 'v2-test' ? 'test' : null;
-    const academy = split ? null : name.slice(3);
-    const cases = dataset.cases
-      .filter((c) =>
-        split
-          ? c.split === split
-          : dataset.users.find((u) => u.user_id === c.input.user_id)
-              ?.academy_id === academy,
-      )
-      .map((c) => fromAcademyCase(name, c));
-    return { name, dataset, cases };
+    const folders = readdirSync(V2_DIR)
+      .filter((folder) => existsSync(join(V2_DIR, folder, 'cases.jsonl')))
+      .filter((folder) => {
+        if (!split) return folder === name.slice(3);
+        const first = readFileSync(join(V2_DIR, folder, 'cases.jsonl'), 'utf-8')
+          .split('\n')
+          .find((line) => line.trim());
+        return first
+          ? (JSON.parse(first) as AcademyCase).split === split
+          : false;
+      });
+    const dataset = readAcademiesDataset(V2_DIR, { folders });
+    return {
+      name,
+      dataset,
+      cases: dataset.cases.map((c) => fromAcademyCase(name, c)),
+    };
   }
   throw new Error(`unknown suite ${name}`);
 }
@@ -195,7 +202,7 @@ export interface Variant {
   id: string;
   /** rag: 검색 1위 청크를 그대로 답으로(생성·보류 없음) / engine: 상담 엔진 */
   kind: 'rag' | 'engine';
-  ranker?: () => ChunkRanker;
+  ranker?: () => Promise<ChunkRanker> | ChunkRanker;
   config?: RagConsultationDeps['config'];
   /** rag 변형의 보류 규칙(없으면 검색 결과가 없을 때만 보류) */
   abstain?: (scores: number[]) => boolean;
@@ -253,7 +260,9 @@ export async function prepareSuite(
 ): Promise<PreparedSuite> {
   const store = await buildAcademiesStore(
     suite.dataset,
-    new InMemoryRagStore(variant.ranker ? { ranker: variant.ranker() } : {}),
+    new InMemoryRagStore(
+      variant.ranker ? { ranker: await variant.ranker() } : {},
+    ),
     build,
   );
   return { suite, store, catalog: createAcademyCatalogPort(suite.dataset) };
