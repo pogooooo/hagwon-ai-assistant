@@ -1,0 +1,917 @@
+{
+  "label": "final-test-baseline",
+  "startedAt": "2026-11-02T14:46:08.962Z",
+  "node": "v22.23.4",
+  "platform": "linux/x64",
+  "runs": [
+    {
+      "suite": "v2-test",
+      "variant": "rag-bm25",
+      "n": 393,
+      "correct": 77,
+      "accuracy": 19.6,
+      "answerable": 281,
+      "falseAbstainRate": 0.4,
+      "unanswerable": 112,
+      "falseAnswerRate": 98.2,
+      "citationAccuracy": 61.4,
+      "contentAccuracy": 32.5,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 0,
+      "latencyMs": {
+        "p50": 3.6,
+        "p95": 6.5
+      },
+      "errorStages": {
+        "binding": 90,
+        "retrieval": 1,
+        "selection": 81,
+        "interpretation": 27,
+        "over_answer": 110,
+        "status": 7
+      },
+      "byCategory": {
+        "academy_info": {
+          "n": 15,
+          "correct": 7,
+          "accuracy": 46.7
+        },
+        "course": {
+          "n": 15,
+          "correct": 4,
+          "accuracy": 26.7
+        },
+        "fee": {
+          "n": 24,
+          "correct": 9,
+          "accuracy": 37.5
+        },
+        "schedule": {
+          "n": 16,
+          "correct": 3,
+          "accuracy": 18.8
+        },
+        "accuracy": {
+          "n": 24,
+          "correct": 12,
+          "accuracy": 50
+        },
+        "weak_area": {
+          "n": 12,
+          "correct": 4,
+          "accuracy": 33.3
+        },
+        "guidance": {
+          "n": 14,
+          "correct": 2,
+          "accuracy": 14.3
+        },
+        "multi_condition": {
+          "n": 19,
+          "correct": 1,
+          "accuracy": 5.3
+        },
+        "followup": {
+          "n": 6,
+          "correct": 1,
+          "accuracy": 16.7
+        },
+        "target_switch": {
+          "n": 10,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "confusion": {
+          "n": 10,
+          "correct": 1,
+          "accuracy": 10
+        },
+        "row_trap": {
+          "n": 5,
+          "correct": 2,
+          "accuracy": 40
+        },
+        "change_before_after": {
+          "n": 5,
+          "correct": 1,
+          "accuracy": 20
+        },
+        "revision": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "insufficient_conflict": {
+          "n": 5,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "not_in_docs": {
+          "n": 25,
+          "correct": 1,
+          "accuracy": 4
+        },
+        "injection": {
+          "n": 5,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "privacy": {
+          "n": 23,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "pdf_layout": {
+          "n": 8,
+          "correct": 5,
+          "accuracy": 62.5
+        },
+        "scan": {
+          "n": 6,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "api_failure": {
+          "n": 10,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "plausible_unanswerable": {
+          "n": 6,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "answerable_hard": {
+          "n": 15,
+          "correct": 6,
+          "accuracy": 40
+        },
+        "timetable": {
+          "n": 8,
+          "correct": 2,
+          "accuracy": 25
+        },
+        "follow_up": {
+          "n": 12,
+          "correct": 1,
+          "accuracy": 8.3
+        },
+        "entity_confusion": {
+          "n": 5,
+          "correct": 1,
+          "accuracy": 20
+        },
+        "table_row_trap": {
+          "n": 10,
+          "correct": 2,
+          "accuracy": 20
+        },
+        "version_change": {
+          "n": 5,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "grading_revision": {
+          "n": 7,
+          "correct": 2,
+          "accuracy": 28.6
+        },
+        "conflict_insufficient": {
+          "n": 8,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "prompt_injection": {
+          "n": 7,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "pdf_table": {
+          "n": 16,
+          "correct": 6,
+          "accuracy": 37.5
+        },
+        "scan_pdf": {
+          "n": 6,
+          "correct": 1,
+          "accuracy": 16.7
+        },
+        "plausible_trap": {
+          "n": 12,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "pdf_scan": {
+          "n": 7,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "change": {
+          "n": 6,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "clarify": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 266,
+          "correct": 76,
+          "accuracy": 28.6
+        },
+        "abstained": {
+          "n": 58,
+          "correct": 1,
+          "accuracy": 1.7
+        },
+        "denied": {
+          "n": 36,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "handoff": {
+          "n": 8,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "partial": {
+          "n": 15,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "clarify": {
+          "n": 10,
+          "correct": 0,
+          "accuracy": 0
+        }
+      },
+      "bySplit": {
+        "test": {
+          "n": 393,
+          "correct": 77,
+          "accuracy": 19.6
+        }
+      },
+      "resources": {
+        "indexBuildMs": 143505,
+        "cpuMsTotal": 1776,
+        "cpuMsPerCase": 5,
+        "rssBeforeMb": 106,
+        "rssPeakMb": 337
+      }
+    },
+    {
+      "suite": "v2-test",
+      "variant": "engine",
+      "n": 393,
+      "correct": 176,
+      "accuracy": 44.8,
+      "answerable": 281,
+      "falseAbstainRate": 25.3,
+      "unanswerable": 112,
+      "falseAnswerRate": 30.4,
+      "citationAccuracy": 73.8,
+      "contentAccuracy": 53.3,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 4,
+      "latencyMs": {
+        "p50": 1.1,
+        "p95": 7.4
+      },
+      "errorStages": {
+        "binding": 46,
+        "sufficiency": 25,
+        "interpretation": 46,
+        "selection": 11,
+        "over_answer": 34,
+        "generation": 2,
+        "status": 8,
+        "retrieval": 5,
+        "verification": 34,
+        "guard": 6
+      },
+      "byCategory": {
+        "academy_info": {
+          "n": 15,
+          "correct": 6,
+          "accuracy": 40
+        },
+        "course": {
+          "n": 15,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "fee": {
+          "n": 24,
+          "correct": 8,
+          "accuracy": 33.3
+        },
+        "schedule": {
+          "n": 16,
+          "correct": 10,
+          "accuracy": 62.5
+        },
+        "accuracy": {
+          "n": 24,
+          "correct": 21,
+          "accuracy": 87.5
+        },
+        "weak_area": {
+          "n": 12,
+          "correct": 9,
+          "accuracy": 75
+        },
+        "guidance": {
+          "n": 14,
+          "correct": 6,
+          "accuracy": 42.9
+        },
+        "multi_condition": {
+          "n": 19,
+          "correct": 4,
+          "accuracy": 21.1
+        },
+        "followup": {
+          "n": 6,
+          "correct": 1,
+          "accuracy": 16.7
+        },
+        "target_switch": {
+          "n": 10,
+          "correct": 6,
+          "accuracy": 60
+        },
+        "confusion": {
+          "n": 10,
+          "correct": 8,
+          "accuracy": 80
+        },
+        "row_trap": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "change_before_after": {
+          "n": 5,
+          "correct": 2,
+          "accuracy": 40
+        },
+        "revision": {
+          "n": 3,
+          "correct": 3,
+          "accuracy": 100
+        },
+        "insufficient_conflict": {
+          "n": 5,
+          "correct": 2,
+          "accuracy": 40
+        },
+        "not_in_docs": {
+          "n": 25,
+          "correct": 15,
+          "accuracy": 60
+        },
+        "injection": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "privacy": {
+          "n": 23,
+          "correct": 13,
+          "accuracy": 56.5
+        },
+        "pdf_layout": {
+          "n": 8,
+          "correct": 3,
+          "accuracy": 37.5
+        },
+        "scan": {
+          "n": 6,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "api_failure": {
+          "n": 10,
+          "correct": 4,
+          "accuracy": 40
+        },
+        "plausible_unanswerable": {
+          "n": 6,
+          "correct": 3,
+          "accuracy": 50
+        },
+        "answerable_hard": {
+          "n": 15,
+          "correct": 2,
+          "accuracy": 13.3
+        },
+        "timetable": {
+          "n": 8,
+          "correct": 3,
+          "accuracy": 37.5
+        },
+        "follow_up": {
+          "n": 12,
+          "correct": 5,
+          "accuracy": 41.7
+        },
+        "entity_confusion": {
+          "n": 5,
+          "correct": 4,
+          "accuracy": 80
+        },
+        "table_row_trap": {
+          "n": 10,
+          "correct": 3,
+          "accuracy": 30
+        },
+        "version_change": {
+          "n": 5,
+          "correct": 1,
+          "accuracy": 20
+        },
+        "grading_revision": {
+          "n": 7,
+          "correct": 7,
+          "accuracy": 100
+        },
+        "conflict_insufficient": {
+          "n": 8,
+          "correct": 1,
+          "accuracy": 12.5
+        },
+        "prompt_injection": {
+          "n": 7,
+          "correct": 3,
+          "accuracy": 42.9
+        },
+        "pdf_table": {
+          "n": 16,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "scan_pdf": {
+          "n": 6,
+          "correct": 2,
+          "accuracy": 33.3
+        },
+        "plausible_trap": {
+          "n": 12,
+          "correct": 7,
+          "accuracy": 58.3
+        },
+        "pdf_scan": {
+          "n": 7,
+          "correct": 1,
+          "accuracy": 14.3
+        },
+        "change": {
+          "n": 6,
+          "correct": 3,
+          "accuracy": 50
+        },
+        "clarify": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 266,
+          "correct": 106,
+          "accuracy": 39.8
+        },
+        "abstained": {
+          "n": 58,
+          "correct": 34,
+          "accuracy": 58.6
+        },
+        "denied": {
+          "n": 36,
+          "correct": 28,
+          "accuracy": 77.8
+        },
+        "handoff": {
+          "n": 8,
+          "correct": 2,
+          "accuracy": 25
+        },
+        "partial": {
+          "n": 15,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "clarify": {
+          "n": 10,
+          "correct": 6,
+          "accuracy": 60
+        }
+      },
+      "bySplit": {
+        "test": {
+          "n": 393,
+          "correct": 176,
+          "accuracy": 44.8
+        }
+      },
+      "resources": {
+        "indexBuildMs": 130,
+        "cpuMsTotal": 1361,
+        "cpuMsPerCase": 3,
+        "rssBeforeMb": 296,
+        "rssPeakMb": 308
+      }
+    },
+    {
+      "suite": "v2-dev",
+      "variant": "rag-bm25",
+      "n": 153,
+      "correct": 21,
+      "accuracy": 13.7,
+      "answerable": 109,
+      "falseAbstainRate": 0,
+      "unanswerable": 44,
+      "falseAnswerRate": 97.7,
+      "citationAccuracy": 50.5,
+      "contentAccuracy": 21.1,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 0,
+      "latencyMs": {
+        "p50": 3.7,
+        "p95": 5.6
+      },
+      "errorStages": {
+        "binding": 32,
+        "selection": 44,
+        "over_answer": 43,
+        "interpretation": 10,
+        "status": 3
+      },
+      "byCategory": {
+        "academy_info": {
+          "n": 6,
+          "correct": 4,
+          "accuracy": 66.7
+        },
+        "course_info": {
+          "n": 7,
+          "correct": 1,
+          "accuracy": 14.3
+        },
+        "fee": {
+          "n": 8,
+          "correct": 1,
+          "accuracy": 12.5
+        },
+        "schedule": {
+          "n": 9,
+          "correct": 1,
+          "accuracy": 11.1
+        },
+        "learning_status": {
+          "n": 10,
+          "correct": 5,
+          "accuracy": 50
+        },
+        "weak_area": {
+          "n": 5,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "learning_guidance": {
+          "n": 6,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "multi_condition": {
+          "n": 8,
+          "correct": 1,
+          "accuracy": 12.5
+        },
+        "followup": {
+          "n": 7,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "target_switch": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "entity_confusion": {
+          "n": 7,
+          "correct": 1,
+          "accuracy": 14.3
+        },
+        "table_row_trap": {
+          "n": 6,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "temporal_change": {
+          "n": 7,
+          "correct": 1,
+          "accuracy": 14.3
+        },
+        "grading_revision": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "conflict_insufficient": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "not_in_docs": {
+          "n": 10,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "prompt_injection": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "privacy": {
+          "n": 11,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "plausible_but_unanswerable": {
+          "n": 5,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "pdf_layout": {
+          "n": 9,
+          "correct": 2,
+          "accuracy": 22.2
+        },
+        "scan_pdf": {
+          "n": 7,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "api_failure": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "answerable_but_hesitant": {
+          "n": 6,
+          "correct": 3,
+          "accuracy": 50
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 105,
+          "correct": 21,
+          "accuracy": 20
+        },
+        "partial": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "clarify": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "handoff": {
+          "n": 3,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "denied": {
+          "n": 14,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "abstained": {
+          "n": 23,
+          "correct": 0,
+          "accuracy": 0
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 153,
+          "correct": 21,
+          "accuracy": 13.7
+        }
+      },
+      "resources": {
+        "indexBuildMs": 27,
+        "cpuMsTotal": 647,
+        "cpuMsPerCase": 4,
+        "rssBeforeMb": 311,
+        "rssPeakMb": 312
+      }
+    },
+    {
+      "suite": "v2-dev",
+      "variant": "engine",
+      "n": 153,
+      "correct": 66,
+      "accuracy": 43.1,
+      "answerable": 109,
+      "falseAbstainRate": 17.4,
+      "unanswerable": 44,
+      "falseAnswerRate": 38.6,
+      "citationAccuracy": 74.4,
+      "contentAccuracy": 47.8,
+      "violations": 0,
+      "violatingCases": [],
+      "generationCalls": 1,
+      "latencyMs": {
+        "p50": 0.9,
+        "p95": 6.4
+      },
+      "errorStages": {
+        "binding": 24,
+        "status": 5,
+        "selection": 6,
+        "guard": 4,
+        "interpretation": 17,
+        "over_answer": 17,
+        "sufficiency": 4,
+        "retrieval": 10
+      },
+      "byCategory": {
+        "academy_info": {
+          "n": 6,
+          "correct": 2,
+          "accuracy": 33.3
+        },
+        "course_info": {
+          "n": 7,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "fee": {
+          "n": 8,
+          "correct": 3,
+          "accuracy": 37.5
+        },
+        "schedule": {
+          "n": 9,
+          "correct": 4,
+          "accuracy": 44.4
+        },
+        "learning_status": {
+          "n": 10,
+          "correct": 9,
+          "accuracy": 90
+        },
+        "weak_area": {
+          "n": 5,
+          "correct": 5,
+          "accuracy": 100
+        },
+        "learning_guidance": {
+          "n": 6,
+          "correct": 2,
+          "accuracy": 33.3
+        },
+        "multi_condition": {
+          "n": 8,
+          "correct": 2,
+          "accuracy": 25
+        },
+        "followup": {
+          "n": 7,
+          "correct": 3,
+          "accuracy": 42.9
+        },
+        "target_switch": {
+          "n": 4,
+          "correct": 3,
+          "accuracy": 75
+        },
+        "entity_confusion": {
+          "n": 7,
+          "correct": 4,
+          "accuracy": 57.1
+        },
+        "table_row_trap": {
+          "n": 6,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "temporal_change": {
+          "n": 7,
+          "correct": 3,
+          "accuracy": 42.9
+        },
+        "grading_revision": {
+          "n": 4,
+          "correct": 2,
+          "accuracy": 50
+        },
+        "conflict_insufficient": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "not_in_docs": {
+          "n": 10,
+          "correct": 3,
+          "accuracy": 30
+        },
+        "prompt_injection": {
+          "n": 4,
+          "correct": 3,
+          "accuracy": 75
+        },
+        "privacy": {
+          "n": 11,
+          "correct": 10,
+          "accuracy": 90.9
+        },
+        "plausible_but_unanswerable": {
+          "n": 5,
+          "correct": 3,
+          "accuracy": 60
+        },
+        "pdf_layout": {
+          "n": 9,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "scan_pdf": {
+          "n": 7,
+          "correct": 1,
+          "accuracy": 14.3
+        },
+        "api_failure": {
+          "n": 3,
+          "correct": 2,
+          "accuracy": 66.7
+        },
+        "answerable_but_hesitant": {
+          "n": 6,
+          "correct": 1,
+          "accuracy": 16.7
+        }
+      },
+      "byExpectedStatus": {
+        "answered": {
+          "n": 105,
+          "correct": 41,
+          "accuracy": 39
+        },
+        "partial": {
+          "n": 4,
+          "correct": 0,
+          "accuracy": 0
+        },
+        "clarify": {
+          "n": 4,
+          "correct": 1,
+          "accuracy": 25
+        },
+        "handoff": {
+          "n": 3,
+          "correct": 1,
+          "accuracy": 33.3
+        },
+        "denied": {
+          "n": 14,
+          "correct": 13,
+          "accuracy": 92.9
+        },
+        "abstained": {
+          "n": 23,
+          "correct": 10,
+          "accuracy": 43.5
+        }
+      },
+      "bySplit": {
+        "dev": {
+          "n": 153,
+          "correct": 66,
+          "accuracy": 43.1
+        }
+      },
+      "resources": {
+        "indexBuildMs": 27,
+        "cpuMsTotal": 356,
+        "cpuMsPerCase": 2,
+        "rssBeforeMb": 312,
+        "rssPeakMb": 315
+      }
+    }
+  ]
+}
