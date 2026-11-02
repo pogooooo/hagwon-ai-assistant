@@ -37,7 +37,15 @@ export function boundClassNames(ctx: AnswerContext): string[] {
 }
 
 export type AnswerType =
-  'amount' | 'date' | 'time' | 'count' | 'percent' | 'place' | 'person';
+  | 'amount'
+  | 'date'
+  | 'time'
+  | 'count'
+  | 'percent'
+  | 'place'
+  | 'person'
+  | 'deadline'
+  | 'start';
 
 /** 의문사·질문 형식이 요구하는 답의 값 종류(국어 의문 표현 — 학원별 유사어가 아님). */
 export function expectedAnswerTypes(question: string): AnswerType[] {
@@ -50,6 +58,9 @@ export function expectedAnswerTypes(question: string): AnswerType[] {
     types.add('time');
   // "언제"는 날짜로도 답한다(“언제까지 해요?” → 12월 18일).
   if (/언제/.test(q) && !/몇\s*시/.test(q)) types.add('date');
+  // "언제까지/며칠까지"는 끝 시점, "언제부터"는 시작 시점을 묻는다.
+  if (/(언제|며칠|몇\s*일|몇\s*시)\s*까지/.test(q)) types.add('deadline');
+  if (/(언제|며칠|몇\s*일|몇\s*시)\s*부터/.test(q)) types.add('start');
   if (/몇\s*(명|개|석|번|회|문항|권|자리)|정원|인원/.test(q))
     types.add('count');
   if (/몇\s*점|몇\s*퍼|몇\s*%|정답률|백분율/.test(q)) types.add('percent');
@@ -69,6 +80,10 @@ const TYPE_PATTERNS: Record<AnswerType, RegExp> = {
   place:
     /\d+\s*(호|층)|[가-힣]+(로|길|동|역|건물|빌딩|센터|관|실)\b|출구|도보|주차/,
   person: /[가-힣]{2,4}\s*(강사|선생님|원장|부원장|실장|쌤)|강사/,
+  deadline:
+    /(\d{1,2}\s*일|\d{1,2}:\d{2}|\d{1,2}\s*시)(\([월화수목금토일]\))?\s*(까지|이전|마감)|~\s*(\d{1,2}\s*월\s*)?\d{1,2}\s*일/,
+  start:
+    /(\d{1,2}\s*일|\d{1,2}:\d{2}|\d{1,2}\s*시)(\([월화수목금토일]\))?\s*(부터|이후|시작)|\d{1,2}\s*일\s*~/,
 };
 
 export function satisfiesAnswerTypes(
@@ -233,9 +248,13 @@ export function evidenceConfidence(
   if (hits.length >= Math.min(2, keywords.length) && hits.length > 0)
     return { trusted: true, reason: 'lexical' };
   // 절 제목이 질문 핵심어 하나를 그대로 담고 있으면(“교재비 따로 내요?” → [5. 교재비]) 그 절을 근거로 본다.
+  // 문서 제목과 같은 최상위 제목은 문서 전체에 붙으므로 제외한다.
   const heading = compactText(result.chunk.location.section ?? '');
+  const docTitle = compactText(result.chunk.title);
   if (
     heading &&
+    !heading.includes(docTitle) &&
+    !docTitle.includes(heading) &&
     keywords.some(
       (word) =>
         word.length >= 3 &&
