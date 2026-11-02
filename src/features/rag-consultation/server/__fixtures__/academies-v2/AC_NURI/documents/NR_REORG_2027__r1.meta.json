@@ -1,0 +1,20 @@
+{
+  "document_id": "NR_REORG_2027",
+  "revision": 1,
+  "document_type": "announcement",
+  "title": "누리코딩아카데미 2027년 과정 개편 안내",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-11-06T10:00:00+09:00",
+  "valid_to": null,
+  "approved_at": "2026-11-06T10:00:00+09:00",
+  "file_name": "과정개편안내_가정통신문_스캔본.pdf",
+  "render": {
+    "format": "pdf_scan",
+    "layout": "single",
+    "rotate": 0,
+    "scan_quality": "poor"
+  }
+}

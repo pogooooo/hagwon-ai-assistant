@@ -1,0 +1,44 @@
+[
+  {
+    "student_id": "HK_STU_001",
+    "academy_id": "AC_HANGYEOL",
+    "name": "배수아",
+    "aliases": ["수아"],
+    "class_ids": ["HK_M2_A"]
+  },
+  {
+    "student_id": "HK_STU_002",
+    "academy_id": "AC_HANGYEOL",
+    "name": "배준서",
+    "aliases": ["준서"],
+    "class_ids": ["HK_E5_LAB"]
+  },
+  {
+    "student_id": "HK_STU_003",
+    "academy_id": "AC_HANGYEOL",
+    "name": "임도현",
+    "aliases": ["도현", "도현이"],
+    "class_ids": ["HK_M2_B"]
+  },
+  {
+    "student_id": "HK_STU_004",
+    "academy_id": "AC_HANGYEOL",
+    "name": "곽민재",
+    "aliases": ["민재"],
+    "class_ids": ["HK_M3_A", "HK_SCIHS"]
+  },
+  {
+    "student_id": "HK_STU_005",
+    "academy_id": "AC_HANGYEOL",
+    "name": "신예나",
+    "aliases": ["예나"],
+    "class_ids": ["HK_E6_LAB", "HK_GIFTED"]
+  },
+  {
+    "student_id": "HK_STU_006",
+    "academy_id": "AC_HANGYEOL",
+    "name": "차은호",
+    "aliases": ["은호"],
+    "class_ids": ["HK_M1_B"]
+  }
+]

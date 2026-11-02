@@ -1,0 +1,104 @@
+[
+  {
+    "user_id": "NR_VISITOR",
+    "role": "visitor",
+    "academy_id": "AC_NURI",
+    "allowed_student_ids": [],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "NR_STUDENT_SEOWOO",
+    "role": "student",
+    "academy_id": "AC_NURI",
+    "allowed_student_ids": [
+      "NR_STU_003"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "NR_STUDENT_MINGYEOL",
+    "role": "student",
+    "academy_id": "AC_NURI",
+    "allowed_student_ids": [
+      "NR_STU_004"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "NR_GUARDIAN_YOON",
+    "role": "guardian",
+    "academy_id": "AC_NURI",
+    "allowed_student_ids": [
+      "NR_STU_001",
+      "NR_STU_002"
+    ],
+    "allowed_class_ids": [],
+    "student_aliases": {
+      "NR_STU_002": [
+        "첫째",
+        "큰애",
+        "큰아이"
+      ],
+      "NR_STU_001": [
+        "둘째",
+        "작은애",
+        "막내"
+      ]
+    }
+  },
+  {
+    "user_id": "NR_GUARDIAN_LIM",
+    "role": "guardian",
+    "academy_id": "AC_NURI",
+    "allowed_student_ids": [
+      "NR_STU_005"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "NR_GUARDIAN_OH",
+    "role": "guardian",
+    "academy_id": "AC_NURI",
+    "allowed_student_ids": [
+      "NR_STU_006"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "NR_TEACHER_MA",
+    "role": "teacher",
+    "academy_id": "AC_NURI",
+    "allowed_student_ids": [
+      "NR_STU_003",
+      "NR_STU_005"
+    ],
+    "allowed_class_ids": [
+      "NR_L3_PY",
+      "NR_L4_PY"
+    ]
+  },
+  {
+    "user_id": "NR_ADMIN",
+    "role": "admin",
+    "academy_id": "AC_NURI",
+    "allowed_student_ids": [
+      "NR_STU_001",
+      "NR_STU_002",
+      "NR_STU_003",
+      "NR_STU_004",
+      "NR_STU_005",
+      "NR_STU_006"
+    ],
+    "allowed_class_ids": [
+      "NR_L1_SCR",
+      "NR_L2_SCR",
+      "NR_ENTRY",
+      "NR_L3_PY",
+      "NR_L4_PY",
+      "NR_L5_ALG_WD",
+      "NR_L5_ALG_SAT",
+      "NR_L6_ALG_SAT",
+      "NR_APP"
+    ]
+  }
+]

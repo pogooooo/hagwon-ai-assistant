@@ -1,0 +1,9 @@
+{
+  "document_id": "SD_BOARD_2026_11", "revision": 1, "document_type": "announcement",
+  "title": "학부모 게시판 11월 질문·답변 모음", "status": "approved_active",
+  "visibility": "academy_public", "class_id": null, "student_id": null,
+  "valid_from": "2026-11-09T18:00:00+09:00", "valid_to": null,
+  "approved_at": "2026-11-09T18:00:00+09:00",
+  "file_name": "학부모게시판_11월_질문답변_정리.txt",
+  "render": { "format": "txt", "layout": "single", "rotate": 0, "scan_quality": null }
+}

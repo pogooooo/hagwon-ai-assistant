@@ -1,0 +1,20 @@
+{
+  "document_id": "NR_POLICY",
+  "revision": 1,
+  "document_type": "policy",
+  "title": "누리코딩아카데미 운영 규정",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-03-02T00:00:00+09:00",
+  "valid_to": null,
+  "approved_at": "2026-02-23T11:00:00+09:00",
+  "file_name": "누리코딩_운영규정_2026.pdf",
+  "render": {
+    "format": "pdf_text",
+    "layout": "single",
+    "rotate": 0,
+    "scan_quality": null
+  }
+}

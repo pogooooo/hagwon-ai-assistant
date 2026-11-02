@@ -1,0 +1,15 @@
+{
+  "document_id": "HK_NOTICE_MATFEE",
+  "revision": 1,
+  "document_type": "fee",
+  "title": "가정통신문 제2026-11호 실험 재료비 변경 안내",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-11-06T09:00:00+09:00",
+  "valid_to": null,
+  "approved_at": "2026-11-06T09:00:00+09:00",
+  "file_name": "가정통신문_실험재료비변경_스캔본.pdf",
+  "render": { "format": "pdf_scan", "layout": "single", "rotate": 0, "scan_quality": "poor" }
+}

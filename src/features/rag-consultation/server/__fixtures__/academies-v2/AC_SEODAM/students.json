@@ -1,0 +1,8 @@
+[
+  { "student_id": "SD_STU_001", "academy_id": "AC_SEODAM", "name": "김하린", "aliases": ["하린", "하린이"], "class_ids": ["SD_E5_READ"] },
+  { "student_id": "SD_STU_002", "academy_id": "AC_SEODAM", "name": "김도윤", "aliases": ["도윤", "도윤이"], "class_ids": ["SD_M2_SD"] },
+  { "student_id": "SD_STU_003", "academy_id": "AC_SEODAM", "name": "박서연", "aliases": ["서연", "서연이"], "class_ids": ["SD_M2_SDG"] },
+  { "student_id": "SD_STU_004", "academy_id": "AC_SEODAM", "name": "이준호", "aliases": ["준호"], "class_ids": ["SD_M2_HS"] },
+  { "student_id": "SD_STU_005", "academy_id": "AC_SEODAM", "name": "최유나", "aliases": ["유나"], "class_ids": ["SD_H1_CSAT", "SD_ESSAY_1ON1"] },
+  { "student_id": "SD_STU_006", "academy_id": "AC_SEODAM", "name": "정민우", "aliases": ["민우"], "class_ids": ["SD_H2_CSAT"] }
+]

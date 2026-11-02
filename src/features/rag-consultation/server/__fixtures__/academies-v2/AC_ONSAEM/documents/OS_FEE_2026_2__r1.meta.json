@@ -1,0 +1,9 @@
+{
+  "document_id": "OS_FEE_2026_2", "revision": 1, "document_type": "fee",
+  "title": "온샘초등종합학원 2026년 2학기 수강료 및 제비용 안내", "status": "approved_active",
+  "visibility": "academy_public", "class_id": null, "student_id": null,
+  "valid_from": "2026-09-01T00:00:00+09:00", "valid_to": "2027-01-01T00:00:00+09:00",
+  "approved_at": "2026-08-20T10:00:00+09:00",
+  "file_name": "2026_2학기_수강료_및_제비용_안내.pdf",
+  "render": { "format": "pdf_text", "layout": "single", "rotate": 0, "scan_quality": null }
+}

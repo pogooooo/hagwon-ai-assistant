@@ -1,0 +1,15 @@
+{
+  "document_id": "HK_NEWSLETTER_2026_11",
+  "revision": 1,
+  "document_type": "announcement",
+  "title": "한결 과학 소식 2026년 11월호(학부모 소식지)",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-11-09T09:00:00+09:00",
+  "valid_to": "2027-01-01T00:00:00+09:00",
+  "approved_at": "2026-11-09T09:00:00+09:00",
+  "file_name": "한결과학소식_2026년11월호.pdf",
+  "render": { "format": "pdf_text", "layout": "two_column", "rotate": 0, "scan_quality": null }
+}

@@ -1,0 +1,20 @@
+{
+  "document_id": "NR_TIMETABLE_7",
+  "revision": 1,
+  "document_type": "schedule",
+  "title": "누리코딩아카데미 2027년 7기(겨울방학) 시간표",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2027-01-04T00:00:00+09:00",
+  "valid_to": "2027-02-28T00:00:00+09:00",
+  "approved_at": "2026-11-20T10:00:00+09:00",
+  "file_name": "7기_겨울방학_시간표.pdf",
+  "render": {
+    "format": "pdf_text",
+    "layout": "single",
+    "rotate": 0,
+    "scan_quality": null
+  }
+}

@@ -1,0 +1,73 @@
+[
+  {
+    "student_id": "OS_STU_001",
+    "academy_id": "AC_ONSAEM",
+    "name": "한지우",
+    "aliases": [
+      "지우"
+    ],
+    "class_ids": [
+      "OS_G4_C2",
+      "OS_ENG_R34"
+    ]
+  },
+  {
+    "student_id": "OS_STU_002",
+    "academy_id": "AC_ONSAEM",
+    "name": "한지아",
+    "aliases": [
+      "지아"
+    ],
+    "class_ids": [
+      "OS_G12_COMP"
+    ]
+  },
+  {
+    "student_id": "OS_STU_003",
+    "academy_id": "AC_ONSAEM",
+    "name": "서민준",
+    "aliases": [
+      "민준",
+      "민준이"
+    ],
+    "class_ids": [
+      "OS_G5_C2"
+    ]
+  },
+  {
+    "student_id": "OS_STU_004",
+    "academy_id": "AC_ONSAEM",
+    "name": "오하린",
+    "aliases": [
+      "하린",
+      "하린이"
+    ],
+    "class_ids": [
+      "OS_G5_C1",
+      "OS_MATH_T56"
+    ]
+  },
+  {
+    "student_id": "OS_STU_005",
+    "academy_id": "AC_ONSAEM",
+    "name": "윤채이",
+    "aliases": [
+      "채이"
+    ],
+    "class_ids": [
+      "OS_G6_COMP"
+    ]
+  },
+  {
+    "student_id": "OS_STU_006",
+    "academy_id": "AC_ONSAEM",
+    "name": "강도현",
+    "aliases": [
+      "도현",
+      "도현이"
+    ],
+    "class_ids": [
+      "OS_G4_C1"
+    ]
+  }
+]
