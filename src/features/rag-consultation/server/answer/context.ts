@@ -136,8 +136,15 @@ export function resolveEffectiveTime(
     }
     return { at: asOf, explicitDay: null };
   }
-  const year = Number.isNaN(date.year) ? toKstDate(asOf).year : date.year;
-  const start = kstStartOfDay({ year, month: date.month, day: date.day });
+  const now = toKstDate(asOf);
+  let year = Number.isNaN(date.year) ? now.year : date.year;
+  let month = date.month;
+  if (month === 0) {
+    // 날만 말한 날짜: 이번 달 그날이 지났으면 다음 달
+    month = date.day >= now.day ? now.month : (now.month % 12) + 1;
+    if (month < now.month) year += 1;
+  }
+  const start = kstStartOfDay({ year, month, day: date.day });
   if (date.operator === 'before') return { at: start - 1, explicitDay: start };
   if (date.operator === 'at' && isSameKstDay(start, asOf))
     return { at: asOf, explicitDay: start };

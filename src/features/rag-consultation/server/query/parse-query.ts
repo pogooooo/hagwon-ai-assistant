@@ -120,6 +120,12 @@ function parseDates(text: string): { dates: ExplicitDate[]; rest: string } {
       regex: /(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/g,
       map: (m) => [m[1] ? Number(m[1]) : null, Number(m[2]), Number(m[3])],
     },
+    // 달 없이 날만 말한 날짜("21일부터"): month 0 으로 두고 기준 시각에서 가장 가까운 앞날로 정한다(context.ts).
+    {
+      regex:
+        /(?<![\d월주.:~\-])(\d{1,2})\s*일(?=\s*(부터|이후|까지|에|날|이|은|는|[,.?!]|\s|$))(?!\s*(동안|간))/g,
+      map: (m) => [null, 0, Number(m[1])],
+    },
   ];
   for (const { regex, map } of patterns) {
     regex.lastIndex = 0;
@@ -133,7 +139,7 @@ function parseDates(text: string): { dates: ExplicitDate[]; rest: string } {
         : /^\s*(이전|전까지|까지)/.test(after)
           ? 'before'
           : 'at';
-      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      if (month >= 0 && month <= 12 && day >= 1 && day <= 31) {
         dates.push({ year: year ?? Number.NaN, month, day, operator });
       }
       replacements.push([match.index, match.index + match[0].length]);
@@ -618,7 +624,7 @@ export function parseQuery(
     relativeDay !== null ||
     test(/일정|언제|날짜|몇\s*시|잡혔|예정|있어요|있나요/g, normalized);
   const makeupSchedule =
-    topics.some((topic) => topic.id === 'makeup') &&
+    (topics.some((topic) => topic.id === 'makeup') || makeupClassContext) &&
     scheduleWords &&
     !policyWords;
   if (makeupSchedule) {

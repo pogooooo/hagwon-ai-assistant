@@ -218,17 +218,22 @@ async function answerClassFacts(
     const name = className(ctx.catalog, classId);
     if (current.length === 0) {
       // 정형 시간표가 없는 반: 승인된 시간표 문서의 표에서 그 반 이름이 든 칸을 찾는다(요일×교시 격자 포함).
+      const seen = { offDay: false };
       const table =
         explicitClasses && options.factType === 'schedule'
-          ? await classTableRows(ctx, classId, ['schedule'])
+          ? await classTableRows(ctx, classId, ['schedule'], effective, seen)
           : [];
       if (table.length > 0) {
         for (const { chunk, line } of table) {
-          part.lines.push(`${name} 수업(시간표 표 기준): ${line}`);
+          part.lines.push(
+            `${effective.explicitDay !== null ? datePrefix(effective) : ''}${name} 수업(시간표 표 기준): ${line}`,
+          );
           part.citations.push({ kind: 'chunk', chunk });
         }
         continue;
       }
+      // 시간표에는 있지만 묻는 요일에 수업이 없는 반(자녀가 듣는 다른 반)은 빠진 정보로 보지 않는다.
+      if (seen.offDay) continue;
       if (explicitClasses) part.missing.push(`${name} ${options.label}`);
       continue;
     }
@@ -259,11 +264,77 @@ async function answerClassFacts(
  * 표에서 반 이름이 든 칸 찾기: 행의 첫 칸(교시·시간) + 그 반이 있는 칸의 머리글(요일)을 한 줄로.
  * 셀 안 공백("중2 내신B 반")은 무시하고 비교한다.
  */
+
+/** 요일 낱말이 묻는 요일을 포함하는지(평일=월~금, 주말=토·일). */
+function dayWordCovers(word: string, day: string): boolean {
+  const w = word.replace(/요일$/, '');
+  if (w === '평일') return '월화수목금'.includes(day);
+  if (w === '주말') return '토일'.includes(day);
+  return w.split(/[·,\s]/).includes(day);
+}
+
+/** 질문이 가리킨 요일(“토요일”, 명시 날짜의 요일). 없으면 null. */
+function askedWeekday(
+  ctx: AnswerContext,
+  effective?: EffectiveTime,
+): string | null {
+  const named = ctx.frame.normalized.match(/([월화수목금토일])요일/);
+  if (named) return named[1];
+  // “21일부터”처럼 기간의 시작을 말한 날짜는 특정 요일을 묻는 것이 아니다.
+  if (
+    effective?.explicitDay != null &&
+    ctx.frame.explicitDates[0]?.operator === 'at'
+  ) {
+    const { year, month, day } = toKstDate(effective.explicitDay);
+    return WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  }
+  return null;
+}
+
+/** "1교시 (평일 16:40~18:10 / 토 13:00~14:30)"처럼 요일별 시각이 함께 든 칸에서 묻는 요일의 시각만 남긴다. */
+function focusDay(label: string, day: string): string {
+  const pairs = [
+    ...label.matchAll(
+      /(평일|주말|[월화수목금토일](?:요일)?)\s*(\d{1,2}:\d{2}\s*[~\-]\s*\d{1,2}:\d{2})/g,
+    ),
+  ];
+  if (pairs.length < 2) return label;
+  const hit = pairs.find((pair) => dayWordCovers(pair[1], day));
+  if (!hit) return label;
+  const prefix = label.split('(')[0].trim();
+  return `${prefix} (${hit[1]} ${hit[2]})`;
+}
+
+/** 행에 적힌 기간("11월 23일~12월 4일")이 있고 묻는 날짜가 그 밖이면 false. */
+function rowCoversDay(text: string, day: number): boolean {
+  const { year } = toKstDate(day);
+  const ranges = [
+    ...text.matchAll(
+      /(\d{1,2})월\s*(\d{1,2})일[^~\-\d]{0,6}[~\-–]\s*(?:(\d{1,2})월\s*)?(\d{1,2})일/g,
+    ),
+  ];
+  if (ranges.length === 0) return true;
+  return ranges.some((m) => {
+    const startMonth = Number(m[1]);
+    const endMonth = m[3] ? Number(m[3]) : startMonth;
+    const start = kstStartOfDay({ year, month: startMonth, day: Number(m[2]) });
+    const end = kstStartOfDay({
+      year: endMonth < startMonth ? year + 1 : year,
+      month: endMonth,
+      day: Number(m[4]),
+    });
+    return day >= start && day <= end;
+  });
+}
+
 export async function classTableRows(
   ctx: AnswerContext,
   classId: string,
   documentTypes: readonly string[],
+  effective?: EffectiveTime,
+  seen: { offDay: boolean } = { offDay: false },
 ): Promise<Array<{ chunk: RagChunk; line: string }>> {
+  const weekday = askedWeekday(ctx, effective);
   const klass = ctx.catalog.classes.find((c) => c.classId === classId);
   if (!klass) return [];
   const names = [klass.name, ...klass.aliases]
@@ -295,9 +366,30 @@ export async function classTableRows(
       .filter((index) => index > 0);
     const rowNamed = names.some((n) => compactText(cells[0] ?? '').includes(n));
     if (columns.length === 0 && !rowNamed) continue;
-    const line = rowNamed
+    // 요일×교시 격자: 반이 든 칸의 머리글이 요일이다. 그렇지 않은 표(반 열이 있는 기록 표)는
+    // 시간·요일 열이 있을 때만 그 행 전체를 시간표 근거로 쓴다(주차별 커리큘럼 등은 제외).
+    const gridColumns = columns.filter((i) =>
+      /^[월화수목금토일](요일)?$/.test((header[i] ?? '').trim()),
+    );
+    const record = rowNamed || gridColumns.length === 0;
+    if (record && !header.some((h) => /시간|요일|교시/.test(h))) continue;
+    if (
+      effective?.explicitDay != null &&
+      !rowCoversDay(cells.join(' '), effective.explicitDay)
+    )
+      continue;
+    let days = gridColumns;
+    if (!record && weekday) {
+      days = gridColumns.filter((i) => dayWordCovers(header[i], weekday));
+      if (days.length === 0) {
+        seen.offDay = true;
+        continue;
+      }
+    }
+    const label = weekday ? focusDay(cells[0] ?? '', weekday) : cells[0];
+    const line = record
       ? header.map((h, i) => `${h}: ${cells[i] ?? ''}`).join(' / ')
-      : `${header[0]}: ${cells[0]} / ${columns.map((i) => header[i]).join('·')}`;
+      : `${header[0]}: ${label} / ${days.map((i) => header[i]).join('·')}`;
     if (!out.some((entry) => entry.line === line)) out.push({ chunk, line });
   }
   return out.slice(0, 6);
@@ -513,7 +605,9 @@ async function answerScheduleChange(
   const types: Array<'cancel' | 'makeup'> =
     flags.makeupSchedule && !flags.cancelSchedule
       ? ['makeup']
-      : flags.cancelSchedule && !ctx.frame.compact.includes('보강')
+      : flags.cancelSchedule &&
+          !flags.makeupSchedule &&
+          !ctx.frame.compact.includes('보강')
         ? ['cancel']
         : ['cancel', 'makeup'];
   const classIds = explicitClassIds(ctx);
@@ -578,22 +672,49 @@ async function answerScheduleChange(
         fact.value.kind === 'schedule_change' &&
         fact.value.changeType === 'cancel',
     );
+    // 같은 공지 안에서 그 반의 휴강과 보강을 날짜순으로 짝짓는다(첫 휴강 ↔ 첫 보강 …).
+    // 같은 공지에 휴강이 없으면 그 반에 적용되는 가장 가까운 이전 휴강의 보강으로 본다.
+    const changeDay = (fact: ApprovedFact) =>
+      fact.value.kind === 'schedule_change' ? dayOf(fact.value.date) : 0;
+    const applies = (cancel: ApprovedFact, makeup: ApprovedFact) =>
+      cancel.subjectType !== 'class' || cancel.subjectId === makeup.subjectId;
     const ownerDay = (makeup: ApprovedFact): number | null => {
       if (makeup.value.kind !== 'schedule_change') return null;
-      const makeupDay = dayOf(makeup.value.date);
+      const makeupDay = changeDay(makeup);
+      const sameNotice = allCancels.filter(
+        (cancel) =>
+          cancel.documentId === makeup.documentId &&
+          cancel.subjectType === 'class' &&
+          applies(cancel, makeup),
+      );
+      if (sameNotice.length > 0) {
+        const cancelDays = [...new Set(sameNotice.map(changeDay))].sort(
+          (a, b) => a - b,
+        );
+        const siblings = facts
+          .filter(
+            (fact) =>
+              fact.value.kind === 'schedule_change' &&
+              fact.value.changeType === 'makeup' &&
+              fact.documentId === makeup.documentId &&
+              fact.subjectId === makeup.subjectId,
+          )
+          .sort((a, b) => changeDay(a) - changeDay(b));
+        const index = siblings.findIndex(
+          (fact) => fact.factId === makeup.factId,
+        );
+        if (
+          index >= 0 &&
+          index < cancelDays.length &&
+          cancelDays[index] <= makeupDay
+        )
+          return cancelDays[index];
+      }
       const prior = allCancels
         .filter(
-          (cancel) =>
-            cancel.value.kind === 'schedule_change' &&
-            (cancel.subjectType !== 'class' ||
-              cancel.subjectId === makeup.subjectId) &&
-            dayOf(cancel.value.date) <= makeupDay,
+          (cancel) => applies(cancel, makeup) && changeDay(cancel) <= makeupDay,
         )
-        .map((cancel) =>
-          cancel.value.kind === 'schedule_change'
-            ? dayOf(cancel.value.date)
-            : 0,
-        );
+        .map(changeDay);
       return prior.length > 0 ? Math.max(...prior) : null;
     };
     const makeups =
