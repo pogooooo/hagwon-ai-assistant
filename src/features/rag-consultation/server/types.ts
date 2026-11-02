@@ -11,6 +11,8 @@ export interface RagStudentRef {
   studentId: string;
   displayLabel: string;
   aliases: readonly string[];
+  /** 서버가 아는 이 학생의 수강 반(“첫째 반 수강료”처럼 반을 대신 지칭할 때 사용) */
+  classIds?: readonly string[];
 }
 
 /**
@@ -111,6 +113,8 @@ export interface ChunkLocation {
   paragraphIndex?: number;
   /** 문서의 절 제목(## 제목) */
   section?: string;
+  /** 표 행의 셀 값(헤더와 같은 순서) — 질문한 칸만 골라 인용할 때 사용 */
+  cells?: string[];
 }
 
 export interface RagChunk {
@@ -226,6 +230,8 @@ export interface ApprovedFact {
   assignmentIds: string[];
   assignments: FactAssignment[];
   evidence: string | null;
+  /** 사실이 속한 문서의 반(과목 구분용, 예: 같은 학생의 수학·국어 리포트) */
+  classId: string | null;
 }
 
 export interface AcademyClass {

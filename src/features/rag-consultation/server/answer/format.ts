@@ -5,8 +5,13 @@ export function formatKrw(amount: number): string {
   return `${String(Math.round(amount)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}원`;
 }
 
+/** 리포트 표기와 같게 정수 %로 반올림한다(비교 차이는 원값으로 계산 후 반올림). */
 export function accuracyPercent(correct: number, total: number): number {
-  return Math.round((correct / total) * 1000) / 10;
+  return Math.round((correct / total) * 100);
+}
+
+export function exactPercent(correct: number, total: number): number {
+  return (correct / total) * 100;
 }
 
 export function formatAccuracy(

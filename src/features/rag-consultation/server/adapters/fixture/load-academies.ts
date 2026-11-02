@@ -411,6 +411,7 @@ export function toAcademyAccessScope(
           ...(student ? [student.name, ...student.aliases] : []),
           ...(user.student_aliases?.[studentId] ?? []),
         ],
+        classIds: student?.class_ids ?? [],
       };
     }),
     canViewPublicHistory: true,

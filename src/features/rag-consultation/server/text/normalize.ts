@@ -63,6 +63,10 @@ const DATA_ABSENCE_PATTERNS = [
   /정해지지\s*않/,
   /명시되어\s*있지\s*않/,
   /등록되어\s*있지\s*않/,
+  /기재하지\s*않/,
+  /기재되어\s*있지\s*않/,
+  /공개하지\s*않/,
+  /안내하지\s*않/,
 ];
 
 export function isDataAbsenceStatement(sentence: string): boolean {

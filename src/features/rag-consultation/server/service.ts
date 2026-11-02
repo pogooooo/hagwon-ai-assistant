@@ -34,7 +34,7 @@ import type {
   RagDocumentsPort,
   RagLogger,
 } from './ports.ts';
-import { parseQuery } from './query/parse-query.ts';
+import { parseQuery, type QueryFrame } from './query/parse-query.ts';
 import { resolveSubjects } from './query/resolve-subjects.ts';
 import type { ConversationState, RagAccessScope, RagTrace } from './types.ts';
 
@@ -70,6 +70,42 @@ export interface RagConsultationService {
 }
 
 const MAX_QUESTION_LENGTH = 500;
+
+/**
+ * "첫째 반 수강료", "도윤이 반 시간표"처럼 학생으로 반을 가리키면 서버가 아는 그 학생의 반을 쓴다.
+ * 학생 본인의 "우리 반/내 반", 보호자의 "우리 애 반"도 같은 방식으로 해석한다.
+ */
+function studentClassIdsFor(
+  access: RagAccessScope,
+  frame: QueryFrame,
+  hint: string | undefined,
+): string[] {
+  let studentIds = [...frame.matchedStudentIds];
+  if (
+    studentIds.length === 0 &&
+    hint &&
+    access.allowedStudentIds.includes(hint)
+  )
+    studentIds = [hint];
+  const ownClassWords =
+    /(우리|내|제)\s*반|(우리|내|제)\s*(아이|애|자녀|딸|아들)/.test(
+      frame.normalized,
+    );
+  if (
+    studentIds.length === 0 &&
+    ownClassWords &&
+    (access.role === 'student' || access.role === 'guardian')
+  ) {
+    studentIds = [...access.allowedStudentIds];
+  }
+  // 원생 본인 계정은 반을 말하지 않아도 자기 반 정보를 묻는 것으로 본다.
+  if (studentIds.length === 0 && access.role === 'student')
+    studentIds = [...access.allowedStudentIds];
+  const classIds = access.studentRefs
+    .filter((ref) => studentIds.includes(ref.studentId))
+    .flatMap((ref) => ref.classIds ?? []);
+  return [...new Set(classIds)];
+}
 
 export function createRagConsultationService(
   deps: RagConsultationDeps,
@@ -214,7 +250,13 @@ export function createRagConsultationService(
         locate: isFact ? request.fact : undefined,
       });
       if (!summary) return failClosed('CITATION_UNSUPPORTED');
-      if (!isFact) quotedNumbers.push(...extractNumbers(request.chunk.text));
+      if (!isFact) {
+        quotedNumbers.push(
+          ...extractNumbers(
+            `${request.chunk.title} ${request.chunk.location.section ?? ''} ${request.chunk.location.label} ${request.chunk.text}`,
+          ),
+        );
+      }
       const location = isFact ? summary.location : request.chunk.location.label;
       const existing = merged.get(summary.sourceId);
       if (existing) {
@@ -316,14 +358,20 @@ export function createRagConsultationService(
               resolvedCitations: [],
             };
           } else {
+            const frame = parseQuery(question, {
+              access: input.access,
+              catalog,
+              config,
+            });
             const ctx: AnswerContext = {
               access: input.access,
               catalog,
-              frame: parseQuery(question, {
-                access: input.access,
-                catalog,
-                config,
-              }),
+              frame,
+              studentClassIds: studentClassIdsFor(
+                input.access,
+                frame,
+                input.studentIdHint,
+              ),
               question,
               asOf: started,
               state,

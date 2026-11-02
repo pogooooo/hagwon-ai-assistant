@@ -11,9 +11,12 @@ import type { ApprovedFact } from '../types.ts';
 import {
   abstain,
   handoff,
+  markMultiSubjectStudents,
+  matchesRequestedSubject,
   recordChunks,
   recordFacts,
   studentLabel,
+  subjectTag,
   type AnswerContext,
   type AnswerDraft,
 } from './context.ts';
@@ -75,10 +78,20 @@ export async function answerAdvice(
     })
   ).filter((fact) => fact.subjectId === target && fact.period);
   recordFacts(ctx.trace, loaded);
+  markMultiSubjectStudents(ctx, loaded);
+  const relevant = loaded.filter((fact) => matchesRequestedSubject(ctx, fact));
 
-  const period = latestPeriodOf(
-    loaded.filter((fact) => fact.factType === 'accuracy'),
-  );
+  // "10월 리포트"처럼 달을 말하면 그 달, 아니면 가장 최근 확정 기간
+  const available = relevant.filter((fact) => fact.factType === 'accuracy');
+  const askedPeriods = ctx.frame.months
+    .map(
+      (month) =>
+        available.find((fact) => Number(fact.period?.split('-')[1]) === month)
+          ?.period,
+    )
+    .filter((value): value is string => Boolean(value));
+  const period =
+    askedPeriods[askedPeriods.length - 1] ?? latestPeriodOf(available);
   if (!period) {
     return abstain(
       '상담에 사용할 확정된 학습 분석 자료가 없어 답변드리기 어렵습니다. 담당자 상담으로 연결해 드릴 수 있습니다.',
@@ -86,7 +99,7 @@ export async function answerAdvice(
       ['학습 분석 자료'],
     );
   }
-  const inPeriod = loaded.filter((fact) => fact.period === period);
+  const inPeriod = relevant.filter((fact) => fact.period === period);
   const numbers = inPeriod.filter(
     (fact) =>
       fact.value.kind === 'accuracy' &&
@@ -105,18 +118,39 @@ export async function answerAdvice(
         fact.value.kind === 'weak_area' ? fact.value.unit : '',
       ),
     );
-    const shownNumbers = numbers.filter(
+    // 질문이 단원·유형을 지정하면 그 수치를, 아니면 전체와 취약 단원 수치를 함께 보여 준다.
+    const labels = [...ctx.frame.units, ...ctx.frame.questionTypes];
+    const preferType = ctx.frame.flags.typeDimension;
+    const requested = inPeriod.filter(
       (fact) =>
         fact.value.kind === 'accuracy' &&
-        ((fact.value.dimension ?? 'unit') === 'overall' ||
-          weakUnits.has(fact.value.unit)),
+        labels.includes(fact.value.unit) &&
+        (!preferType ||
+          !ctx.frame.questionTypes.includes(fact.value.unit) ||
+          (fact.value.dimension ?? 'unit') === 'question_type'),
     );
+    const shownNumbers = [
+      ...numbers.filter(
+        (fact) =>
+          fact.value.kind === 'accuracy' &&
+          ((fact.value.dimension ?? 'unit') === 'overall' ||
+            (labels.length === 0 && weakUnits.has(fact.value.unit))),
+      ),
+      ...requested,
+    ];
     const used = [...guidance, ...weakAreas, ...shownNumbers];
     const lines = [
       `${name} 학생 ${formatPeriod(period)} 분석 리포트 기준입니다.`,
-      ...shownNumbers.map((fact) => `· ${valueLine(fact)}`),
-      ...weakAreas.map((fact) => `· ${valueLine(fact)}`),
-      `담당 강사가 확인한 학습 방향: ${guidance.map((fact) => valueLine(fact)).join(' ')}`,
+      ...shownNumbers.map(
+        (fact) => `· ${subjectTag(ctx, fact)}${valueLine(fact)}`,
+      ),
+      ...weakAreas.map(
+        (fact) => `· ${subjectTag(ctx, fact)}${valueLine(fact)}`,
+      ),
+      ...guidance.map(
+        (fact) =>
+          `담당 강사가 확인한 학습 방향: ${subjectTag(ctx, fact)}${valueLine(fact)}`,
+      ),
     ];
     return {
       status: 'answered',

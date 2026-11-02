@@ -1,0 +1,14 @@
+[
+  { "student_id": "SS_STU_001", "academy_id": "AC_SAESOL", "name": "오민재",
+    "aliases": ["민재"], "class_ids": ["SS_M2_NAESIN"] },
+  { "student_id": "SS_STU_002", "academy_id": "AC_SAESOL", "name": "오민서",
+    "aliases": ["민서"], "class_ids": ["SS_E6_READ"] },
+  { "student_id": "SS_STU_003", "academy_id": "AC_SAESOL", "name": "윤채원",
+    "aliases": ["채원", "채원이"], "class_ids": ["SS_M2_NAESIN"] },
+  { "student_id": "SS_STU_004", "academy_id": "AC_SAESOL", "name": "강시우",
+    "aliases": ["시우"], "class_ids": ["SS_M1_GRAM"] },
+  { "student_id": "SS_STU_005", "academy_id": "AC_SAESOL", "name": "장유나",
+    "aliases": ["유나"], "class_ids": ["SS_E5_READ"] },
+  { "student_id": "SS_STU_006", "academy_id": "AC_SAESOL", "name": "임준혁",
+    "aliases": ["준혁", "준혁이"], "class_ids": ["SS_M3_WRITE"] }
+]

@@ -81,7 +81,11 @@ export interface QueryFrame {
   relativePeriod: 'last_month' | 'this_month' | null;
   units: string[];
   questionTypes: string[];
+  /** 질문에 나온 과목(카탈로그 반의 과목명) */
+  subjects: string[];
   topics: TopicDefinition[];
+  /** 카탈로그 반과 일치하지 않는 프로그램 지칭(예: "겨울방학 특강") */
+  unknownPrograms: string[];
   amountsKrw: number[];
   percents: number[];
   hasAnalysisTerms: boolean;
@@ -201,14 +205,23 @@ function matchClasses(compact: string, catalog: AcademyCatalog) {
       }
     }
   }
+  const isProgram = (classId: string) =>
+    /특강|캠프|패키지|파이널/.test(
+      catalog.classes.find((klass) => klass.classId === classId)?.name ?? '',
+    );
   const kept = hits.filter(
     (hit) =>
       !hits.some(
         (other) =>
           other.classId !== hit.classId &&
-          other.start <= hit.start &&
-          other.end >= hit.end &&
-          other.end - other.start > hit.end - hit.start,
+          ((other.start <= hit.start &&
+            other.end >= hit.end &&
+            other.end - other.start > hit.end - hit.start) ||
+            // "고1 수학 기말 특강"처럼 특강 이름 바로 앞의 반 표현은 특강을 꾸미는 말로 본다.
+            (isProgram(other.classId) &&
+              !isProgram(hit.classId) &&
+              other.start >= hit.end &&
+              other.start - hit.end <= 3)),
       ),
   );
   const negated = unique(
@@ -232,13 +245,37 @@ function matchAcademies(normalized: string, catalog: AcademyCatalog): boolean {
       compactText(name).replace(/학원$/, ''),
     ),
   );
-  for (const match of normalized.matchAll(/([0-9a-z가-힣]+)\s*학원/g)) {
+  // "새솔영어학원"처럼 붙여 쓴 이름은 그대로, "새솔영어 학원"처럼 띄어 쓴 경우는 앞말이 조사로 끝나지 않을 때만 학원 이름으로 본다.
+  for (const match of normalized.matchAll(/([0-9a-z가-힣]+)(\s*)학원/g)) {
     const prefix = match[1];
+    const spaced = match[2].length > 0;
     if (GENERIC_ACADEMY_PREFIXES.includes(prefix)) continue;
+    // 띄어 쓴 경우 앞말이 "OO영어/OO수학"처럼 학원 이름 꼴일 때만 인정한다("감기 걸려서 학원 빠지면" 등 제외).
+    if (
+      spaced &&
+      !/(영어|수학|국어|과학|입시|종합|보습|논술|코딩|미술|음악|어학|단과)$/.test(
+        prefix,
+      )
+    )
+      continue;
     if (!own.has(prefix)) return true;
   }
   return false;
 }
+
+/** 카탈로그에 없는 프로그램(특강·캠프 등)을 가리키는 말 — 승인 자료로 확인할 수 없으므로 정형 답변 대상이 아니다. */
+const PROGRAM_TERMS = [
+  '겨울방학특강',
+  '여름방학특강',
+  '방학특강',
+  '특강',
+  '캠프',
+  '패키지',
+  '파이널',
+  '단기반',
+  '윈터스쿨',
+  '썸머스쿨',
+];
 
 const NAME_SUFFIX =
   '(이|가|는|은|의|도|랑|이랑|한테|에게|이는|이가|이의|이도|이한테|이네|네|씨|학생|군|양)?';
@@ -385,14 +422,46 @@ export function parseQuery(
   const questionTypes = (catalog.questionTypes ?? []).filter((type) =>
     withoutClasses.includes(clean(type)),
   );
-  const units = catalog.units.filter((unit) => {
-    if (withoutClasses.includes(clean(unit))) return true;
-    const tokens = unit
+  const unknownPrograms = PROGRAM_TERMS.filter((term) =>
+    withoutClasses.includes(term),
+  ).filter(
+    (term, index, list) =>
+      !list.some(
+        (other, j) =>
+          j !== index && other.length > term.length && other.includes(term),
+      ),
+  );
+  // 단원: 전체 이름 일치를 우선하고, 없을 때만 한 단원에만 있는 고유 토큰(3글자 이상)으로 찾는다.
+  const unitTokens = (unit: string) =>
+    unit
       .split(/[\s·,/()\-–—]+|와|과|및/)
       .map(clean)
       .filter((token) => token.length >= 3 && !questionTypes.includes(token));
-    return tokens.some((token) => withoutClasses.includes(token));
-  });
+  const fullUnitMatches = catalog.units.filter((unit) =>
+    withoutClasses.includes(clean(unit)),
+  );
+  const tokenOwners = new Map<string, number>();
+  for (const unit of catalog.units) {
+    for (const token of new Set(unitTokens(unit)))
+      tokenOwners.set(token, (tokenOwners.get(token) ?? 0) + 1);
+  }
+  const units =
+    fullUnitMatches.length > 0
+      ? fullUnitMatches
+      : catalog.units.filter((unit) =>
+          unitTokens(unit).some(
+            (token) =>
+              tokenOwners.get(token) === 1 && withoutClasses.includes(token),
+          ),
+        );
+  // 과목(국어·수학·영어 등): 카탈로그 반의 과목명이 질문에 있으면 그 과목 자료로 좁힌다.
+  const subjects = [
+    ...new Set(
+      catalog.classes
+        .map((klass) => klass.subject)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  ].filter((subject) => withoutClasses.includes(clean(subject)));
   const percents = [...normalized.matchAll(/(\d+(?:\.\d+)?)\s*%/g)].map((m) =>
     Number(m[1]),
   );
@@ -439,7 +508,17 @@ export function parseQuery(
       test(
         /(학생|원생)\s*(명단|목록|리스트|전원|연락처|전화번호)/g,
         normalized,
-      ),
+      ) ||
+      test(/(전체|모든|전부)\s*(명단|목록|리스트)/g, normalized) ||
+      test(
+        /(애들|아이들|학생들|원생들|친구들)\s*(전체|명단|목록|리스트|연락처)/g,
+        normalized,
+      ) ||
+      test(
+        /다른\s*(애들|아이들|학생|원생|친구|사람)\S*\s*(점수|성적|정답률|결과|명단|연락처|리포트)/g,
+        normalized,
+      ) ||
+      test(/순위|등수|석차|몇\s*등(?!급)/g, normalized),
     shareOrPermission:
       test(
         /(아무나|누구나|외부인?|모두가)\s*(열|볼|보|접근|다운)/g,
@@ -464,17 +543,21 @@ export function parseQuery(
       distinctStudentRefs + (selfReference ? 1 : 0) >= 2 &&
       (test(/(성적|점수|결과|정답률)\s*(으로|처럼)/g, normalized) ||
         test(/인\s*것처럼|라고\s*(답|해)/g, normalized)),
-    causal: test(/원인|이유|때문|(^|\s)왜(\s|$)/g, normalized),
+    causal: test(
+      /원인|이유|때문|(^|\s)왜(\s|$)|탓|(해서|라서|어서)\s*그런\s*(건가|거|걸까)/g,
+      normalized,
+    ),
     attitude: test(
-      /집중력|태도|성실|의지|산만|게으|성격|공부\s*안\s*하|딴짓/g,
+      /집중력|집중(을|이|도)?\s*(안|못)|태도|성실|의지|산만|게으|성격|공부\s*안\s*하|딴짓|노력(을|이)?\s*(안|부족)/g,
       normalized,
     ),
-    prediction: test(
-      /받을까|될까|나올까|오를까|떨어질까|예상|예측|전망|붙을까|갈\s*수\s*있을까/g,
-      normalized,
-    ),
+    prediction:
+      test(
+        /받을까|나올까|오를까|떨어질까|예상|예측|전망|붙을까|갈\s*수\s*있을까|(점수|등급|성적)[^?]{0,8}될까/g,
+        normalized,
+      ) && !test(/(하면|시키면|해야|봐야)\s*될까/g, normalized),
     compare: test(
-      /비교|차이|같나요|같아|같은가|다른가|다르나|보다|비싸|싼가|싸요|저렴|더\s*(높|낮|많|적)/g,
+      /비교(?!급)|차이|같나요|같아|같은가|다른가|다르나|보다|비싸|싼가|싸요|저렴|더\s*(높|낮|많|적)/g,
       normalized,
     ),
     trend: test(
@@ -489,7 +572,7 @@ export function parseQuery(
         normalized,
       ),
     generationRequest: test(
-      /학습\s*방향|공부\s*방법|보완|보충|조언|어떻게\s*(하면|공부|해야)|뭘\s*더\s*(해야|공부)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
+      /학습\s*방향|공부\s*방향|방향으로|방향\s*(좀|을|잡)|공부\s*방법|보완|보충|조언|어떻게\s*(하면|공부|해야)|공부\s*(하면|시키면|해야)\s*(좋|될|할)|뭘\s*(더\s*)?(해야|공부)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
       normalized,
     ),
     countLimit: test(/\d+\s*(번|회)|횟수|몇\s*번|한도|제한/g, normalized),
@@ -534,7 +617,9 @@ export function parseQuery(
     relativePeriod,
     units,
     questionTypes,
+    subjects,
     topics,
+    unknownPrograms,
     amountsKrw: parseAmounts(withoutDates),
     percents,
     hasAnalysisTerms:

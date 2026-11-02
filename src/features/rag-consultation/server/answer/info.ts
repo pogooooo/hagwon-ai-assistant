@@ -74,8 +74,17 @@ async function loadFacts(
   return facts;
 }
 
-function targetClassIds(ctx: AnswerContext): string[] {
+/** 질문이 특정한 반(반 이름 또는 학생의 반). 없으면 빈 배열. */
+function explicitClassIds(ctx: AnswerContext): string[] {
   if (ctx.frame.classIds.length > 0) return ctx.frame.classIds;
+  return ctx.studentClassIds.filter(
+    (id) => !ctx.frame.negatedClassIds.includes(id),
+  );
+}
+
+function targetClassIds(ctx: AnswerContext): string[] {
+  const explicit = explicitClassIds(ctx);
+  if (explicit.length > 0) return explicit;
   return ctx.catalog.classes
     .map((klass) => klass.classId)
     .filter((id) => !ctx.frame.negatedClassIds.includes(id));
@@ -94,6 +103,22 @@ function currentFor(
 }
 
 function hasConflict(facts: ApprovedFact[]): boolean {
+  // 모집 현황은 문구가 달라도 상태·정원·잔여석이 같으면 같은 사실로 본다.
+  if (facts.every((fact) => fact.value.kind === 'enrollment')) {
+    const values = facts.map(
+      (fact) =>
+        fact.value as Extract<ApprovedFact['value'], { kind: 'enrollment' }>,
+    );
+    const differs = (pick: (v: (typeof values)[number]) => number | null) => {
+      const known = values.map(pick).filter((v): v is number => v !== null);
+      return new Set(known).size > 1;
+    };
+    return (
+      new Set(values.map((v) => v.status)).size > 1 ||
+      differs((v) => v.capacity) ||
+      differs((v) => v.remaining)
+    );
+  }
   return new Set(facts.map((fact) => JSON.stringify(fact.value))).size > 1;
 }
 
@@ -126,11 +151,13 @@ async function answerClassFacts(
     label: string;
     render: (fact: ApprovedFact, name: string) => string;
     datePrefixed?: boolean;
+    /** 한 반에 여러 값이 정상인 사실(정규·원어민 시간표, 담당 강사 여러 명) */
+    multiValued?: boolean;
   },
 ): Promise<Part> {
   const facts = await loadFacts(ctx, [options.factType], effective.at);
   const part = emptyPart('ok');
-  const explicitClasses = ctx.frame.classIds.length > 0;
+  const explicitClasses = explicitClassIds(ctx).length > 0;
   for (const classId of targetClassIds(ctx)) {
     const current = currentFor(facts, classId, effective.at);
     const name = className(ctx.catalog, classId);
@@ -138,14 +165,18 @@ async function answerClassFacts(
       if (explicitClasses) part.missing.push(`${name} ${options.label}`);
       continue;
     }
-    if (hasConflict(current))
+    if (
+      (!options.multiValued || options.factType === 'enrollment_status') &&
+      hasConflict(current)
+    )
       return emptyPart('conflict', [`${name} ${options.label}`]);
-    const fact = current[0];
-    part.lines.push(
-      `${options.datePrefixed ? datePrefix(effective) : ''}${options.render(fact, name)}`,
-    );
-    part.citations.push({ kind: 'fact', fact, effectiveAt: effective.at });
-    part.usedFacts.push(fact);
+    for (const fact of options.multiValued ? current : current.slice(0, 1)) {
+      part.lines.push(
+        `${options.datePrefixed ? datePrefix(effective) : ''}${options.render(fact, name)}`,
+      );
+      part.citations.push({ kind: 'fact', fact, effectiveAt: effective.at });
+      part.usedFacts.push(fact);
+    }
   }
   if (part.usedFacts.length === 0) {
     return emptyPart(
@@ -166,7 +197,7 @@ async function answerFee(
   const facts = (
     await loadFacts(ctx, ['monthly_fee'], effective.at, wantsPrevious)
   ).filter((fact) => fact.value.kind === 'money');
-  const explicitClasses = ctx.frame.classIds.length > 0;
+  const explicitClasses = explicitClassIds(ctx).length > 0;
   const part = emptyPart('ok');
 
   const rows: Array<{
@@ -370,7 +401,7 @@ async function answerScheduleChange(
       : flags.cancelSchedule && !ctx.frame.compact.includes('보강')
         ? ['cancel']
         : ['cancel', 'makeup'];
-  const classIds = ctx.frame.classIds;
+  const classIds = explicitClassIds(ctx);
   let candidates = facts.filter((fact) => {
     if (fact.value.kind !== 'schedule_change') return false;
     if (!types.includes(fact.value.changeType)) return false;
@@ -385,7 +416,37 @@ async function answerScheduleChange(
 
   const range = requestedRange(ctx, effective);
   const today = kstStartOfDay(toKstDate(ctx.asOf));
-  if (range) {
+  const linkedMakeup =
+    flags.makeupSchedule &&
+    flags.cancelSchedule &&
+    effective.explicitDay !== null;
+  if (range && linkedMakeup) {
+    // "11월 12일 휴강분 보강은 언제?": 그날 휴강 + 그 휴강과 연결된(같은 반 또는 날짜를 언급한) 이후 보강
+    const day = effective.explicitDay as number;
+    const cancels = candidates.filter(
+      (fact) =>
+        fact.value.kind === 'schedule_change' &&
+        fact.value.changeType === 'cancel' &&
+        dayOf(fact.value.date) === day,
+    );
+    const { month, day: dom } = toKstDate(day);
+    const mention = `${month}월${dom}일`;
+    const cancelClasses = new Set(
+      cancels
+        .filter((fact) => fact.subjectType === 'class')
+        .map((fact) => fact.subjectId),
+    );
+    const makeups = candidates.filter(
+      (fact) =>
+        fact.value.kind === 'schedule_change' &&
+        fact.value.changeType === 'makeup' &&
+        dayOf(fact.value.date) >= day &&
+        dayOf(fact.value.date) < day + 31 * DAY_MS &&
+        (compactText(fact.value.text).includes(mention) ||
+          (fact.subjectType === 'class' && cancelClasses.has(fact.subjectId))),
+    );
+    candidates = [...cancels, ...makeups];
+  } else if (range) {
     candidates = candidates.filter((fact) => {
       const day =
         fact.value.kind === 'schedule_change' ? dayOf(fact.value.date) : 0;
@@ -465,14 +526,14 @@ async function answerMakeupPolicy(
 ): Promise<Part> {
   const facts = await loadFacts(ctx, ['makeup_policy'], effective.at);
   if (facts.length === 0) return emptyPart('missing', ['보강 규정']);
-  if (hasConflict(facts)) return emptyPart('conflict', ['보강 규정']);
-  const fact = facts[0];
+  // 보강 규정은 여러 조항(대상·신청 방법 등)으로 나뉠 수 있으므로 모두 안내한다.
   const part = emptyPart('ok');
-  part.lines.push(
-    `등록된 운영 규정에 따른 보강 기준: ${textOf(fact)}.`.replace(/\.\.$/, '.'),
-  );
-  part.citations.push({ kind: 'fact', fact, effectiveAt: effective.at });
-  part.usedFacts.push(fact);
+  part.lines.push('등록된 운영 규정에 따른 보강 기준:');
+  for (const fact of facts) {
+    part.lines.push(`- ${textOf(fact)}`);
+    part.citations.push({ kind: 'fact', fact, effectiveAt: effective.at });
+    part.usedFacts.push(fact);
+  }
   if (ctx.frame.flags.unconditional) {
     part.lines.push(
       '규정에 무조건(자동) 승인한다는 내용은 없으므로, 구체적인 가능 여부는 담당자에게 확인해 주세요.',
@@ -610,87 +671,226 @@ function contentWords(question: string): string[] {
 
 const SECTION_MAX_CHARS = 600;
 
-/** 운영 문서의 해당 절을 찾아 인용한다(여러 블록이면 같은 절끼리 이어 붙임). */
+interface SectionCandidate {
+  chunk: RagChunk;
+  score: number;
+  wordHits: number;
+  sectionMatch: boolean;
+}
+
+/**
+ * 질문 대상 반이 정해져 있으면 다른 반 이름만 언급하는 문장·행은 빼고(반 사이 값 혼동 방지),
+ * 대상 반이나 반 이름이 없는 문장은 남긴다.
+ */
+function classFilter(ctx: AnswerContext): (text: string) => boolean {
+  const targets = explicitClassIds(ctx);
+  if (targets.length === 0) return () => true;
+  const names = (classId: string) => {
+    const klass = ctx.catalog.classes.find((c) => c.classId === classId);
+    return klass
+      ? [klass.name, ...klass.aliases]
+          .map(compactText)
+          .filter((n) => n.length >= 3)
+      : [];
+  };
+  const targetNames = targets.flatMap(names);
+  const otherNames = ctx.catalog.classes
+    .filter((c) => !targets.includes(c.classId))
+    .flatMap((c) => names(c.classId));
+  return (text: string) => {
+    const compact = compactText(text);
+    if (targetNames.some((name) => compact.includes(name))) return true;
+    return !otherNames.some((name) => compact.includes(name));
+  };
+}
+
+/** 표 행 청크에서 질문과 관련된 행·열만 골라 "헤더: 값" 형태로 만든다(다른 칸 값이 섞이지 않게). */
+function renderTableRows(
+  chunks: RagChunk[],
+  words: string[],
+  evidenceTerms: readonly string[],
+  keepText: (text: string) => boolean,
+): string[] {
+  const has = (text: string) =>
+    words.filter((word) => compactText(text).includes(compactText(word)))
+      .length;
+  const rows = chunks.filter(
+    (chunk) =>
+      chunk.location.cells &&
+      chunk.location.header &&
+      keepText((chunk.location.cells ?? []).join(' ')),
+  );
+  // 행이 적으면 모두 보여 주고, 많으면 질문 단어·근거어와 가장 많이 맞는 행만 고른다.
+  const rowScore = (chunk: RagChunk) => {
+    const cells = (chunk.location.cells ?? []).join(' ');
+    return has(cells) + (containsAny(cells, evidenceTerms) ? 2 : 0);
+  };
+  const bestRow = Math.max(0, ...rows.map(rowScore));
+  const selectedRows = (
+    rows.length <= 4 || bestRow === 0
+      ? rows
+      : rows.filter((chunk) => rowScore(chunk) === bestRow)
+  ).slice(0, 8);
+  const header = selectedRows[0]?.location.header ?? [];
+  const headerScores = header.map((name) => has(name));
+  const best = Math.max(0, ...headerScores.slice(1));
+  const keep = header.map(
+    (_, index) => index === 0 || best === 0 || headerScores[index] === best,
+  );
+  return selectedRows.map((chunk) =>
+    (chunk.location.header ?? [])
+      .map((name, index) =>
+        keep[index] ? `${name}: ${chunk.location.cells?.[index] ?? ''}` : null,
+      )
+      .filter(Boolean)
+      .join(' / '),
+  );
+}
+
+/** 문단 청크에서 질문 단어·근거어가 들어간 문장을 고른다(없으면 앞 3문장). */
+function renderParagraphs(
+  chunks: RagChunk[],
+  words: string[],
+  evidenceTerms: readonly string[],
+  keepText: (text: string) => boolean,
+): string[] {
+  const sentences = chunks
+    .flatMap((chunk) => splitSentences(chunk.text))
+    .filter(
+      (sentence) => !isDataAbsenceStatement(sentence) && keepText(sentence),
+    );
+  const relevant = sentences.filter(
+    (sentence) =>
+      containsAny(sentence, evidenceTerms) ||
+      words.some((word) => compactText(sentence).includes(compactText(word))),
+  );
+  return (relevant.length > 0 ? relevant : sentences.slice(0, 3)).filter(
+    (sentence) => !/^\d+\.?$/.test(sentence.trim()),
+  );
+}
+
+/**
+ * 운영 문서의 해당 절을 찾아 인용한다(생성 0회).
+ * - 근거어는 문서 제목·절 제목·본문 중 어디에 있어도 된다(표 행에는 근거어가 없을 수 있음).
+ * - 표는 질문한 행·열만, 문단은 관련 문장만 인용한다.
+ * - 질문이 두 문서에 걸치면(예: 셔틀 시각 + 셔틀 이용료) 첫 절이 다루지 않는 단어를 가진 두 번째 절을 덧붙인다.
+ */
 async function answerSection(
   ctx: AnswerContext,
   topic: TopicDefinition,
 ): Promise<Part> {
   const evidenceTerms = topic.evidenceTerms ?? topic.terms;
+  const words = contentWords(ctx.question).filter(
+    (word) => !topic.terms.some((term) => compactText(term) === word),
+  );
   const results = await ctx.documents.searchApprovedChunks({
     access: ctx.access,
     studentIds: [],
     asOf: ctx.asOf,
-    query: [
-      ...evidenceTerms,
-      ...topic.terms,
-      ...contentWords(ctx.question),
-    ].join(' '),
-    limit: ctx.config.searchLimit * 2,
+    query: [...evidenceTerms, ...topic.terms, ...words].join(' '),
+    limit: ctx.config.searchLimit * 3,
   });
   recordChunks(
     ctx.trace,
     results.map((result) => result.chunk),
   );
-  const scored = results
-    .map(({ chunk, score }) => {
-      const sentences = splitSentences(chunk.text).filter(
+  const candidates: SectionCandidate[] = results
+    .filter(({ chunk }) => {
+      const hasText = splitSentences(chunk.text).some(
         (sentence) => !isDataAbsenceStatement(sentence),
       );
-      const evidenceCount = sentences.filter((sentence) =>
-        containsAny(sentence, evidenceTerms),
-      ).length;
-      const sectionMatch = chunk.location.section
-        ? containsAny(chunk.location.section, evidenceTerms)
-        : false;
-      return { chunk, score, evidenceCount, sectionMatch };
+      const evidence =
+        containsAny(chunk.title, evidenceTerms) ||
+        containsAny(chunk.location.section ?? '', evidenceTerms) ||
+        splitSentences(chunk.text).some(
+          (sentence) =>
+            !isDataAbsenceStatement(sentence) &&
+            containsAny(sentence, evidenceTerms),
+        );
+      return hasText && evidence;
     })
-    .filter((entry) => entry.evidenceCount > 0 || entry.sectionMatch);
-  if (scored.length === 0) return emptyPart('missing', [topic.label]);
-  // 질문 단어 일치(BM25)를 우선하고, 절 제목 일치·근거 문장 수를 보조 점수로 더한다.
-  const maxScore = Math.max(...scored.map((entry) => entry.score), 1e-9);
-  const rank = (entry: (typeof scored)[number]) =>
-    entry.score / maxScore +
-    (entry.sectionMatch ? 0.5 : 0) +
-    Math.min(entry.evidenceCount, 3) * 0.1;
-  scored.sort((a, b) => rank(b) - rank(a));
-  const best = scored[0].chunk;
-  const order = (chunk: RagChunk) => Number(chunk.chunkId.split('#').pop());
-  const sameSection = (
-    best.location.section
-      ? scored.filter(
-          (entry) =>
-            entry.chunk.sourceId === best.sourceId &&
-            entry.chunk.location.section === best.location.section,
-        )
-      : [scored[0]]
-  )
-    .map((entry) => entry.chunk)
-    .sort((a, b) => order(a) - order(b));
+    .map(({ chunk, score }) => ({
+      chunk,
+      score,
+      wordHits: words.filter((word) =>
+        compactText(chunk.contextualText).includes(compactText(word)),
+      ).length,
+      sectionMatch: containsAny(chunk.location.section ?? '', evidenceTerms),
+    }));
+  if (candidates.length === 0) return emptyPart('missing', [topic.label]);
 
-  const lines: string[] = [];
-  let length = 0;
-  const used: RagChunk[] = [];
-  for (const chunk of sameSection) {
-    const sentences = splitSentences(chunk.text).filter(
-      (sentence) => !isDataAbsenceStatement(sentence),
-    );
-    for (const sentence of sentences) {
-      if (length + sentence.length > SECTION_MAX_CHARS && lines.length > 0)
-        break;
-      lines.push(sentence);
-      length += sentence.length;
-    }
-    used.push(chunk);
-    if (length >= SECTION_MAX_CHARS) break;
+  const maxScore = Math.max(...candidates.map((entry) => entry.score), 1e-9);
+  const rank = (entry: SectionCandidate) =>
+    entry.score / maxScore +
+    entry.wordHits * 0.15 +
+    (entry.sectionMatch ? 0.3 : 0);
+  candidates.sort((a, b) => rank(b) - rank(a));
+
+  const groupKey = (chunk: RagChunk) =>
+    `${chunk.sourceId}§${chunk.location.section ?? chunk.chunkId}`;
+  const groups: Array<{
+    key: string;
+    best: SectionCandidate;
+    chunks: RagChunk[];
+  }> = [];
+  for (const entry of candidates) {
+    const key = groupKey(entry.chunk);
+    const group = groups.find((g) => g.key === key);
+    if (group) group.chunks.push(entry.chunk);
+    else groups.push({ key, best: entry, chunks: [entry.chunk] });
   }
+  const order = (chunk: RagChunk) => Number(chunk.chunkId.split('#').pop());
+  const first = groups[0];
+  const chosen = [first];
+  const covered = (group: (typeof groups)[number]) =>
+    new Set(
+      words.filter((word) =>
+        group.chunks.some((chunk) =>
+          compactText(chunk.contextualText).includes(compactText(word)),
+        ),
+      ),
+    );
+  const firstCovered = covered(first);
+  const second = groups
+    .slice(1)
+    .find(
+      (group) =>
+        rank(group.best) >= rank(first.best) * 0.35 &&
+        [...covered(group)].some((word) => !firstCovered.has(word)),
+    );
+  if (second) chosen.push(second);
+
   const part = emptyPart('ok');
-  const heading = best.location.section ?? topic.label;
-  part.lines.push(
-    `[${heading}] ${best.title} 기준 안내입니다.\n${lines.join('\n')}`,
-  );
-  part.citations.push(
-    ...used.map((chunk) => ({ kind: 'chunk' as const, chunk })),
-  );
+  for (const group of chosen) {
+    const chunks = group.chunks.sort((a, b) => order(a) - order(b));
+    const tableChunks = chunks.filter(
+      (chunk) => chunk.location.kind === 'table_row',
+    );
+    const paragraphChunks = chunks.filter(
+      (chunk) => chunk.location.kind !== 'table_row',
+    );
+    const lines: string[] = [];
+    let length = 0;
+    const keepText = classFilter(ctx);
+    for (const text of [
+      ...renderParagraphs(paragraphChunks, words, evidenceTerms, keepText),
+      ...renderTableRows(tableChunks, words, evidenceTerms, keepText),
+    ]) {
+      if (length + text.length > SECTION_MAX_CHARS && lines.length > 0) break;
+      lines.push(text);
+      length += text.length;
+    }
+    const best = group.best.chunk;
+    // 원문 Markdown 강조 기호는 인용할 때 뺀다.
+    for (let i = 0; i < lines.length; i += 1)
+      lines[i] = lines[i].replace(/\*\*|__/g, '');
+    part.lines.push(
+      `[${best.location.section ?? topic.label}] ${best.title} 기준 안내입니다.\n${lines.join('\n')}`,
+    );
+    part.citations.push(
+      ...chunks.map((chunk) => ({ kind: 'chunk' as const, chunk })),
+    );
+  }
   return part;
 }
 
@@ -728,9 +928,21 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
       ? topics.map((topic) => topic.id).join('+')
       : 'general_info';
 
+  // 카탈로그에 없는 프로그램(예: 겨울방학 특강)의 수강료·일정은 승인 자료로 확인할 수 없다(초안 수치를 쓰지 않음).
+  // 반 이름에 포함되지 않은 프로그램 지칭(캠프·패키지 등)이 남아 있으면 승인 자료에 없는 프로그램이다.
+  if (ctx.frame.unknownPrograms.length > 0) {
+    const label = ctx.frame.unknownPrograms.join(', ');
+    return abstain(
+      `문의하신 ${label} 관련 내용은 현재 승인된 안내 자료에서 확인되지 않아 안내해 드릴 수 없습니다. 개설 여부와 비용은 담당자에게 확인해 주세요.`,
+      'INSUFFICIENT_EVIDENCE',
+      [`${label} 정보`],
+      ['INSUFFICIENT_EVIDENCE'],
+    );
+  }
+
   let selectedTopics: TopicDefinition[] = [...topics];
   if (selectedTopics.length === 0) {
-    if (ctx.frame.classIds.length === 0) return answerGeneric(ctx);
+    if (explicitClassIds(ctx).length === 0) return answerGeneric(ctx);
     // 반만 언급된 경우 해당 반의 수강료·시간표·강사를 함께 안내한다.
     selectedTopics = ctx.config.topics.filter((topic) =>
       ['fee', 'schedule', 'teacher'].includes(topic.id),
@@ -776,6 +988,7 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
             factType: 'schedule',
             label: '수업 시간표',
             datePrefixed: true,
+            multiValued: true,
             render: (fact, name) =>
               `${name} 수업은 ${textOf(fact)}입니다(${formatValidity(fact.validFrom, fact.validTo)}).`,
           }),
@@ -786,6 +999,7 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
           await answerClassFacts(ctx, effective, {
             factType: 'teacher',
             label: '담당 강사',
+            multiValued: true,
             render: (fact, name) =>
               `${name} 담당 강사는 ${textOf(fact)}입니다.`,
           }),
@@ -796,6 +1010,7 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
           await answerClassFacts(ctx, effective, {
             factType: 'enrollment_status',
             label: '모집 현황',
+            multiValued: true,
             render: (fact, name) =>
               `${name} 모집 현황: ${textOf(fact)} (${formatKstDate(fact.validFrom)} 공지 기준)`,
           }),

@@ -15,12 +15,16 @@ import {
 import type { AccuracyDimension, ApprovedFact } from '../types.ts';
 import {
   abstain,
+  markMultiSubjectStudents,
+  matchesRequestedSubject,
+  subjectOf,
   recordFacts,
   studentLabel,
+  subjectTag,
   type AnswerContext,
   type AnswerDraft,
 } from './context.ts';
-import { accuracyPercent } from './format.ts';
+import { accuracyPercent, exactPercent } from './format.ts';
 
 type AccuracyFact = ApprovedFact & {
   value: {
@@ -46,6 +50,9 @@ function dimensionOf(fact: AccuracyFact): AccuracyDimension {
 }
 function percent(fact: AccuracyFact): number {
   return accuracyPercent(fact.value.correct, fact.value.total);
+}
+function exact(fact: AccuracyFact): number {
+  return exactPercent(fact.value.correct, fact.value.total);
 }
 
 const CAVEAT =
@@ -93,7 +100,7 @@ function line(ctx: AnswerContext, fact: AccuracyFact): string {
   const name = studentLabel(ctx.access, fact.subjectId);
   const revision =
     fact.revision > 1 ? ` (채점 수정 반영본 r${fact.revision})` : '';
-  return `${name} 학생 ${formatPeriod(fact.period ?? '')} ${labelOf(fact)}: ${fact.value.total}문항 중 ${fact.value.correct}문항 정답(정답률 ${percent(fact)}%)${revision}.`;
+  return `${name} 학생 ${formatPeriod(fact.period ?? '')} ${subjectTag(ctx, fact)}${labelOf(fact)}: ${fact.value.total}문항 중 ${fact.value.correct}문항 정답(정답률 ${percent(fact)}%)${revision}.`;
 }
 
 /** 분석 기간과 근거 숙제를 함께 제시한다. */
@@ -166,6 +173,12 @@ function draft(
     targets: string[];
   },
 ): AnswerDraft {
+  const assignmentCounts = [
+    ...new Set(used.flatMap((fact) => fact.assignments.map((a) => a.title))),
+  ].length;
+  const periodNumbers = extras.periods.flatMap((period) =>
+    period.split('-').map(Number),
+  );
   return {
     status,
     text: [...lines, ...assignmentLines(used)].join('\n'),
@@ -173,7 +186,12 @@ function draft(
     usedFacts: used,
     missingFields: status === 'partial' ? extras.missing : undefined,
     reasonCode: status === 'partial' ? 'PARTIAL_EVIDENCE' : undefined,
-    derivedNumbers: extras.derived,
+    // 기간 표기(연·월)와 "외 N건" 같은 개수도 코드가 만든 수치로 허용한다.
+    derivedNumbers: [
+      ...(extras.derived ?? []),
+      ...periodNumbers,
+      ...Array.from({ length: assignmentCounts + 1 }, (_, n) => n),
+    ],
     instants: [ctx.asOf],
     conversationUpdate: {
       selectedStudentId:
@@ -265,17 +283,20 @@ export async function answerAnalysis(
     asOf: ctx.asOf,
   });
   recordFacts(ctx.trace, loaded);
+  markMultiSubjectStudents(ctx, loaded);
   const allAccuracy = loaded
     .filter(isAccuracy)
-    .filter((fact) => targets.includes(fact.subjectId));
+    .filter((fact) => targets.includes(fact.subjectId))
+    .filter((fact) => matchesRequestedSubject(ctx, fact));
   const weakAreas = loaded
     .filter(isWeakArea)
-    .filter((fact) => targets.includes(fact.subjectId));
+    .filter((fact) => targets.includes(fact.subjectId))
+    .filter((fact) => matchesRequestedSubject(ctx, fact));
 
   // 같은 학생·지표·기간에 동시에 유효한 승인 값이 서로 다르면 어느 쪽도 고르지 않는다.
   const groups = new Map<string, Set<string>>();
   for (const fact of allAccuracy) {
-    const key = `${fact.subjectId}|${dimensionOf(fact)}|${fact.value.unit}|${fact.period}`;
+    const key = `${fact.subjectId}|${subjectOf(ctx.catalog, fact.classId) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}|${fact.period}`;
     const values = groups.get(key) ?? new Set<string>();
     values.add(`${fact.value.correct}/${fact.value.total}`);
     groups.set(key, values);
@@ -388,7 +409,7 @@ export async function answerAnalysis(
   const unitFacts = sorted.filter((fact) => dimensionOf(fact) !== 'overall');
   if (frame.flags.unitDimension && wantsComparison && unitFacts.length >= 2) {
     const [a, b] = [...unitFacts].sort((x, y) => percent(y) - percent(x));
-    const diff = Math.round((percent(a) - percent(b)) * 10) / 10;
+    const diff = Math.round(exact(a) - exact(b));
     derived.push(diff);
     lines.push(
       diff === 0
@@ -437,6 +458,17 @@ function weakAreaAnswer(
       continue;
     }
     const reported = ownWeak.filter((fact) => fact.period === period);
+    // 그 달 전체 정답률이 있으면 함께 보여 준다("성적이랑 약한 단원" 질문).
+    const overall = accuracy.find(
+      (fact) =>
+        fact.subjectId === target &&
+        fact.period === period &&
+        dimensionOf(fact) === 'overall',
+    );
+    if (overall) {
+      lines.push(line(ctx, overall));
+      used.push(overall);
+    }
     if (reported.length > 0) {
       // 3번 기능이 판정한 취약 영역을 그대로 전달하고, 해당 단원의 확정 수치를 함께 보여 준다.
       for (const weak of reported) {
@@ -565,7 +597,7 @@ function comparePeriodsFor(
   }
 
   const keyOf = (fact: AccuracyFact) =>
-    `${dimensionOf(fact)}|${fact.value.unit}`;
+    `${subjectOf(ctx.catalog, fact.classId) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}`;
   const keySets = byPeriod.map((entry) => new Set(entry.facts.map(keyOf)));
   const commonKeys = [...keySets[0]]
     .filter((key) => keySets.every((set) => set.has(key)))
@@ -600,12 +632,11 @@ function comparePeriodsFor(
     used.push(...points);
     const parts = points.map(
       (fact) =>
-        `${formatPeriod(fact.period ?? '')} ${fact.value.correct}/${fact.value.total}(${percent(fact)}%)`,
+        `${formatPeriod(fact.period ?? '')} ${fact.value.total}문항 중 ${fact.value.correct}문항(${percent(fact)}%)`,
     );
-    const diff =
-      Math.round(
-        (percent(points[points.length - 1]) - percent(points[0])) * 10,
-      ) / 10;
+    const diff = Math.round(
+      exact(points[points.length - 1]) - exact(points[0]),
+    );
     derived.push(Math.abs(diff));
     const direction =
       diff === 0
@@ -613,7 +644,7 @@ function comparePeriodsFor(
         : `${Math.abs(diff)}%p ${diff > 0 ? '높습니다' : '낮습니다'}`;
     const span = points.length > 2 ? '첫 기간보다' : '이전 기간보다';
     lines.push(
-      `${name} 학생 ${labelOf(points[0])}: ${parts.join(' → ')}. ${span} 정답률이 ${direction}.`,
+      `${name} 학생 ${subjectTag(ctx, points[0])}${labelOf(points[0])}: ${parts.join(' → ')}. ${span} 정답률이 ${direction}.`,
     );
   }
   lines.push(CAVEAT, ...notes(ctx, used));
@@ -644,7 +675,12 @@ function compareStudents(
     targets.every((target) => facts.some((fact) => fact.subjectId === target));
   const series = seriesFacts(inPeriod, labels, coversAll);
   const keys = [
-    ...new Set(series.map((fact) => `${dimensionOf(fact)}|${fact.value.unit}`)),
+    ...new Set(
+      series.map(
+        (fact) =>
+          `${subjectOf(ctx.catalog, fact.classId) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}`,
+      ),
+    ),
   ].sort();
   const used: AccuracyFact[] = [];
   const lines: string[] = [];
@@ -655,13 +691,14 @@ function compareStudents(
       fact: series.find(
         (fact) =>
           fact.subjectId === target &&
-          `${dimensionOf(fact)}|${fact.value.unit}` === key,
+          `${subjectOf(ctx.catalog, fact.classId) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}` ===
+            key,
       ),
     }));
     for (const row of rows) {
       if (!row.fact)
         missing.push(
-          `${studentLabel(ctx.access, row.target)} ${formatPeriod(period)} ${key.split('|')[1]}`,
+          `${studentLabel(ctx.access, row.target)} ${formatPeriod(period)} ${key.split('|')[2]}`,
         );
       else {
         used.push(row.fact);

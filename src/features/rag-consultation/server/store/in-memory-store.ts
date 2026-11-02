@@ -238,6 +238,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
           [],
         assignments: fact.assignments ?? [],
         evidence: fact.evidence ?? null,
+        classId: stored.classId,
       })),
     );
     stored.status = 'indexed_verified';

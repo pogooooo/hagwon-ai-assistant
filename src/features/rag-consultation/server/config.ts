@@ -131,6 +131,12 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
       '몇명',
       '인원',
       '신규등록',
+      '등록할수',
+      '등록되나',
+      '등록돼',
+      '수강가능',
+      '수강할수',
+      '자리있',
     ],
     factTypes: ['enrollment_status'],
   },
@@ -185,7 +191,7 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
   section(
     'refund',
     '환불 규정',
-    ['환불', '환급', '반환'],
+    ['환불', '환급', '반환', '돌려받', '돌려주', '그만두면', '그만둘'],
     ['환불', '환급', '반환'],
   ),
   section(
@@ -221,7 +227,7 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
     'shuttle',
     '셔틀버스',
     ['셔틀', '차량운행', '학원버스', '학원차', '픽업', '등하원차'],
-    ['셔틀', '차량', '버스'],
+    ['셔틀', '통학 차량', '학원 차량', '차량 운행', '노선'],
   ),
   section('discount', '할인', ['할인', '형제'], ['할인']),
   section(
@@ -239,8 +245,8 @@ export const DEFAULT_TOPICS: readonly TopicDefinition[] = [
   section(
     'phone_rule',
     '휴대폰 규정',
-    ['휴대폰', '핸드폰', '스마트폰'],
-    ['휴대폰', '핸드폰', '스마트폰'],
+    ['휴대폰', '핸드폰', '스마트폰', '폰'],
+    ['휴대폰', '핸드폰', '스마트폰', '폰'],
   ),
   section(
     'clinic',
@@ -275,8 +281,12 @@ export const TOPIC_SUPPRESSION: ReadonlyArray<readonly [string, string]> = [
   ['makeup', 'attendance'],
   ['contact', 'phone_rule'],
   ['study_room', 'hours'],
-  ['parking', 'hours'],
   ['contact', 'teacher'],
+  ['refund', 'fee'],
+  ['refund', 'schedule'],
+  ['level_test', 'schedule'],
+  ['retest', 'schedule'],
+  ['shuttle', 'schedule'],
 ];
 
 /** 학습 분석 질문으로 보는 표현(단원·유형명은 카탈로그에서 추가). */

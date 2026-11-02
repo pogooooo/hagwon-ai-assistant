@@ -1,0 +1,73 @@
+[
+  {
+    "student_id": "DO_STU_001",
+    "academy_id": "AC_DAON",
+    "name": "송지안",
+    "aliases": [
+      "지안",
+      "지안이"
+    ],
+    "class_ids": [
+      "DO_H1_MATH",
+      "DO_H1_LIT"
+    ]
+  },
+  {
+    "student_id": "DO_STU_002",
+    "academy_id": "AC_DAON",
+    "name": "송지후",
+    "aliases": [
+      "지후"
+    ],
+    "class_ids": [
+      "DO_H3_CALC"
+    ]
+  },
+  {
+    "student_id": "DO_STU_003",
+    "academy_id": "AC_DAON",
+    "name": "류태윤",
+    "aliases": [
+      "태윤",
+      "태윤이"
+    ],
+    "class_ids": [
+      "DO_H2_MATH1"
+    ]
+  },
+  {
+    "student_id": "DO_STU_004",
+    "academy_id": "AC_DAON",
+    "name": "백소율",
+    "aliases": [
+      "소율",
+      "소율이"
+    ],
+    "class_ids": [
+      "DO_H1_MATH"
+    ]
+  },
+  {
+    "student_id": "DO_STU_005",
+    "academy_id": "AC_DAON",
+    "name": "서다인",
+    "aliases": [
+      "다인",
+      "다인이"
+    ],
+    "class_ids": [
+      "DO_H2_READ"
+    ]
+  },
+  {
+    "student_id": "DO_STU_006",
+    "academy_id": "AC_DAON",
+    "name": "문건우",
+    "aliases": [
+      "건우"
+    ],
+    "class_ids": [
+      "DO_H1_LIT"
+    ]
+  }
+]

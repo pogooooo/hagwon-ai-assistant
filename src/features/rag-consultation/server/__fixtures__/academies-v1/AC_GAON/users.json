@@ -1,0 +1,112 @@
+[
+  {
+    "user_id": "GA_VISITOR",
+    "role": "visitor",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "GA_GUARDIAN_KIM",
+    "role": "guardian",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [
+      "GA_STU_001",
+      "GA_STU_002"
+    ],
+    "allowed_class_ids": [],
+    "student_aliases": {
+      "GA_STU_001": [
+        "첫째",
+        "큰애"
+      ],
+      "GA_STU_002": [
+        "둘째",
+        "작은애"
+      ]
+    }
+  },
+  {
+    "user_id": "GA_GUARDIAN_LEE",
+    "role": "guardian",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [
+      "GA_STU_003"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "GA_GUARDIAN_PARK",
+    "role": "guardian",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [
+      "GA_STU_004"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "GA_STUDENT_JIHO",
+    "role": "student",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [
+      "GA_STU_005"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "GA_STUDENT_DOYUN",
+    "role": "student",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [
+      "GA_STU_003"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "GA_TEACHER_MOON",
+    "role": "teacher",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [
+      "GA_STU_001",
+      "GA_STU_002",
+      "GA_STU_003"
+    ],
+    "allowed_class_ids": [
+      "GA_M2_ADV",
+      "GA_M3_ADV"
+    ]
+  },
+  {
+    "user_id": "GA_TEACHER_OH",
+    "role": "teacher",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [
+      "GA_STU_004",
+      "GA_STU_006"
+    ],
+    "allowed_class_ids": [
+      "GA_M1_BASIC",
+      "GA_M2_BASIC"
+    ]
+  },
+  {
+    "user_id": "GA_ADMIN",
+    "role": "admin",
+    "academy_id": "AC_GAON",
+    "allowed_student_ids": [
+      "GA_STU_001",
+      "GA_STU_002",
+      "GA_STU_003",
+      "GA_STU_004",
+      "GA_STU_005",
+      "GA_STU_006"
+    ],
+    "allowed_class_ids": [
+      "GA_M1_BASIC",
+      "GA_M2_BASIC",
+      "GA_M2_ADV",
+      "GA_M3_ADV",
+      "GA_M3_EXAM"
+    ]
+  }
+]

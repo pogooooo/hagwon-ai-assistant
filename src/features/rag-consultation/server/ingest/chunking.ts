@@ -102,6 +102,7 @@ export function splitIntoBlocks(text: string): RawBlock[] {
             tableIndex,
             rowIndex: rowOffset + 1,
             header,
+            cells,
             section,
           },
           text: pairs.join(' / '),

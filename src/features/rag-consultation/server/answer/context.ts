@@ -31,6 +31,10 @@ export interface AnswerContext {
   generation: GenerationPort;
   clock: Clock;
   trace: RagTrace;
+  /** 질문이 반 대신 학생으로 반을 가리킬 때(“첫째 반”, “도윤이 반”) 서버가 아는 그 학생들의 반 */
+  studentClassIds: string[];
+  /** 과목이 둘 이상인 학생(답변에 과목 표시가 필요한 경우) — 분석 단계에서 채운다 */
+  multiSubjectStudents?: Set<string>;
 }
 
 export type CitationRequest =
@@ -154,4 +158,48 @@ export function recordChunks(trace: RagTrace, chunks: readonly RagChunk[]) {
     if (!trace.retrievedChunkIds.includes(chunk.chunkId))
       trace.retrievedChunkIds.push(chunk.chunkId);
   }
+}
+
+export function subjectOf(
+  catalog: AcademyCatalog,
+  classId: string | null,
+): string | null {
+  if (!classId) return null;
+  return (
+    catalog.classes.find((klass) => klass.classId === classId)?.subject ?? null
+  );
+}
+
+/** 질문에 과목이 있으면 그 과목 문서의 사실만 남긴다(과목을 알 수 없는 사실은 유지). */
+export function matchesRequestedSubject(
+  ctx: AnswerContext,
+  fact: ApprovedFact,
+): boolean {
+  if (ctx.frame.subjects.length === 0) return true;
+  const subject = subjectOf(ctx.catalog, fact.classId);
+  return subject === null || ctx.frame.subjects.includes(subject);
+}
+
+/** 학생별로 사실이 걸친 과목이 둘 이상인지 기록한다. */
+export function markMultiSubjectStudents(
+  ctx: AnswerContext,
+  facts: readonly ApprovedFact[],
+) {
+  const subjects = new Map<string, Set<string>>();
+  for (const fact of facts) {
+    const subject = subjectOf(ctx.catalog, fact.classId);
+    if (!subject) continue;
+    const set = subjects.get(fact.subjectId) ?? new Set<string>();
+    set.add(subject);
+    subjects.set(fact.subjectId, set);
+  }
+  ctx.multiSubjectStudents = new Set(
+    [...subjects].filter(([, set]) => set.size > 1).map(([id]) => id),
+  );
+}
+
+export function subjectTag(ctx: AnswerContext, fact: ApprovedFact): string {
+  if (!ctx.multiSubjectStudents?.has(fact.subjectId)) return '';
+  const subject = subjectOf(ctx.catalog, fact.classId);
+  return subject ? `[${subject}] ` : '';
 }
