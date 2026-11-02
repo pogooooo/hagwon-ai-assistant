@@ -162,6 +162,18 @@ async function answerClassFacts(
     const current = currentFor(facts, classId, effective.at);
     const name = className(ctx.catalog, classId);
     if (current.length === 0) {
+      // 정형 시간표가 없는 반: 승인된 시간표 문서의 표에서 그 반 이름이 든 칸을 찾는다(요일×교시 격자 포함).
+      const table =
+        explicitClasses && options.factType === 'schedule'
+          ? await classTableRows(ctx, classId, ['schedule'])
+          : [];
+      if (table.length > 0) {
+        for (const { chunk, line } of table) {
+          part.lines.push(`${name} 수업(시간표 표 기준): ${line}`);
+          part.citations.push({ kind: 'chunk', chunk });
+        }
+        continue;
+      }
       if (explicitClasses) part.missing.push(`${name} ${options.label}`);
       continue;
     }
@@ -178,7 +190,7 @@ async function answerClassFacts(
       part.usedFacts.push(fact);
     }
   }
-  if (part.usedFacts.length === 0) {
+  if (part.usedFacts.length === 0 && part.lines.length === 0) {
     return emptyPart(
       'missing',
       part.missing.length ? part.missing : [options.label],
@@ -186,6 +198,54 @@ async function answerClassFacts(
   }
   if (part.missing.length > 0) part.outcome = 'partial';
   return part;
+}
+
+/**
+ * 표에서 반 이름이 든 칸 찾기: 행의 첫 칸(교시·시간) + 그 반이 있는 칸의 머리글(요일)을 한 줄로.
+ * 셀 안 공백("중2 내신B 반")은 무시하고 비교한다.
+ */
+export async function classTableRows(
+  ctx: AnswerContext,
+  classId: string,
+  documentTypes: readonly string[],
+): Promise<Array<{ chunk: RagChunk; line: string }>> {
+  const klass = ctx.catalog.classes.find((c) => c.classId === classId);
+  if (!klass) return [];
+  const names = [klass.name, ...klass.aliases]
+    .map(compactText)
+    .filter((n) => n.length >= 3);
+  const results = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    query: [klass.name, ...klass.aliases].join(' '),
+    limit: 40,
+    documentTypes,
+  });
+  recordChunks(
+    ctx.trace,
+    results.map((result) => result.chunk),
+  );
+  const out: Array<{ chunk: RagChunk; line: string }> = [];
+  for (const { chunk } of results) {
+    const cells = chunk.location.cells;
+    const header = chunk.location.header;
+    if (chunk.location.kind !== 'table_row' || !cells || !header) continue;
+    const columns = cells
+      .map((cell, index) =>
+        index > 0 && names.some((n) => compactText(cell).includes(n))
+          ? index
+          : -1,
+      )
+      .filter((index) => index > 0);
+    const rowNamed = names.some((n) => compactText(cells[0] ?? '').includes(n));
+    if (columns.length === 0 && !rowNamed) continue;
+    const line = rowNamed
+      ? header.map((h, i) => `${h}: ${cells[i] ?? ''}`).join(' / ')
+      : `${header[0]}: ${cells[0]} / ${columns.map((i) => header[i]).join('·')}`;
+    if (!out.some((entry) => entry.line === line)) out.push({ chunk, line });
+  }
+  return out.slice(0, 6);
 }
 
 async function answerFee(
@@ -714,7 +774,7 @@ export function contentWords(question: string): string[] {
   return [...new Set(words)];
 }
 
-const SECTION_MAX_CHARS = 600;
+const SECTION_MAX_CHARS = 900;
 
 interface SectionCandidate {
   chunk: RagChunk;
@@ -749,6 +809,40 @@ export function classFilter(ctx: AnswerContext): (text: string) => boolean {
   };
 }
 
+const GRADE_GROUP_WORDS: Record<string, string[]> = {
+  초: ['초등', '초'],
+  중: ['중등', '중학'],
+  고: ['고등', '고교'],
+};
+
+/**
+ * 반 이름과 표 행 이름이 정확히 같지 않을 때(예: "중2 심화반" ↔ "중등 2학년 심화")의 유사도.
+ * 학년(또는 초·중·고 구분)이 맞으면 1, 학년을 뺀 핵심 이름의 두 글자 묶음이 겹치는 비율을 더한다.
+ */
+export function classSimilarity(className: string, text: string): number {
+  const name = compactText(className);
+  const target = compactText(text);
+  const grade = name.match(/^(초|중|고)([1-6])/);
+  let score = 0;
+  if (grade) {
+    const [token, group, year] = grade;
+    const groupHit = GRADE_GROUP_WORDS[group].some((w) => target.includes(w));
+    if (
+      target.includes(token) ||
+      (groupHit && new RegExp(`${year}(학년)?`).test(target))
+    )
+      score += 1;
+    else if (groupHit && !/[1-6]학년/.test(target)) score += 0.5;
+  }
+  const core = name.replace(/^(초|중|고)[1-6]/, '').replace(/반$/, '');
+  const grams: string[] = [];
+  for (let i = 0; i + 2 <= core.length; i += 1)
+    grams.push(core.slice(i, i + 2));
+  if (grams.length > 0)
+    score += grams.filter((g) => target.includes(g)).length / grams.length;
+  return score;
+}
+
 /** 표 행 청크에서 질문과 관련된 행·열만 골라 "헤더: 값" 형태로 만든다(다른 칸 값이 섞이지 않게). */
 export function renderTableRows(
   chunks: RagChunk[],
@@ -772,10 +866,30 @@ export function renderTableRows(
     return has(cells) + (containsAny(cells, evidenceTerms) ? 2 : 0);
   };
   const bestRow = Math.max(0, ...rows.map(rowScore));
+  const targets = targetNames.map(compactText).filter((n) => n.length >= 2);
+  // 대상 반 이름이 어느 행에도 그대로 없으면, 행 이름(첫 칸)이 반 이름과 가장 비슷한 행만 고른다.
+  const exactTarget = rows.some((chunk) =>
+    (chunk.location.cells ?? []).some((cell) =>
+      targets.some((t) => compactText(cell).includes(t)),
+    ),
+  );
+  const similarity = (chunk: RagChunk) =>
+    Math.max(
+      0,
+      ...targetNames.map((name) =>
+        classSimilarity(name, chunk.location.cells?.[0] ?? ''),
+      ),
+    );
+  const bestSimilarity =
+    targets.length > 0 && !exactTarget && rows.length > 1
+      ? Math.max(0, ...rows.map(similarity))
+      : 0;
   const selectedRows = (
-    rows.length <= 4 || bestRow === 0
-      ? rows
-      : rows.filter((chunk) => rowScore(chunk) === bestRow)
+    bestSimilarity >= 1.3
+      ? rows.filter((chunk) => similarity(chunk) === bestSimilarity)
+      : rows.length <= 4 || bestRow === 0
+        ? rows
+        : rows.filter((chunk) => rowScore(chunk) === bestRow)
   ).slice(0, 8);
   const header = selectedRows[0]?.location.header ?? [];
   const headerScores = header.map((name) => has(name));
@@ -784,7 +898,6 @@ export function renderTableRows(
     (_, index) => index === 0 || best === 0 || headerScores[index] === best,
   );
   // 요일×교시 격자처럼 한 행에 여러 반이 있는 표: 대상 반 이름이 든 칸(과 첫 칸)만 보여 준다.
-  const targets = targetNames.map(compactText).filter((n) => n.length >= 2);
   return selectedRows.map((chunk) => {
     const cells = chunk.location.cells ?? [];
     const targetColumns = cells
@@ -932,10 +1045,30 @@ async function answerSection(
     const lines: string[] = [];
     let length = 0;
     const keepText = classFilter(ctx);
-    for (const text of [
-      ...renderParagraphs(paragraphChunks, words, evidenceTerms, keepText),
-      ...renderTableRows(tableChunks, words, evidenceTerms, keepText),
-    ]) {
+    const explicit = explicitClassIds(ctx);
+    const targetNames = ctx.catalog.classes
+      .filter((klass) => explicit.includes(klass.classId))
+      .map((klass) => klass.name);
+    const paragraphLines = renderParagraphs(
+      paragraphChunks,
+      words,
+      evidenceTerms,
+      keepText,
+    );
+    const tableLines = renderTableRows(
+      tableChunks,
+      words,
+      evidenceTerms,
+      keepText,
+      targetNames,
+    );
+    // 질문 단어가 표 행에 있으면 표를 먼저 보여 준다(길이 제한에 표가 잘리지 않게).
+    const tableFirst = tableLines.some((line) =>
+      words.some((word) => compactText(line).includes(compactText(word))),
+    );
+    for (const text of tableFirst
+      ? [...tableLines, ...paragraphLines]
+      : [...paragraphLines, ...tableLines]) {
       if (length + text.length > SECTION_MAX_CHARS && lines.length > 0) break;
       lines.push(text);
       length += text.length;

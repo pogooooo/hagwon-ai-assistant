@@ -52,6 +52,8 @@ export interface QueryFlags {
   makeupSchedule: boolean;
   /** 휴강을 묻는지 */
   cancelSchedule: boolean;
+  /** 등수·석차·순위를 묻는지(자기 자녀라도 제공하지 않는 정보) */
+  rankRequest: boolean;
 }
 
 export interface QueryFrame {
@@ -282,6 +284,7 @@ function isSubsequence(needle: string, haystack: string): boolean {
 export function abbreviatedClasses(
   normalized: string,
   catalog: AcademyCatalog,
+  preferredClassIds: readonly string[] = [],
 ): string[] {
   const grades = unique(
     [...normalized.replace(/\s+/g, '').matchAll(/(초|중|고)[1-6]/g)].map(
@@ -309,8 +312,13 @@ export function abbreviatedClasses(
         : (compactText(klass.name).match(/^(초|중|고)[1-6]/)?.[0] ?? null);
       return grades.length === 0 || !grade || grades.includes(grade);
     });
-    if (candidates.length > 0 && candidates.length <= 4)
-      candidates.forEach((klass) => found.add(klass.classId));
+    // 질문한 학생(또는 학생 본인)이 듣는 반 중에 후보가 있으면 그 반만 고른다.
+    const preferred = candidates.filter((klass) =>
+      preferredClassIds.includes(klass.classId),
+    );
+    const chosen = preferred.length > 0 ? preferred : candidates;
+    if (chosen.length > 0 && chosen.length <= 4)
+      chosen.forEach((klass) => found.add(klass.classId));
   }
   return [...found];
 }
@@ -493,10 +501,22 @@ export function parseQuery(
   const matched = matchClasses(stripped, catalog);
   const { negated, spans } = matched;
   // 반 이름 줄임말("과고반"·"영재원반"·"실험반"·"내신반"): 정확히 맞는 반이 없을 때만, 학년이 맞고 글자 순서가 같은 반들
-  const positive =
-    matched.positive.length > 0
-      ? matched.positive
-      : abbreviatedClasses(normalized, catalog);
+  const referencedStudents = access.studentRefs.filter((ref) =>
+    matchedStudentIds.includes(ref.studentId),
+  );
+  const preferredClassIds = (
+    referencedStudents.length > 0
+      ? referencedStudents
+      : access.role === 'student'
+        ? access.studentRefs
+        : []
+  ).flatMap((ref) => ref.classIds ?? []);
+  const positive = unique([
+    ...matched.positive,
+    ...abbreviatedClasses(normalized, catalog, preferredClassIds).filter(
+      (id) => !negated.includes(id),
+    ),
+  ]);
   let withoutClasses = stripped;
   for (const [start, end] of spans) {
     withoutClasses = `${withoutClasses.slice(0, start)}${' '.repeat(end - start)}${withoutClasses.slice(end)}`;
@@ -618,7 +638,7 @@ export function parseQuery(
   const distinctStudentRefs =
     unique(matchedStudentIds).length + unauthorizedStudentRefs.length;
   const selfReference =
-    test(/(^|\s)(내|제|나의|저의)\s/g, normalized) ||
+    test(/(^|\s)(나|내|제|나의|저의)\s/g, normalized) ||
     test(/(우리|내|제)\s*(아이|애|자녀|딸|아들)/g, normalized);
 
   const flags: QueryFlags = {
@@ -638,7 +658,12 @@ export function parseQuery(
         /다른\s*(애들|아이들|학생|원생|친구|사람)\S*\s*(점수|성적|정답률|결과|명단|연락처|리포트)/g,
         normalized,
       ) ||
-      test(/순위|등수|석차|몇\s*등(?!급)/g, normalized),
+      (test(/순위|등수|석차|몇\s*등(?!급)/g, normalized) &&
+        (access.studentRefs.length === 0 ||
+          (matchedStudentIds.length === 0 &&
+            !selfReference &&
+            access.role !== 'student' &&
+            access.role !== 'guardian'))),
     shareOrPermission:
       test(
         /(아무나|누구나|외부인?|모두가)\s*(열|볼|보|접근|다운)/g,
@@ -646,7 +671,14 @@ export function parseQuery(
       ) ||
       test(/링크.{0,10}(공유|공개)/g, normalized) ||
       test(/공개\s*(링크|설정|로)/g, normalized) ||
-      test(/권한.{0,8}(바꿔|변경|부여|올려)/g, normalized) ||
+      test(
+        /권한.{0,8}(바꿔|변경|부여|올려|추가|열어|줘|주세요)/g,
+        normalized,
+      ) ||
+      test(
+        /(링크|리포트|자료).{0,12}(보내\s*주|공유|전달).{0,20}(권한|볼\s*수\s*있게)/g,
+        normalized,
+      ) ||
       test(/(관리자|admin)\s*(권한|로)/g, normalized),
     sessionChange: test(
       /(선택(한|된)|현재|조회)\s*(학생|아이|대상).{0,12}(바꿔|변경|전환)/g,
@@ -663,17 +695,23 @@ export function parseQuery(
       distinctStudentRefs + (selfReference ? 1 : 0) >= 2 &&
       (test(/(성적|점수|결과|정답률)\s*(으로|처럼)/g, normalized) ||
         test(/인\s*것처럼|라고\s*(답|해)/g, normalized)),
-    causal: test(
-      /원인|이유|때문|(^|\s)왜(\s|$)|탓|(해서|라서|어서)\s*그런\s*(건가|거|걸까)/g,
-      normalized,
-    ),
+    // 문서 처리(채점 수정·휴강 등)의 이유를 묻는 말은 학습 원인 추정이 아니다.
+    causal:
+      test(
+        /원인|이유|때문|(^|\s)왜(\s|$)|탓|(해서|라서|어서)\s*그런\s*(건가|거|걸까)/g,
+        normalized,
+      ) &&
+      !test(
+        /(왜|이유).{0,8}(수정|정정|변경|바뀌|바꿨|고쳐|취소|휴강|휴원|연기|늦)/g,
+        normalized,
+      ),
     attitude: test(
       /집중력|집중(을|이|도)?\s*(안|못)|태도|성실|의지|산만|게으|성격|공부\s*안\s*하|딴짓|노력(을|이)?\s*(안|부족)/g,
       normalized,
     ),
     prediction:
       test(
-        /받을까|나올까|오를까|떨어질까|예상|예측|전망|붙을까|갈\s*수\s*있을까|(점수|등급|성적)[^?]{0,8}될까/g,
+        /받을까|나올까|오를까|떨어질까|예상|예측|전망|붙을까|(붙|합격|갈|들어갈|오를|받)\S{0,2}\s*수\s*있을까|(점수|등급|성적)[^?]{0,8}될까/g,
         normalized,
       ) && !test(/(하면|시키면|해야|봐야)\s*될까/g, normalized),
     compare: test(
@@ -693,7 +731,7 @@ export function parseQuery(
       ),
     generationRequest:
       test(
-        /학습\s*방향|공부\s*방향|방향으로|방향\s*(좀|을|잡)|공부\s*방법|보완|조언|어떻게\s*(하면|공부|해야)|공부\s*(하면|시키면|해야)\s*(좋|될|할)|뭘\s*(더\s*)?(해야|공부)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
+        /학습\s*방향|공부\s*방향|방향으로|방향\s*(좀|을|잡)|공부\s*방법|보완|조언|어떻게\s*(하면|공부|해야)|어떻게\s*\S*(시키면|해\s*주면|도와)|공부\s*(하면|시키면|해야)\s*(좋|될|할)|뭘\s*(더\s*)?(해야|공부)|(뭐|뭘|무엇)부터|(뭘|뭐)\s*(도와|챙겨)|도와\s*주면|집에서\s*(뭘|뭐|무엇|어떻게)|복습\s*(시키|하면|방법)|서술형\s*상담|자세(한|히)|생성해|상담해/g,
         normalized,
       ) ||
       // "보충"은 날짜·요일·수업 일정 맥락이면 보충 수업(보강), 아니면 보충 학습(학습 상담)
@@ -713,6 +751,7 @@ export function parseQuery(
       /휴강|휴원|쉬|수업\s*(하나요|있나요|있어요|해요|하는지|없)/g,
       normalized,
     ),
+    rankRequest: test(/순위|등수|석차|몇\s*등(?!급)/g, normalized),
   };
 
   return {

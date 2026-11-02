@@ -125,7 +125,21 @@ export function splitQuestion(question: string): string[] {
     .split(/(?<=[?？])\s*|(?<=[다요]\.)\s+/)
     .map((part) => part.trim())
     .filter(Boolean);
-  const meaningful = parts.filter((part) => keywordsOf(part).length > 0);
+  // 질문 형태(물음표·의문사·의문 어미)인 부분만 따로 답한다. "~하고 싶다는데" 같은 사정 설명은 앞 질문에 붙인다.
+  const isQuestion = (part: string) =>
+    /[?？]$|얼마|언제|몇|어디|누구|무엇|뭐|뭘|어떻게|왜|어느|무슨|(나요|까요|가요|어요|아요|죠|니|냐|래요|되나|있나)\s*[.?？]?$/.test(
+      part,
+    );
+  const merged: string[] = [];
+  for (const part of parts) {
+    if (
+      merged.length > 0 &&
+      (!isQuestion(part) || keywordsOf(part).length === 0)
+    )
+      merged[merged.length - 1] = `${merged[merged.length - 1]} ${part}`;
+    else merged.push(part);
+  }
+  const meaningful = merged.filter((part) => keywordsOf(part).length > 0);
   return meaningful.length >= 2 && meaningful.length <= 4 ? meaningful : [];
 }
 
@@ -245,6 +259,32 @@ export function createRagConsultationService(
       trace.internalErrors.push('PROMPT_INJECTION_DIRECTIVE');
     }
 
+    // 등수·석차는 자기 자녀라도 학원이 제공하지 않는 정보다(성적 자료에 없음).
+    if (flags.rankRequest) {
+      trace.intent = 'rank_request';
+      return abstain(
+        '등수나 순위는 학원 자료로 안내해 드리지 않습니다. 정답률·단원별 결과 같은 학습 리포트 내용은 확인해 드릴 수 있습니다.',
+        'UNSUPPORTED_REQUEST',
+        ['등수·순위'],
+      );
+    }
+    // 원생 권한이 없는 계정이 반 평균 같은 성적 통계를 물으면 공개 자료가 아니므로 보류한다.
+    if (
+      access.allowedStudentIds.length === 0 &&
+      /평균\s*(점수|성적|정답률)?|전체\s*(점수|성적|정답률)|반\s*(성적|점수|정답률)/.test(
+        frame.normalized,
+      ) &&
+      /점수|성적|정답률|평균/.test(frame.normalized) &&
+      !/수강료|교재비|비용|요금|금액/.test(frame.normalized)
+    ) {
+      trace.intent = 'aggregate_stats';
+      return abstain(
+        '반 평균 같은 성적 통계는 공개 자료로 안내해 드리지 않습니다. 수업 일정·수강료 등 학원 안내는 확인해 드릴 수 있습니다.',
+        'INSUFFICIENT_EVIDENCE',
+        ['성적 통계'],
+      );
+    }
+
     // 2) 학습 분석 vs 학원 정보
     // "선생님이 어떻게 지도해 주신대요?"처럼 원생을 가리키며 강사의 지도·연습을 묻는 말은 강사 정보가 아니라 학습 방향 질문이다.
     const teacherGuidance =
@@ -255,7 +295,10 @@ export function createRagConsultationService(
         frame.unresolvedRelationWords.length > 0) &&
       /지도|연습|시키|하라고|하래|봐\s*주|챙겨|도와/.test(frame.normalized) &&
       !/누구|누가|담당|이름|성함|바뀌|교체|어떤\s*분/.test(frame.normalized);
-    if (teacherGuidance) ctx.frame = { ...frame, topics: [] };
+    if (teacherGuidance) {
+      ctx.frame = { ...frame, topics: [] };
+      return routeAnalysis(ctx, studentIdHint, { forceAdvice: true });
+    }
     carryOverFollowUp(ctx);
     const hasInfoTopics = ctx.frame.topics.length > 0;
     const hasStudentReference =
@@ -360,7 +403,7 @@ export function createRagConsultationService(
       frame.topics.length === 0 &&
       !frame.hasAnalysisTerms &&
       previous.topicIds?.length &&
-      fresh.length <= 1
+      fresh.length === 0
     ) {
       next = {
         ...next,
@@ -587,6 +630,15 @@ export function createRagConsultationService(
         studentIdHint,
       );
     };
+    // 일반어 주제라도 반이 정해져 있으면(“영재원반 한 달에 얼마?”) 그 반의 정형 값을 먼저 본다.
+    if (weak && explicitClassIds(ctx).length > 0 && !noTopic) {
+      const ruled = await answerInfo(ctx);
+      if (
+        (ruled.status === 'answered' || ruled.status === 'partial') &&
+        satisfiesAnswerTypes(ruled.text, types)
+      )
+        return ruled;
+    }
     if (weak) {
       const viaEvidence = await tryEvidence();
       if (
