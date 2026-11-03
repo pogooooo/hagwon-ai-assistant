@@ -230,6 +230,13 @@ export interface CaseResult {
   violations: string[];
   cited: string[];
   goldRetrieved: boolean;
+  sourceCoverage: {
+    listed: string[];
+    retrieved: string[];
+    missingFromRetrieval: string[];
+    missingFromCitations: string[];
+    citedLocations: Array<{ sourceId: string; location?: string }>;
+  };
   intent: string;
   internalErrors: string[];
   generationCalls: number;
@@ -511,6 +518,19 @@ export async function runCase(
     violations: [...new Set(violations)],
     cited,
     goldRetrieved,
+    sourceCoverage: {
+      listed: e.sourceIds,
+      retrieved: [...new Set(observed?.retrievedSourceIds ?? touched)],
+      missingFromRetrieval: e.sourceIds.filter(
+        (id) => !(observed?.retrievedSourceIds ?? touched).includes(id),
+      ),
+      missingFromCitations: e.sourceIds.filter((id) => !cited.includes(id)),
+      citedLocations:
+        observed?.answer.citations.map(({ sourceId, location }) => ({
+          sourceId,
+          location,
+        })) ?? [],
+    },
     intent,
     internalErrors,
     generationCalls,

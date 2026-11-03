@@ -400,3 +400,25 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/run-eval.ts --suite v2-dev,v1-90,v1-paraphrase-100,v2-test,v2-AC_ARCH_1,v2-AC_ARCH_2,v2-AC_ARCH_3 --variant engine,engine-planned --label cost-release --out .git/rag-validation
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/score-architecture-holdout.ts .git/rag-validation/cost-release
 ```
+
+## 비용 슬롯 후속 비교
+
+81c7176 기준선을 재실행했고, 기존 문항·라벨은 그대로 사용했습니다.
+
+| 평가               | 기존 엔진 | 수정 전 계획 엔진 | 수정 후 계획 엔진 |
+| ------------------ | --------: | ----------------: | ----------------: |
+| 개발 153           |       128 |               129 |               129 |
+| 기존 90            |        90 |                90 |                90 |
+| 구어체 100         |        74 |                74 |                74 |
+| 공개 회귀 393      |       211 |               216 |               217 |
+| 공개 합성 회귀 300 |       265 |               300 |               300 |
+
+공개 393에서 직전 계획판 대비 NR-T-113과 OS-T-011을 회복했습니다. NR-T-040은 기존 채점의 기대 상태가 answered이지만, 삽입된 지시를 제외하면 확인 가능한 값은 정가뿐이므로 partial로 바뀌었습니다. 정가 280,000원은 유지됐으며 게시판 인용과 할인 지시는 출력에서 제거됐습니다. 순증은 1문항입니다. 기존 엔진 대비 정답은 211 → 217, 1.53%p 증가입니다.
+
+공개 합성 300의 필수 출처 슬롯은 수정 후에도 240/240입니다. 393에서 과잉 응답 25.0% → 22.3%, 오보류 19.6% → 20.6%, 인용 정확도 79.2% → 80.3%였습니다. PDF 표와 근거 충돌의 기존 실패는 남았습니다. 문서 등록부터 최종 응답까지 교재비·재료비가 각각의 열·출처와 일치하고, 한 비용만 있을 때 부분 답변하는지 검증했습니다. 개발 Oracle 8문항 재실행 A/B/C/D는 7/7/8/8이며 기존 표본의 범위는 동일합니다.
+
+새 독립 학원 3곳·300문항 검증은 수행하지 않았습니다. 기존 공개 합성 300의 회귀 결과와 독립 일반화 검증은 구분합니다. 모든 오답에 대해 정답 QueryPlan·원본 셀과 최초 실패 단계를 수동 라벨링하는 작업도 남았습니다. 기본 엔진을 유지합니다.
+
+393만 따로 실행한 같은 프로세스에서 p50/p95 2.1/8.9 → 2.0/9.5ms, CPU 합계 1,657 → 1,672ms, 최대 RSS 153 → 163MB였습니다. 평가 순서의 영향이 포함되는 로컬 단회 측정입니다. 두 엔진 모두 권한·미승인 위반 0건, Mock 생성 5회였습니다. 복합 조건 5/19 → 6/19, 부분 답변 1/15 → 2/15, 비용 13/24 → 16/24, PDF 표 3/16 → 3/16, 충돌·근거 부족 0/8 → 0/8입니다.
+
+평가 결과 JSON의 sourceCoverage는 개별 문항에서 기재 출처, 검색 출처, 검색·인용 누락 및 인용 위치를 나열합니다. v1 점수는 기존 방식으로 재현합니다.

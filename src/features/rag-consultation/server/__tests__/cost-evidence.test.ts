@@ -136,3 +136,29 @@ test('미확인 강좌와 타인 명단 요청에 기존 반의 값을 사용하
   assert.equal(roster.answer.status, 'denied');
   assert.deepEqual(roster.answer.citations, []);
 });
+
+test('교재비와 재료비는 다른 표 열로 확인하고 하나만 있으면 부분 답변한다', async () => {
+  const { register, ask } = await createFixture();
+  const question = '금속 조형반 교재비와 실습 재료비 각각 얼마예요?';
+  await register(
+    'BOOK',
+    '| 반 | 교재비 |\n|---|---|\n| 금속 조형반 | 17,000원 |',
+    null,
+  );
+  const partial = (await ask(question)).answer;
+  assert.equal(partial.status, 'partial');
+  assert.deepEqual(partial.missingFields, ['금속 조형반 재료비']);
+  assert.match(partial.citations[0]?.location ?? '', /열 반, 교재비/);
+  await register(
+    'MATERIAL',
+    '| 항목 | 금액 |\n|---|---|\n| 실습 재료비 | 23,000원 |',
+  );
+  const complete = (await ask(question)).answer;
+  assert.equal(complete.status, 'answered', complete.answer);
+  assert.match(complete.answer, /교재비: 17,000원/);
+  assert.match(complete.answer, /실습 재료비: 23,000원/);
+  assert.deepEqual(
+    complete.citations.map(({ documentId }) => documentId),
+    ['BOOK', 'MATERIAL'],
+  );
+});

@@ -3,6 +3,7 @@
  * 시설 속성(문장 인용), 환불·셔틀·운영 시간 등 운영 문서의 절(절 인용).
  * 모두 생성 API 0회. 자료로 확인되지 않으면 지어내지 않고 보류한다.
  */
+import { isAssistantDirective } from '../ingest/validation.ts';
 import type { TopicDefinition } from '../config.ts';
 import {
   compactText,
@@ -1493,6 +1494,11 @@ async function answerSection(
   );
   const candidates: SectionCandidate[] = results
     .filter(({ chunk }) => {
+      if (
+        ctx.engine === 'planned' &&
+        (chunk.suspicious || isAssistantDirective(chunk.text))
+      )
+        return false;
       const hasText = splitSentences(chunk.text).some(
         (sentence) => !isDataAbsenceStatement(sentence),
       );

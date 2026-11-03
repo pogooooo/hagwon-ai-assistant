@@ -6,6 +6,7 @@ import type {
   GenerationPort,
   RagDocumentsPort,
 } from '../ports.ts';
+import type { PlannedRequest } from '../query/plan.ts';
 import type { QueryFrame } from '../query/parse-query.ts';
 import { isSameKstDay, kstStartOfDay, toKstDate } from '../text/time.ts';
 import type {
@@ -22,6 +23,7 @@ export interface AnswerContext {
   access: RagAccessScope;
   catalog: AcademyCatalog;
   frame: QueryFrame;
+  plannedRequest?: PlannedRequest;
   question: string;
   engine?: 'legacy' | 'planned';
   asOf: number;

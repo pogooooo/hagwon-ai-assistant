@@ -62,11 +62,30 @@ function inheritAnchors(part: QueryFrame, full: QueryFrame): QueryFrame {
   return out;
 }
 
+export type CostSlot = 'fee' | 'textbook' | 'supplies' | 'material';
+
+export function requiredCostSlots(frame: QueryFrame): CostSlot[] {
+  const fields: CostSlot[] = [];
+  if (
+    frame.topics.some(({ id }) => id === 'fee') ||
+    (frame.classIds.length > 0 &&
+      /한\s*달(?:에)?\s*얼마/.test(frame.normalized))
+  )
+    fields.push('fee');
+  if (frame.topics.some(({ id }) => id === 'material')) {
+    if (/교재|책값/.test(frame.normalized)) fields.push('textbook');
+    if (/재료비/.test(frame.normalized)) fields.push('supplies');
+    if (!fields.includes('textbook') && !fields.includes('supplies'))
+      fields.push('material');
+  }
+  return fields;
+}
 export interface PlannedRequest {
   question: string;
   frame: QueryFrame;
   weekday?: string;
   intentIds: string[];
+  costSlots: readonly CostSlot[];
   requiredFields: readonly (
     ReturnType<typeof expectedAnswerTypes>[number] | 'startTime'
   )[];
@@ -194,6 +213,7 @@ export function planQuery(
       frame: parsed,
       weekday,
       intentIds,
+      costSlots: planned ? requiredCostSlots(parsed) : [],
       requiredFields,
       expectedFields: expectedAnswerTypes(text),
       inheritsContext,

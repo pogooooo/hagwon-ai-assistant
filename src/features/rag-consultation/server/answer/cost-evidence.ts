@@ -15,17 +15,19 @@ import {
 import { explicitClassIds } from './info.ts';
 import { supportsExcerpt } from './verify.ts';
 
-type CostField = 'fee' | 'material';
+import { requiredCostSlots, type CostSlot } from '../query/plan.ts';
 const COST_KEYS = {
   fee: /^(?:(?:월|매월|1개월|\d+주)\s*)?(?:수강료|교습비|학원비)(?:\s*\((?:월|\d+주|\d+개월)\))?$/,
   material: /^(?:(?:실험|실습)\s*)?(?:교재비|재료비)$/,
+  textbook: /^교재비$/,
+  supplies: /^(?:(?:실험|실습)\s*)?재료비$/,
 };
 const AMOUNT =
   /^(?:(?:월|매월|\d+\s*(?:주|개월)(?:당|\s*기준)?)\s*)?(\d{1,3}(?:,\d{3})+|\d+)\s*원(?:\s*\((?:월|\d+\s*(?:주|개월))(?:당|\s*기준)?\))?$/;
 
 interface CostEvidence extends EvidenceExcerpt {
   classId: string;
-  field: CostField;
+  field: CostSlot;
   amount: number;
   value: string;
   label: string;
@@ -36,7 +38,7 @@ function selectCosts(
   ctx: AnswerContext,
   chunk: RagChunk,
   classIds: readonly string[],
-  fields: readonly CostField[],
+  fields: readonly CostSlot[],
   at: number,
 ): CostEvidence[] {
   const { cells, header, kind } = chunk.location;
@@ -84,16 +86,6 @@ function selectCosts(
     if (column < 0) return [];
     const label =
       column === amountColumn ? cells[key].trim() : header[column].trim();
-    if (
-      field === 'material' &&
-      ((/교재비|책값/.test(ctx.frame.normalized) &&
-        !/재료비/.test(ctx.frame.normalized) &&
-        !label.includes('교재비')) ||
-        (/재료비/.test(ctx.frame.normalized) &&
-          !/교재비|책값/.test(ctx.frame.normalized) &&
-          !label.includes('재료비')))
-    )
-      return [];
     const value = cells[column].trim();
     const match = AMOUNT.exec(value);
     if (!match) return [];
@@ -128,11 +120,14 @@ export async function answerFromCostEvidence(
 ): Promise<AnswerDraft | undefined> {
   const { frame } = ctx;
   const classIds = explicitClassIds(ctx);
-  const fields = frame.topics.map(({ id }) => id);
+  const fields =
+    ctx.plannedRequest?.frame === frame
+      ? ctx.plannedRequest.costSlots
+      : requiredCostSlots(frame);
   if (
     !classIds.length ||
     !fields.length ||
-    !fields.every((id): id is CostField => id === 'fee' || id === 'material') ||
+    !frame.topics.every(({ id }) => id === 'fee' || id === 'material') ||
     frame.flags.compare ||
     frame.flags.previousRevision ||
     frame.relativePeriod !== null ||
@@ -169,7 +164,15 @@ export async function answerFromCostEvidence(
   const candidates = hits.flatMap(({ chunk }) =>
     selectCosts(ctx, chunk, classIds, fields, at),
   );
-  if (!candidates.length) return undefined;
+  const distinctMaterials =
+    fields.includes('textbook') && fields.includes('supplies');
+  if (!candidates.length)
+    return distinctMaterials
+      ? abstain(
+          '교재비와 재료비를 구분할 수 있는 승인 자료가 없습니다.',
+          'INSUFFICIENT_EVIDENCE',
+        )
+      : undefined;
 
   const facts = await ctx.facts.queryApprovedFacts({
     access: ctx.access,
@@ -199,10 +202,12 @@ export async function answerFromCostEvidence(
           isValidAt(fact.validFrom, fact.validTo, at) &&
           fact.factType ===
             (field === 'fee' ? 'monthly_fee' : 'material_fee') &&
+          (field === 'fee' || !distinctMaterials) &&
           fact.value.kind === 'money',
       );
       // A slot available only through the structured adapter keeps its original path.
-      if (!options.length && scopedFacts.length) return undefined;
+      if (!options.length && scopedFacts.length && !distinctMaterials)
+        return undefined;
       const amounts = new Set([
         ...options.map(({ amount }) => amount),
         ...scopedFacts.flatMap(({ value }) =>
@@ -236,7 +241,12 @@ export async function answerFromCostEvidence(
       } else
         missing.push(
           className(ctx.catalog, classId) +
-            (field === 'fee' ? ' 수강료' : ' 교재·재료비'),
+            {
+              fee: ' 수강료',
+              textbook: ' 교재비',
+              supplies: ' 재료비',
+              material: ' 교재·재료비',
+            }[field],
         );
     }
   }
@@ -258,7 +268,11 @@ export async function answerFromCostEvidence(
         domain: 'info',
         units: [],
         periods: [],
-        topicIds: fields,
+        topicIds: [
+          ...new Set(
+            fields.map((field) => (field === 'fee' ? 'fee' : 'material')),
+          ),
+        ],
         classIds,
       },
     },

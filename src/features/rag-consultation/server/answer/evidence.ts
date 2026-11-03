@@ -13,6 +13,7 @@ import { supportsExcerpt } from './verify.ts';
  */
 import type { TopicDefinition } from '../config.ts';
 import type { ScoredChunk } from '../ports.ts';
+import { isAssistantDirective } from '../ingest/validation.ts';
 import { compactText, normalizeText } from '../text/normalize.ts';
 import type { FactType, RagChunk } from '../types.ts';
 import {
@@ -313,7 +314,11 @@ export function planFromEvidence(
   evidence: readonly ScoredChunk[],
 ): EvidencePlan {
   const top = evidence.find(
-    (result) => evidenceConfidence(ctx.question, result).trusted,
+    (result) =>
+      (ctx.engine !== 'planned' ||
+        (!result.chunk.suspicious &&
+          !isAssistantDirective(result.chunk.text))) &&
+      evidenceConfidence(ctx.question, result).trusted,
   );
   if (!top)
     return {
@@ -419,7 +424,11 @@ export async function answerFromDocuments(
   const words = contentWords(ctx.question);
   const keepText = classFilter(ctx);
   const trusted = evidence.filter(
-    (result) => evidenceConfidence(ctx.question, result).trusted,
+    (result) =>
+      (ctx.engine !== 'planned' ||
+        (!result.chunk.suspicious &&
+          !isAssistantDirective(result.chunk.text))) &&
+      evidenceConfidence(ctx.question, result).trusted,
   );
   // 같은 절의 청크는 한 묶음으로 본다. 절 제목이 없는 문서(게시판 글 모음 등)는 서로 이웃한 청크끼리만 묶는다
   // (질문 글과 바로 뒤 답변 글 — 같은 문서의 무관한 글이 한 묶음으로 섞이지 않게).

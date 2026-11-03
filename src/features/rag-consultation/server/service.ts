@@ -9,7 +9,7 @@ import type { RagAnswer, RagCitation } from '../contract.ts';
 import { collectEvidence, validateEvidence } from './answer/evidence-bundle.ts';
 import { answerFromCostEvidence } from './answer/cost-evidence.ts';
 import { composeRequests } from './answer/composer.ts';
-import { isRosterRequest, planQuery } from './query/plan.ts';
+import { isRosterRequest, planQuery, requiredCostSlots } from './query/plan.ts';
 export { splitQuestion } from './query/plan.ts';
 import { answerAdvice } from './answer/advice.ts';
 import { answerAnalysis } from './answer/analysis.ts';
@@ -541,6 +541,20 @@ export function createRagConsultationService(
         );
       const cost = await answerFromCostEvidence(ctx);
       if (cost) return cost;
+      // A monthly price request may precede an explicit textbook question.
+      // Keep both topics when the legacy structured facts are the only source.
+      if (
+        frame.topics.length === 1 &&
+        frame.topics[0].id === 'material' &&
+        requiredCostSlots(frame).includes('fee')
+      ) {
+        const fee = ctx.config.topics.find(({ id }) => id === 'fee');
+        if (fee)
+          return answerInfo({
+            ...ctx,
+            frame: { ...frame, topics: [fee, ...frame.topics] },
+          });
+      }
     }
     const asksMinutes =
       /몇\s*분/.test(frame.normalized) &&
@@ -1037,6 +1051,7 @@ export function createRagConsultationService(
                 const partContext = {
                   ...ctx,
                   frame: partFrame,
+                  plannedRequest: request,
                   question: part,
                   studentClassIds:
                     deps.engine === 'planned'
@@ -1075,6 +1090,7 @@ export function createRagConsultationService(
                 plan.requests.map((request) => request.question),
               );
             } else {
+              ctx.plannedRequest = plan.requests[0];
               const proposal = await route(ctx, input.studentIdHint);
               draft =
                 deps.engine === 'planned'

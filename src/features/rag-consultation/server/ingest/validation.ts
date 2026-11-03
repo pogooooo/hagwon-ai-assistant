@@ -26,6 +26,12 @@ export function isSuspiciousInstruction(text: string): boolean {
   return INJECTION_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
+/** Directives addressed to the assistant, even in approved reference material. */
+export function isAssistantDirective(text: string): boolean {
+  return /(?:ai|인공지능)\s*(?:상담\s*)?(?:비서|봇|모델)(?:에게|한테).{0,20}(?:알립니다|지시|명령)/i.test(
+    normalizeText(text),
+  );
+}
 export function contentHash(
   document: SourceDocumentInput,
   facts: ApprovedFactInput[],
