@@ -22,6 +22,7 @@ import {
 } from './context.ts';
 import {
   classFilter,
+  chunkMatchesClass,
   contentWords,
   explicitClassIds,
   renderParagraphs,
@@ -146,17 +147,19 @@ export async function retrieveEvidence(
 ): Promise<ScoredChunk[]> {
   // 질문·계정·대화로 정해진 반 이름을 키워드 질의에 더해 그 반의 행·문장이 위로 오게 한다(근거 바인딩).
   const bound = boundClassNames(ctx);
-  const search = (documentTypes?: readonly string[]) =>
-    ctx.documents.searchApprovedChunks({
-      access: ctx.access,
-      studentIds: options.studentIds ?? ctx.access.allowedStudentIds,
-      asOf: ctx.asOf,
-      query: [ctx.question, ...bound].join(' '),
-      question: ctx.question,
-      limit: options.limit ?? 8,
-      rerank: 'auto',
-      ...(documentTypes ? { documentTypes } : {}),
-    });
+  const search = async (documentTypes?: readonly string[]) =>
+    (
+      await ctx.documents.searchApprovedChunks({
+        access: ctx.access,
+        studentIds: options.studentIds ?? ctx.access.allowedStudentIds,
+        asOf: ctx.asOf,
+        query: [ctx.question, ...bound].join(' '),
+        question: ctx.question,
+        limit: options.limit ?? 8,
+        rerank: 'auto',
+        ...(documentTypes ? { documentTypes } : {}),
+      })
+    ).filter(({ chunk }) => chunkMatchesClass(ctx, chunk));
   let results = await search(options.documentTypes);
   // 주제에 맞는 문서 종류에서 믿을 만한 근거를 못 찾으면 전체에서 다시 찾는다.
   if (
@@ -370,9 +373,42 @@ export function planFromEvidence(
 }
 
 /** 운영 문서 근거 인용: 근거 청크가 속한 절의 관련 문장·표 행(질문한 반·열)을 그대로 보여 준다. */
+/** 발급 문의는 납부 수단이 아니라 요청한 증빙의 발급 조건을 확인한다. */
+export function issuanceRequirement(
+  question: string,
+): ((line: string) => boolean) | undefined {
+  const match = normalizeText(question).match(
+    /((?:(?:현금|전자|수강|납입|결제)\s+)?[가-힣]{0,20}(?:영수증|증명서|확인서|명세서|내역서))(?:을|를|은|는|이|가)?\s*(?:발급|받을)/,
+  );
+  // 일반 명칭도 별도 수식어 없이 요청할 수 있다.
+  const generic = normalizeText(question).match(
+    /(영수증|증명서|확인서|명세서|내역서)(?:을|를|은|는|이|가)?\s*(?:발급|받을)/,
+  );
+  const artifact = match?.[1] ?? generic?.[1];
+  if (!artifact) return undefined;
+  const condition =
+    /(?:계좌\s*이체|무통장\s*입금|카드\s*결제)\s*(?:하면|시|의 경우|로)/.exec(
+      question,
+    )?.[0];
+  const method = condition?.replace(/\s*(?:하면|시|의 경우|로)$/, '');
+  return (line) => {
+    const normalized = compactText(line);
+    return (
+      normalized.includes(compactText(artifact)) &&
+      /발급(?:이|은|을|도|해|하)?(?:가능|불가|됩|되|드|줍|주|지않|합니다|할수|신청|절차|방법|대상|대행|[:：])/.test(
+        normalized,
+      ) &&
+      (!method ||
+        normalized.includes(compactText(method)) ||
+        /모든(?:납부|결제)/.test(normalized))
+    );
+  };
+}
+
 export async function answerFromDocuments(
   ctx: AnswerContext,
   evidence: readonly ScoredChunk[],
+  supports?: (line: string) => boolean,
 ): Promise<AnswerDraft> {
   ctx.trace.intent = `${ctx.trace.intent === 'unknown' ? '' : `${ctx.trace.intent}>`}evidence`;
   const types = expectedAnswerTypes(ctx.question);
@@ -469,7 +505,9 @@ export async function answerFromDocuments(
         boundClassNames(ctx),
         ctx,
       ),
-    ].slice(0, 8);
+    ]
+      .filter(({ line }) => !supports || supports(line))
+      .slice(0, 8);
     if (lines.length === 0) continue;
     const text = lines
       .map(({ line }) => line.replace(/\*\*|__/g, ''))
@@ -479,7 +517,11 @@ export async function answerFromDocuments(
     return {
       status: 'answered',
       text: `[${best.location.section ?? best.title}] ${best.title} 기준 안내입니다.\n${text}`,
-      citations: lines.map(({ chunk }) => ({ kind: 'chunk' as const, chunk })),
+      citations: lines.map(({ chunk, tableColumns }) => ({
+        kind: 'chunk' as const,
+        chunk,
+        tableColumns,
+      })),
       usedFacts: [],
       instants: [ctx.asOf],
     };

@@ -245,11 +245,11 @@ async function answerClassFacts(
           ? await classTableRows(ctx, classId, ['schedule'], effective, seen)
           : [];
       if (table.length > 0) {
-        for (const { chunk, line } of table) {
+        for (const { chunk, line, tableColumns } of table) {
           part.lines.push(
             `${effective.explicitDay !== null ? datePrefix(effective) : ''}${name} 수업(시간표 표 기준): ${line}`,
           );
-          part.citations.push({ kind: 'chunk', chunk });
+          part.citations.push({ kind: 'chunk', chunk, tableColumns });
         }
         continue;
       }
@@ -289,7 +289,7 @@ async function answerClassFacts(
 const WEEKDAY_AXIS = /^[월화수목금토일](요일)?$/;
 const CLASS_COLUMN = /^(대상|수강)?(반|강좌|과정)(명|이름|구분)?$/;
 const WEEKDAY_TOKEN =
-  /(?<![가-힣a-z0-9])(?:평일|주말|매일|[월화수목금토일]+(?:요일)?)(?![가-힣a-z0-9])/gi;
+  /(?<![가-힣a-z0-9])(평일|주말|매일|[월화수목금토일]+(?:요일)?)(?:에는|에서|에도|은|는|이|가|에|도|과|와)?(?![가-힣a-z0-9])/gi;
 const DAY_GROUPS: Record<string, string> = {
   평일: '월화수목금',
   주말: '토일',
@@ -301,9 +301,9 @@ function weekdayTokens(text: string): Set<string> {
   const tokens = [...text.matchAll(WEEKDAY_TOKEN)];
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
-    const value = token[0].replace(/요일$/, '');
+    const value = token[1].replace(/요일$/, '');
     const next = tokens[i + 1];
-    const end = next?.[0].replace(/요일$/, '');
+    const end = next?.[1].replace(/요일$/, '');
     if (
       value.length === 1 &&
       end?.length === 1 &&
@@ -368,7 +368,7 @@ function weekdayAvailability(
     for (const value of days) (negative ? excluded : included).add(value);
   }
   if (excluded.has(day)) return false;
-  return included.size > 0 ? included.has(day) : undefined;
+  return included.has(day) ? true : undefined;
 }
 
 function dayWordCovers(word: string, day: string): boolean {
@@ -421,7 +421,9 @@ function askedWeekday(
   ctx: AnswerContext,
   effective?: EffectiveTime,
 ): string | null {
-  const named = ctx.frame.normalized.match(/([월화수목금토일])요일/);
+  const named = ctx.frame.normalized.match(
+    /(?<![가-힣a-z0-9])([월화수목금토일])요일(?:에는|에서|에도|은|는|이|가|에|도|과|와)?(?![가-힣a-z0-9])/i,
+  );
 
   // “21일부터”처럼 기간의 시작을 말한 날짜는 특정 요일을 묻는 것이 아니다.
   if (
@@ -478,7 +480,7 @@ export async function classTableRows(
   documentTypes: readonly string[],
   effective?: EffectiveTime,
   seen: { offDay: boolean } = { offDay: false },
-): Promise<Array<{ chunk: RagChunk; line: string }>> {
+): Promise<EvidenceLine[]> {
   effective ??= resolveEffectiveTime(ctx.frame, ctx.asOf);
   const weekday = askedWeekday(ctx, effective);
   const klass = ctx.catalog.classes.find((c) => c.classId === classId);
@@ -498,11 +500,18 @@ export async function classTableRows(
     ctx.trace,
     results.map((result) => result.chunk),
   );
-  const out: Array<{ chunk: RagChunk; line: string }> = [];
+  const out: EvidenceLine[] = [];
   for (const { chunk } of results) {
     const cells = chunk.location.cells;
     const header = chunk.location.header;
-    if (chunk.location.kind !== 'table_row' || !cells || !header) continue;
+    if (
+      chunk.location.kind !== 'table_row' ||
+      !cells ||
+      !header ||
+      !chunkMatchesClass(ctx, chunk) ||
+      !isValidAt(chunk.validFrom, chunk.validTo, effective.at)
+    )
+      continue;
 
     const key = classColumn(header, cells, names);
     const grid = key < 0;
@@ -552,9 +561,8 @@ export async function classTableRows(
         ' / ' +
         selected.map((i) => header[i]).join('·')
       : formatCells(header, cells, indices);
-    const evidence = selectedTableChunk(chunk, line, grid ? selected : indices);
     if (!out.some((entry) => entry.line === line))
-      out.push({ chunk: evidence, line });
+      out.push({ chunk, line, tableColumns: grid ? selected : indices });
   }
   return out.slice(0, 6);
 }
@@ -1127,6 +1135,16 @@ interface SectionCandidate {
  * 질문 대상 반이 정해져 있으면 다른 반 이름만 언급하는 문장·행은 빼고(반 사이 값 혼동 방지),
  * 대상 반이나 반 이름이 없는 문장은 남긴다.
  */
+export function chunkMatchesClass(
+  ctx: AnswerContext,
+  chunk: RagChunk,
+): boolean {
+  const targets = explicitClassIds(ctx);
+  return (
+    !chunk.classId || targets.length === 0 || targets.includes(chunk.classId)
+  );
+}
+
 export function classFilter(ctx: AnswerContext): (text: string) => boolean {
   const targets = explicitClassIds(ctx);
   if (targets.length === 0) return () => true;
@@ -1247,27 +1265,10 @@ function formatCells(
     .join(' / ');
 }
 
-function selectedTableChunk(
-  chunk: RagChunk,
-  line: string,
-  indices: number[],
-): RagChunk {
-  const labels = indices
-    .map((index) => chunk.location.header?.[index])
-    .filter(Boolean);
-  return {
-    ...chunk,
-    text: line,
-    location: {
-      ...chunk.location,
-      label: chunk.location.label + ' · 열 ' + labels.join(', '),
-    },
-  };
-}
-
 interface EvidenceLine {
   line: string;
   chunk: RagChunk;
+  tableColumns?: readonly number[];
 }
 
 /** 표 행 청크에서 질문과 관련된 행·열만 골라 "헤더: 값" 형태로 만든다(다른 칸 값이 섞이지 않게). */
@@ -1292,6 +1293,7 @@ export function selectTableRows(
     (chunk) =>
       chunk.location.cells &&
       chunk.location.header &&
+      (!ctx || chunkMatchesClass(ctx, chunk)) &&
       keepText((chunk.location.cells ?? []).join(' ')) &&
       (chunk.documentType !== 'schedule' ||
         (weekday !== '불일치' &&
@@ -1419,7 +1421,8 @@ export function selectTableRows(
     return [
       {
         line,
-        chunk: selectedTableChunk(chunk, line, grid ? selected : indices),
+        chunk,
+        tableColumns: grid ? selected : indices,
       },
     ];
   });
@@ -1581,12 +1584,12 @@ async function answerSection(
     const tableFirst = tableLines.some(({ line }) =>
       words.some((word) => compactText(line).includes(compactText(word))),
     );
-    for (const { line: text, chunk } of tableFirst
+    for (const { line: text, chunk, tableColumns } of tableFirst
       ? [...tableLines, ...paragraphLines]
       : [...paragraphLines, ...tableLines]) {
       if (length + text.length > SECTION_MAX_CHARS && lines.length > 0) break;
       lines.push(text);
-      part.citations.push({ kind: 'chunk', chunk });
+      part.citations.push({ kind: 'chunk', chunk, tableColumns });
       length += text.length;
     }
     if (lines.length === 0) continue;

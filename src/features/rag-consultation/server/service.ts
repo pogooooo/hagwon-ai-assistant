@@ -17,6 +17,7 @@ import {
 } from './answer/context.ts';
 import {
   answerFromDocuments,
+  issuanceRequirement,
   documentTypesFor,
   expectedAnswerTypes,
   hasOnlyGenericTopics,
@@ -608,6 +609,9 @@ export function createRagConsultationService(
         },
       };
     }
+    const issuance = issuanceRequirement(ctx.question);
+    if (issuance)
+      return answerFromDocuments(ctx, await retrieveEvidence(ctx), issuance);
     const types = expectedAnswerTypes(ctx.question);
     const noTopic = frame.topics.length === 0;
     const weak = noTopic || hasOnlyGenericTopics(ctx);
@@ -773,15 +777,52 @@ export function createRagConsultationService(
         includeHistory: isFact ? request.includeHistory : undefined,
         locate: isFact ? request.fact : undefined,
       });
+
       if (!summary) return failClosed('CITATION_UNSUPPORTED');
+      let location = isFact ? summary.location : request.chunk.location.label;
       if (!isFact) {
+        const { chunk, tableColumns } = request;
+        if (
+          summary.documentId !== chunk.documentId ||
+          summary.revision !== chunk.revision
+        )
+          return failClosed('CITATION_UNSUPPORTED');
+        let quote = chunk.text;
+        if (tableColumns) {
+          const { header, cells, kind } = chunk.location;
+          if (
+            kind !== 'table_row' ||
+            !header ||
+            !cells ||
+            tableColumns.length === 0 ||
+            tableColumns.some(
+              (index) =>
+                !Number.isInteger(index) ||
+                index < 0 ||
+                index >= header.length ||
+                index >= cells.length,
+            )
+          )
+            return failClosed('CITATION_UNSUPPORTED');
+          location =
+            chunk.location.label +
+            ' · 열 ' +
+            tableColumns.map((index) => header[index]).join(', ');
+          quote = [...new Set([0, ...tableColumns])]
+            .map((index) => header[index] + ' ' + cells[index])
+            .join(' ');
+        }
         quotedNumbers.push(
           ...extractNumbers(
-            `${request.chunk.title} ${request.chunk.location.section ?? ''} ${request.chunk.location.label} ${request.chunk.text}`,
+            [
+              chunk.title,
+              chunk.location.section,
+              chunk.location.label,
+              quote,
+            ].join(' '),
           ),
         );
       }
-      const location = isFact ? summary.location : request.chunk.location.label;
       const existing = merged.get(summary.sourceId);
       if (existing) {
         if (location) existing.locations.add(location);
@@ -931,7 +972,18 @@ export function createRagConsultationService(
               clock: deps.clock,
               trace,
             };
-            const parts = splitQuestion(question);
+            const sentences = splitQuestion(question);
+            const clauses =
+              sentences.length === 0
+                ? question
+                    .split(/(?:이랑|랑|하고|과|와)\s+|\s+(?:및|그리고)\s+/)
+                    .map((clause) => clause.trim())
+                : [];
+            const inline =
+              clauses.length === 2 &&
+              clauses.every(Boolean) &&
+              /(?:[월화수목금토일]요일|\d{1,2}월\s*\d{1,2}일)/.test(clauses[1]);
+            const parts = inline ? clauses : sentences;
             // 문장 전체에 적용되는 보안·정책 판단(다른 학원·전체 명단·원인/예측·미승인 프로그램)이 있으면 나누지 않는다.
             const blocked =
               frame.flags.crossTenant ||
@@ -945,12 +997,19 @@ export function createRagConsultationService(
               frame.flags.misattribution ||
               frame.unknownPrograms.length > 0 ||
               frame.unauthorizedStudentRefs.length > 0;
-            const partFrames = parts.map((part) =>
-              inheritAnchors(
-                parseQuery(part, { access: input.access, catalog, config }),
-                frame,
-              ),
+            const parsedParts = parts.map((part) =>
+              parseQuery(part, { access: input.access, catalog, config }),
             );
+            const shared = inline ? parsedParts[0] : frame;
+            const partFrames = parsedParts.map((part) =>
+              inheritAnchors(part, shared),
+            );
+            const distinctInlineTopics =
+              !inline ||
+              (parsedParts.every((part) => part.topics.length > 0) &&
+                !parsedParts[0].topics.some((topic) =>
+                  parsedParts[1].topics.some((other) => other.id === topic.id),
+                ));
             // 부분마다 스스로 해석 가능한 주제(일반어가 아닌 주제어)나 분석 용어가 있을 때만 나눈다
             // ("셔틀 몇 시에 와요? 이용료도 알려주세요"의 뒤 문장처럼 앞 문장에 기대는 경우는 통째로 처리).
             const selfContained = (part: QueryFrame) =>
@@ -967,26 +1026,42 @@ export function createRagConsultationService(
             if (
               parts.length >= 2 &&
               !blocked &&
+              distinctInlineTopics &&
               partFrames.every(selfContained)
             ) {
               // 여러 질문이 섞인 문장: 부분마다 따로 해석·답변하고 합친다(학생·반·날짜는 전체 문장에서 이어받음).
               const drafts: AnswerDraft[] = [];
               for (const [index, part] of parts.entries()) {
                 const partFrame = partFrames[index];
+                const answer = await route(
+                  {
+                    ...ctx,
+                    frame: partFrame,
+                    question: part,
+                    studentClassIds: studentClassIdsFor(
+                      input.access,
+                      partFrame,
+                      input.studentIdHint,
+                    ),
+                  },
+                  input.studentIdHint,
+                );
+                // 연결된 절의 정형 요청을 다른 절의 근거로 대신 답하지 않는다.
+                const asksAmount =
+                  inline &&
+                  partFrame.topics.some((topic) =>
+                    ['fee', 'material'].includes(topic.id),
+                  );
                 drafts.push(
-                  await route(
-                    {
-                      ...ctx,
-                      frame: partFrame,
-                      question: part,
-                      studentClassIds: studentClassIdsFor(
-                        input.access,
-                        partFrame,
-                        input.studentIdHint,
-                      ),
-                    },
-                    input.studentIdHint,
-                  ),
+                  asksAmount &&
+                    (answer.status === 'answered' ||
+                      answer.status === 'partial') &&
+                    !satisfiesAnswerTypes(answer.text, ['amount'])
+                    ? abstain(
+                        '요청한 비용을 승인 자료에서 확인할 수 없습니다.',
+                        'INSUFFICIENT_EVIDENCE',
+                      )
+                    : answer,
                 );
               }
               trace.intent = `multi(${parts.length})`;

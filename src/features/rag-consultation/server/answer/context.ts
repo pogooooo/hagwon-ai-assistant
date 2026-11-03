@@ -44,7 +44,7 @@ export type CitationRequest =
       effectiveAt?: number;
       includeHistory?: boolean;
     }
-  | { kind: 'chunk'; chunk: RagChunk };
+  | { kind: 'chunk'; chunk: RagChunk; tableColumns?: readonly number[] };
 
 export interface AnswerDraft {
   status: RagAnswerStatus;

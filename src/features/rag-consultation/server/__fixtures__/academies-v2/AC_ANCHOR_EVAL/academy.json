@@ -1,0 +1,39 @@
+{
+  "academy_id": "AC_ANCHOR_EVAL",
+  "display_name": "이음메이커학원",
+  "aliases": [],
+  "classes": [
+    {
+      "class_id": "CL_ANCHOR_0",
+      "name": "중1 탐구반",
+      "aliases": []
+    },
+    {
+      "class_id": "CL_ANCHOR_1",
+      "name": "고1 탐구반",
+      "aliases": []
+    },
+    {
+      "class_id": "CL_ANCHOR_2",
+      "name": "고2 실전반",
+      "aliases": []
+    },
+    {
+      "class_id": "CL_ANCHOR_3",
+      "name": "초6 설계반",
+      "aliases": []
+    },
+    {
+      "class_id": "CL_ANCHOR_4",
+      "name": "초5 설계반",
+      "aliases": []
+    },
+    {
+      "class_id": "CL_ANCHOR_5",
+      "name": "중3 제작반",
+      "aliases": []
+    }
+  ],
+  "units": [],
+  "question_types": []
+}

@@ -463,3 +463,128 @@ test('같은 절의 반별 표와 공통 규정 표를 각각 유지한다', () 
     ['반: 중2 심화반 / 교실: 301호', '반환 사유: 시작 전 / 반환 금액: 전액'],
   );
 });
+
+test('요일에 붙은 조사와 휴강 범위를 각각 해석한다', async () => {
+  for (const [schedule, asked, expected] of [
+    ['매일 (토요일은 휴강)', '금요일에', 'answered'],
+    ['매일 (토요일은 휴강)', '토요일에는', 'abstained'],
+    ['주말과 평일', '토요일', 'answered'],
+    ['월요일은 수업 없음', '월요일', 'abstained'],
+    ['월요일은 수업 없음', '화요일', 'abstained'],
+    ['평일 (공휴일 제외)', '일요일', 'abstained'],
+    ['월·수', '금요일', 'abstained'],
+  ]) {
+    const ctx = await context(
+      '| 반 | 요일 | 시간 |\n|---|---|---|\n| 중2 심화반 | ' +
+        schedule +
+        ' | 16:00~17:00 |',
+      '중2 심화반 ' + asked + ' 시간표',
+    );
+    const answer = await askTable(ctx);
+    assert.equal(answer.status, expected, schedule + ' / ' + asked);
+    if (expected === 'abstained')
+      assert.doesNotMatch(answer.answer, /화요일.*휴강/);
+  }
+});
+
+test('복합 질문은 반을 이어받되 시간표의 요일을 유지하고 없는 수강료를 부분 보류한다', async () => {
+  const ctx = await context(
+    '| 시간 | 월요일 | 화요일 |\n|---|---|---|\n| 16:00 | 중2 심화반 | |\n| 17:30 | | 중2 심화반 |',
+    '중2 심화반 수강료랑 화요일 시간표 알려줘',
+  );
+  const answer = await askTable(ctx);
+  assert.equal(answer.status, 'partial', answer.answer);
+  assert.match(answer.answer, /17:30/);
+  assert.doesNotMatch(answer.answer, /16:00/);
+});
+
+test('관련 납부 안내는 발급 근거가 아니고, 발급 조건이 확인되는 문장만 답한다', async () => {
+  const question = '계좌이체하면 현금 영수증을 발급받을 수 있나요?';
+  const noEvidence = await context(
+    '수강료는 계좌이체로 납부할 수 있습니다.',
+    question,
+  );
+  assert.equal((await askTable(noEvidence)).status, 'abstained');
+  const otherMethod = await context(
+    '카드 결제 시 현금 영수증 발급이 가능합니다.',
+    question,
+  );
+  assert.equal((await askTable(otherMethod)).status, 'abstained');
+  const supported = await context(
+    '계좌이체 시 현금 영수증을 발급해 드립니다.',
+    question,
+  );
+  const answer = await askTable(supported);
+  assert.equal(answer.status, 'answered');
+  assert.match(answer.answer, /현금 영수증을 발급/);
+});
+
+test('반 전용 문서의 메타데이터가 질문 대상과 다르면 표 이름이 같아도 제외한다', async () => {
+  const ctx = await context(
+    '| 반 | 요일 | 시간 |\n|---|---|---|\n| 중2 심화반 | 화요일 | 16:00 |',
+    '중2 심화반 화요일 시간표',
+  );
+  await ctx.documents.revokeRevision({
+    documentId: 'TABLE',
+    reason: 'revoked',
+  });
+  const result = await ctx.documents.upsertIndexedRevision({
+    approve: true,
+    document: {
+      academyId: access.academyId,
+      documentId: 'WRONG_SCOPE',
+      revision: 1,
+      classId: 'OTHER_CLASS',
+      documentType: 'schedule',
+      title: '반별 시간표',
+      visibility: 'academy_public',
+      validFrom: '2026-11-01T00:00:00+09:00',
+      validTo: null,
+      approvedAt: '2026-11-01T00:00:00+09:00',
+      text: '| 반 | 요일 | 시간 |\n|---|---|---|\n| 중2 심화반 | 화요일 | 19:25 |',
+    },
+  });
+  assert.equal(result.status, 'activated');
+  const answer = await askTable(ctx);
+  assert.equal(answer.status, 'abstained');
+  assert.deepEqual(answer.citations, []);
+});
+
+test('쪽마다 열 순서가 달라도 선택한 셀만 인용하고 개정·철회 후 이전 근거를 쓰지 않는다', async () => {
+  const first =
+    '<!-- page 1 -->\n| 시간 | A실 | B실 |\n|---|---|---|\n| 16:10 | 중2 심화반 | 중1 기본반 |\n\n<!-- page 2 -->\n| 시간 | B실 | A실 |\n|---|---|---|\n| 18:20 | 중2 심화반 | 중1 기본반 |';
+  const ctx = await context(first, '중2 심화반 시간표');
+  const before = await askTable(ctx);
+  assert.equal(before.status, 'answered');
+  assert.match(before.citations[0]?.location ?? '', /1쪽[^;]*열 A실/);
+  assert.match(before.citations[0]?.location ?? '', /2쪽[^;]*열 B실/);
+  assert.doesNotMatch(before.answer, /중1 기본반/);
+  const result = await ctx.documents.upsertIndexedRevision({
+    approve: true,
+    document: {
+      academyId: access.academyId,
+      documentId: 'TABLE',
+      revision: 2,
+      documentType: 'schedule',
+      title: '반별 시간표',
+      visibility: 'academy_public',
+      validFrom: '2026-11-01T00:00:00+09:00',
+      validTo: null,
+      approvedAt: '2026-11-02T00:00:00+09:00',
+      text: '<!-- page 3 -->\n| 시간 | A실 | B실 |\n|---|---|---|\n| 19:35 | 중1 기본반 | 중2 심화반 |',
+    },
+  });
+  assert.equal(result.status, 'activated');
+  const after = await askTable(ctx);
+  assert.match(after.answer, /19:35/);
+  assert.doesNotMatch(after.answer, /16:10|18:20|중1 기본반/);
+  assert.equal(after.citations[0]?.revision, 2);
+  assert.match(after.citations[0]?.location ?? '', /3쪽.*열 B실/);
+  await ctx.documents.revokeRevision({
+    documentId: 'TABLE',
+    reason: 'revoked',
+  });
+  const revoked = await askTable(ctx);
+  assert.equal(revoked.status, 'abstained');
+  assert.deepEqual(revoked.citations, []);
+});
