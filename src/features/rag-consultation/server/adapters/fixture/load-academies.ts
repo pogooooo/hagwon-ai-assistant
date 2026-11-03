@@ -382,7 +382,7 @@ export function toAcademyDocumentInput(
   };
 }
 
-/** 파싱 결과 캐시(같은 파일·같은 파서 버전이면 다시 OCR 하지 않음). 평가 반복 실행용. */
+/** 파싱 결과 캐시(파일·파서 버전·OCR 실행 조건별로 분리). 평가 반복 실행용. */
 function parseCacheDir(): string {
   return join(
     process.env.RAG_MODEL_CACHE_DIR ??
@@ -411,8 +411,14 @@ async function documentInput(
   const base = toAcademyDocumentInput(document);
   if (!document.source) return base;
   const bytes = new Uint8Array(readFileSync(document.source.path));
+  const ocrMode =
+    options.ocr === undefined
+      ? 'auto:tesseract.js:kor+eng'
+      : options.ocr === null
+        ? 'disabled'
+        : `custom:${options.ocr.id}`;
   const key = createHash('sha256')
-    .update(PARSER_VERSION)
+    .update(JSON.stringify([PARSER_VERSION, document.source.fileName, ocrMode]))
     .update(bytes)
     .digest('hex');
   const cachePath = join(parseCacheDir(), `${key}.json`);
@@ -429,7 +435,14 @@ async function documentInput(
     { ocr: options.ocr },
   );
   options.onParsed?.(document, prepared.parsed, false);
-  if (options.cache !== false) {
+  // 일시적 OCR 장애·빈 결과를 저장해 다음 실행의 복구를 막지 않는다.
+  if (
+    options.cache !== false &&
+    prepared.document &&
+    !prepared.parsed.warnings.some(
+      (warning) => warning.code === 'ocr_unavailable',
+    )
+  ) {
     mkdirSync(parseCacheDir(), { recursive: true });
     writeFileSync(cachePath, JSON.stringify(prepared.parsed));
   }

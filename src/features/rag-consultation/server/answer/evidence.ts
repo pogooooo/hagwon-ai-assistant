@@ -461,7 +461,14 @@ export async function answerFromDocuments(
     );
     const lines = [
       ...renderParagraphs(paragraphs, words, [], keepText),
-      ...renderTableRows(tables, words, [], keepText, boundClassNames(ctx)),
+      ...renderTableRows(
+        tables,
+        words,
+        [],
+        keepText,
+        boundClassNames(ctx),
+        ctx,
+      ),
     ]
       .map((line) => line.replace(/\*\*|__/g, ''))
       .slice(0, 8);

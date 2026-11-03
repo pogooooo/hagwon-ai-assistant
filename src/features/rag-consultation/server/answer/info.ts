@@ -288,10 +288,48 @@ async function answerClassFacts(
 
 /** 요일 낱말이 묻는 요일을 포함하는지(평일=월~금, 주말=토·일). */
 function dayWordCovers(word: string, day: string): boolean {
-  const w = word.replace(/요일$/, '');
-  if (w === '평일') return '월화수목금'.includes(day);
-  if (w === '주말') return '토일'.includes(day);
-  return w.split(/[·,\s]/).includes(day);
+  const w = word.replace(/요일/g, '');
+  if (w.includes('평일') && '월화수목금'.includes(day)) return true;
+  if (w.includes('주말') && '토일'.includes(day)) return true;
+  const schedule = w.replace(/평일|주말/g, '');
+  const ranges = [
+    ...schedule.matchAll(/([월화수목금토일])\s*[~\-–]\s*([월화수목금토일])/g),
+  ];
+  const days = '월화수목금토일';
+  if (
+    ranges.some((range) => {
+      const start = days.indexOf(range[1]);
+      const end = days.indexOf(range[2]);
+      const index = days.indexOf(day);
+      return start <= end
+        ? index >= start && index <= end
+        : index >= start || index <= end;
+    })
+  )
+    return true;
+  return (
+    schedule
+      .replace(/([월화수목금토일])\s*[~\-–]\s*([월화수목금토일])/g, '')
+      .match(/[월화수목금토일]/g) ?? []
+  ).some((candidate) => candidate === day);
+}
+
+function rowMatchesWeekday(
+  cells: string[],
+  header: string[],
+  weekday: string,
+): boolean {
+  const dayColumns = header
+    .map((h, index) =>
+      /요일|수업일/.test(h) && !/^[월화수목금토일](요일)?$/.test(compactText(h))
+        ? index
+        : -1,
+    )
+    .filter((index) => index >= 0);
+  return (
+    dayColumns.length === 0 ||
+    dayColumns.some((i) => dayWordCovers(cells[i] ?? '', weekday))
+  );
 }
 
 /** 질문이 가리킨 요일(“토요일”, 명시 날짜의 요일). 없으면 null. */
@@ -394,9 +432,17 @@ export async function classTableRows(
     );
     const record = rowNamed || gridColumns.length === 0;
     if (record && !header.some((h) => /시간|요일|교시/.test(h))) continue;
+    if (record && weekday) {
+      if (!rowMatchesWeekday(cells, header, weekday)) {
+        seen.offDay = true;
+        continue;
+      }
+    }
     if (
-      effective?.explicitDay != null &&
-      !rowCoversDay(cells.join(' '), effective.explicitDay)
+      !rowCoversDay(
+        cells.join(' '),
+        kstStartOfDay(toKstDate(effective?.at ?? ctx.asOf)),
+      )
     )
       continue;
     let days = gridColumns;
@@ -1020,6 +1066,8 @@ export function classSimilarity(className: string, text: string): number {
   const name = compactText(className);
   const target = compactText(text);
   const grade = name.match(/^(초|중|고)([1-6])/);
+  const rowGrade = target.match(/^(초|중|고)([1-6])/);
+  if (grade && rowGrade && grade[0] !== rowGrade[0]) return 0;
   let score = 0;
   if (grade) {
     const [token, group, year] = grade;
@@ -1047,56 +1095,98 @@ export function renderTableRows(
   evidenceTerms: readonly string[],
   keepText: (text: string) => boolean,
   targetNames: readonly string[] = [],
+  ctx?: AnswerContext,
 ): string[] {
   const has = (text: string) =>
     words.filter((word) => compactText(text).includes(compactText(word)))
       .length;
+  const effective = ctx ? resolveEffectiveTime(ctx.frame, ctx.asOf) : undefined;
+  const weekday = ctx
+    ? askedWeekday(ctx, effective)
+    : words
+        .map((word) => word.match(/([월화수목금토일])요일/)?.[1])
+        .find(Boolean);
   const rows = chunks.filter(
     (chunk) =>
       chunk.location.cells &&
       chunk.location.header &&
-      keepText((chunk.location.cells ?? []).join(' ')),
+      keepText((chunk.location.cells ?? []).join(' ')) &&
+      (chunk.documentType !== 'schedule' ||
+        ((!effective ||
+          rowCoversDay(
+            (chunk.location.cells ?? []).join(' '),
+            kstStartOfDay(toKstDate(effective.at)),
+          )) &&
+          (!weekday ||
+            rowMatchesWeekday(
+              chunk.location.cells ?? [],
+              chunk.location.header ?? [],
+              weekday,
+            )))),
   );
   // 행이 적으면 모두 보여 주고, 많으면 질문 단어·근거어와 가장 많이 맞는 행만 고른다.
   const rowScore = (chunk: RagChunk) => {
     const cells = (chunk.location.cells ?? []).join(' ');
     return has(cells) + (containsAny(cells, evidenceTerms) ? 2 : 0);
   };
-  const bestRow = Math.max(0, ...rows.map(rowScore));
   const targets = targetNames.map(compactText).filter((n) => n.length >= 2);
-  // 대상 반 이름이 어느 행에도 그대로 없으면, 행 이름(첫 칸)이 반 이름과 가장 비슷한 행만 고른다.
-  const exactTarget = rows.some((chunk) =>
-    (chunk.location.cells ?? []).some((cell) =>
-      targets.some((t) => compactText(cell).includes(t)),
-    ),
-  );
-  const similarity = (chunk: RagChunk) =>
-    Math.max(
-      0,
-      ...targetNames.map((name) =>
-        classSimilarity(name, chunk.location.cells?.[0] ?? ''),
-      ),
+  // 반마다 따로 선택해 비교 질문에서도 각 대상의 정확·유사 행을 모두 유지한다.
+  const matches = new Set<RagChunk>();
+  for (const name of targets) {
+    const exact = rows.filter((chunk) =>
+      chunk.location.cells?.some((cell) => compactText(cell).includes(name)),
     );
-  const bestSimilarity =
-    targets.length > 0 && !exactTarget && rows.length > 1
-      ? Math.max(0, ...rows.map(similarity))
-      : 0;
+    if (exact.length > 0) {
+      exact.forEach((chunk) => matches.add(chunk));
+      continue;
+    }
+    const similarity = (chunk: RagChunk) =>
+      classSimilarity(name, chunk.location.cells?.[0] ?? '');
+    const best = Math.max(0, ...rows.map(similarity));
+    if (best >= 1.3)
+      rows
+        .filter((chunk) => similarity(chunk) === best)
+        .forEach((chunk) => matches.add(chunk));
+  }
+  const boundRows =
+    targets.length === 0
+      ? rows
+      : matches.size > 0
+        ? rows.filter((chunk) => matches.has(chunk))
+        : rows.filter(
+            (chunk) =>
+              !chunk.location.header?.some((h) =>
+                /^(대상|수강)?(반|강좌|과정)(명|이름|구분)?$/.test(
+                  compactText(h),
+                ),
+              ) &&
+              !chunk.location.cells?.some((cell) =>
+                /^(초|중|고)[1-6]/.test(compactText(cell)),
+              ),
+          );
+  const bestRow = Math.max(0, ...boundRows.map(rowScore));
   const selectedRows = (
-    bestSimilarity >= 1.3
-      ? rows.filter((chunk) => similarity(chunk) === bestSimilarity)
-      : rows.length <= 4 || bestRow === 0
-        ? rows
-        : rows.filter((chunk) => rowScore(chunk) === bestRow)
+    matches.size > 0 || boundRows.length <= 4 || bestRow === 0
+      ? boundRows
+      : boundRows.filter((chunk) => rowScore(chunk) === bestRow)
   ).slice(0, 8);
-  const header = selectedRows[0]?.location.header ?? [];
-  const headerScores = header.map((name) => has(name));
-  const best = Math.max(0, ...headerScores.slice(1));
-  const keep = header.map(
-    (_, index) => index === 0 || best === 0 || headerScores[index] === best,
-  );
+  const askedDays = [
+    ...new Set([
+      ...(weekday ? [weekday] : []),
+      ...words.flatMap((word) =>
+        [...word.matchAll(/([월화수목금토일])요일/g)].map((m) => m[1]),
+      ),
+    ]),
+  ];
   // 요일×교시 격자처럼 한 행에 여러 반이 있는 표: 대상 반 이름이 든 칸(과 첫 칸)만 보여 준다.
-  return selectedRows.map((chunk) => {
+  return selectedRows.flatMap((chunk) => {
     const cells = chunk.location.cells ?? [];
+    const header = chunk.location.header ?? [];
+    const headerScores = header.map((name) => has(name));
+    const best = Math.max(0, ...headerScores.slice(1));
+    const keep = header.map(
+      (_, index) => index === 0 || best === 0 || headerScores[index] === best,
+    );
     const targetColumns = cells
       .map((cell, index) =>
         index > 0 && targets.some((t) => compactText(cell).includes(t))
@@ -1104,16 +1194,29 @@ export function renderTableRows(
           : -1,
       )
       .filter((index) => index > 0);
+    const gridColumns = targetColumns.filter((i) =>
+      /^[월화수목금토일](요일)?$/.test(header[i] ?? ''),
+    );
+    const selectedColumns = gridColumns.filter((i) =>
+      askedDays.length > 0
+        ? askedDays.some((day) => dayWordCovers(header[i], day))
+        : keep[i],
+    );
+    if (gridColumns.length > 0 && selectedColumns.length === 0) return [];
     const keepRow =
-      targetColumns.length > 0 && targetColumns.length < cells.length - 1
-        ? cells.map((_, index) => index === 0 || targetColumns.includes(index))
+      gridColumns.length > 0
+        ? cells.map(
+            (_, index) => index === 0 || selectedColumns.includes(index),
+          )
         : keep;
-    return (chunk.location.header ?? [])
-      .map((name, index) =>
-        keepRow[index] ? `${name}: ${cells[index] ?? ''}` : null,
-      )
-      .filter(Boolean)
-      .join(' / ');
+    return [
+      header
+        .map((name, index) =>
+          keepRow[index] ? `${name}: ${cells[index] ?? ''}` : null,
+        )
+        .filter(Boolean)
+        .join(' / '),
+    ];
   });
 }
 
@@ -1258,6 +1361,7 @@ async function answerSection(
       evidenceTerms,
       keepText,
       targetNames,
+      ctx,
     );
     // 질문 단어가 표 행에 있으면 표를 먼저 보여 준다(길이 제한에 표가 잘리지 않게).
     const tableFirst = tableLines.some((line) =>

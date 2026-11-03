@@ -151,9 +151,22 @@ describe('PDF 업로드 → 색인 → 질문(HTTP)', async () => {
 
 describe('개발용 가상 학원 원본 PDF 로만 답하기(서비스)', async () => {
   const dataset = readAcademiesDataset(V2_DIR, { folders: ['AC_HANGYEOL'] });
-  const store = await buildAcademiesStore(dataset, new InMemoryRagStore(), {
-    ocr: null,
-  });
+  // 이 절은 텍스트 PDF 시험이다. 무관한 스캔 문서를 제외하고 원본을 매번 파싱해
+  // 다른 실행에서 만든 OCR 캐시가 있어야만 통과하던 의존성을 없앤다.
+  const textOnlyDataset = {
+    ...dataset,
+    documents: dataset.documents.filter(
+      (document) => document.source?.format !== 'pdf_scan',
+    ),
+  };
+  const store = await buildAcademiesStore(
+    textOnlyDataset,
+    new InMemoryRagStore(),
+    {
+      ocr: null,
+      cache: false,
+    },
+  );
   const catalog = createAcademyCatalogPort(dataset);
   const ask = async (userId: string, question: string, asOf: string) => {
     const user = dataset.users.find((u) => u.user_id === userId);
