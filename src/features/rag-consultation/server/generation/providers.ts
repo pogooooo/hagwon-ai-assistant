@@ -3,8 +3,7 @@
  * - DisabledGenerationProvider: 공급자 미선정 상태(기본값). 생성이 필요한 질문은 담당자 연결.
  * - MockGenerationProvider: 합성 데이터 테스트용(외부 전송 없음).
  * - GuardedGenerationProvider: 429/5xx/타임아웃/쿼터 소진 시 호출 전 차단하는 회로 차단기.
- * - createOpenAICompatibleProvider: 승인된 공급자를 나중에 연결하기 위한 서버 전용 HTTP 어댑터.
- *   (실제 공급자 API 와의 호환성은 검증되지 않음 — 연결 시 계약·약관 확인 필요)
+ * - createOpenAICompatibleProvider: CLOVA Studio·Gemini 등 OpenAI 호환 API의 서버 전용 HTTP 어댑터.
  *
  * 다른 공급자로의 자동 전환은 하지 않는다(개인정보 처리 정책이 다른 곳으로 데이터가 흘러갈 수 있음).
  */
@@ -269,6 +268,8 @@ export function createOpenAICompatibleProvider(
     personalDataApproved: options.personalDataApproved ?? false,
     availability: () => 'available',
     async generateGroundedAnswer(input, { timeoutMs }) {
+      if (input.containsPersonalData && !options.personalDataApproved)
+        return { ok: false, error: 'invalid_response' };
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {

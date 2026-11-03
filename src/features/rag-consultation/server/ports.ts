@@ -28,6 +28,8 @@ export interface FactQuery {
   asOf: number;
   /** 정형 학원 정보의 적용 시점(질문의 "11월 4일 기준"). 없으면 asOf. */
   effectiveAt?: number;
+  /** 시작일이 이 범위에 속하는 승인 학원·반 사실을 조회한다. */
+  startsIn?: { from: number; until: number };
   /** 공개 정형 정보의 과거 이력 포함 여부(권한 정책에서 허용된 경우만 반영). */
   includeHistory?: boolean;
 }

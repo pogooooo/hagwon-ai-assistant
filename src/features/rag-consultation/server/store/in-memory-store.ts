@@ -443,7 +443,14 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
             stored.visibility === 'academy_public' &&
             fact.validTo !== null &&
             fact.validTo <= effectiveAt;
-          if (!current && !past) continue;
+          const startsIn = query.startsIn;
+          if (
+            startsIn
+              ? fact.validFrom < startsIn.from ||
+                fact.validFrom >= startsIn.until
+              : !current && !past
+          )
+            continue;
         }
         result.push(fact);
       }

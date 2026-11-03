@@ -127,7 +127,9 @@ export function planQuery(
   const parsePart = (part: string) =>
     parseQuery(part, { access: access, catalog, config });
   const clauseFrames =
-    clauses.length === 2 && clauses.every(Boolean)
+    (clauses.length === 2 ||
+      (planned && clauses.length >= 3 && clauses.length <= 4)) &&
+    clauses.every(Boolean)
       ? clauses.map(parsePart)
       : [];
   const analysisAndTeacher =
@@ -141,11 +143,33 @@ export function planQuery(
     clauseFrames[0].topics.some((topic) =>
       ['fee', 'teacher', 'material'].includes(topic.id),
     );
+  const independentTopics = new Set([
+    'fee',
+    'material',
+    'teacher',
+    'schedule',
+    'classroom',
+    'enrollment',
+  ]);
+  const inlineTopicIds = clauseFrames.flatMap((clause) =>
+    clause.topics.map(({ id }) => id),
+  );
+  const hasIndependentInfo =
+    planned &&
+    clauseFrames.length >= 2 &&
+    clauseFrames.every(
+      (clause) => clause.topics.length === 1 && !clause.hasAnalysisTerms,
+    ) &&
+    new Set(inlineTopicIds).size === clauseFrames.length &&
+    inlineTopicIds.every((id) => independentTopics.has(id)) &&
+    !(inlineTopicIds.includes('fee') && inlineTopicIds.includes('material')) &&
+    !/포함|합계|합쳐|빼고|제외|말고|비교|차이|할인/.test(frame.normalized);
   const inline =
-    clauseFrames.length === 2 &&
-    (analysisAndTeacher ||
-      (planned && hasIndependentSchedule) ||
-      /(?:[월화수목금토일]요일|\d{1,2}월\s*\d{1,2}일)/.test(clauses[1]));
+    hasIndependentInfo ||
+    (clauseFrames.length === 2 &&
+      (analysisAndTeacher ||
+        (planned && hasIndependentSchedule) ||
+        /(?:[월화수목금토일]요일|\d{1,2}월\s*\d{1,2}일)/.test(clauses[1])));
   const parts = inline ? clauses : sentences;
   // 문장 전체에 적용되는 보안·정책 판단(다른 학원·전체 명단·원인/예측·미승인 프로그램)이 있으면 나누지 않는다.
   const blocked =
@@ -164,7 +188,20 @@ export function planQuery(
     frame.unauthorizedStudentRefs.length > 0;
   const parsedParts = inline ? clauseFrames : parts.map(parsePart);
   const shared = inline ? parsedParts[0] : frame;
-  const partFrames = parsedParts.map((part) => inheritAnchors(part, shared));
+  const partFrames: QueryFrame[] = [];
+  for (const part of parsedParts) {
+    const anchor = planned ? partFrames.at(-1) : shared;
+    const scoped = anchor ? inheritAnchors(part, anchor) : part;
+    // An availability question can introduce a report whose focus is stated next.
+    partFrames.push(
+      planned &&
+        scoped.hasAnalysisTerms &&
+        scoped.units.length === 0 &&
+        frame.units.length === 1
+        ? { ...scoped, units: frame.units }
+        : scoped,
+    );
+  }
   const distinctInlineTopics =
     !inline ||
     analysisAndTeacher ||

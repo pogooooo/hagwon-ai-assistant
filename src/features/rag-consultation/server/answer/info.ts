@@ -516,7 +516,29 @@ export async function classTableRows(
 
     const key = classColumn(header, cells, names);
     const grid = key < 0;
-    if (!grid && !matchesClassCell(cells[key] ?? '', names)) continue;
+    const classCell = cells[key] ?? '';
+    const gradeColumn =
+      ctx.engine === 'planned'
+        ? header.findIndex((label) =>
+            /^(대상|(?:대상|수강)?학년)$/.test(compactText(label)),
+          )
+        : -1;
+    const grade = gradeColumn < 0 ? '' : cells[gradeColumn]?.trim();
+    const qualified = grade ? compactText(classCell + '(' + grade + ')') : '';
+    const qualifiedCatalogMatch =
+      grade &&
+      ctx.catalog.classes.some((entry) =>
+        [entry.name, ...entry.aliases].some(
+          (label) => compactText(label) === qualified,
+        ),
+      );
+    if (
+      !grid &&
+      !(qualifiedCatalogMatch
+        ? names.includes(qualified)
+        : matchesClassCell(classCell, names))
+    )
+      continue;
     if (!header.some((h) => /시간|요일|교시/.test(h) || WEEKDAY_AXIS.test(h)))
       continue;
     if (

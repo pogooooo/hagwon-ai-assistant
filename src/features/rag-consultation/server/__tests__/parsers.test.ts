@@ -10,6 +10,7 @@ import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { strToU8, zipSync } from 'fflate';
+import { PDFDocument } from 'pdf-lib';
 
 import { buildChunks, splitIntoBlocks } from '../ingest/chunking.ts';
 import { prepareFileDocument } from '../ingest/ingest-file.ts';
@@ -115,6 +116,93 @@ describe('텍스트 PDF', () => {
     ]);
   });
 
+  test('다음 쪽의 다른 머리글은 같은 열 수여도 이전 표에 합치지 않는다', async () => {
+    const pdf = await PDFDocument.create();
+    for (const rows of [
+      [
+        ['Class', 'Weekday', 'Monthly fee'],
+        ['Alpha', 'Monday', '210,000 KRW'],
+        ['Beta', 'Tuesday', '220,000 KRW'],
+      ],
+      [
+        ['Class', 'Valid from', 'Materials fee'],
+        ['Alpha', '2026-11-01', '30,000 KRW'],
+        ['Beta', '2026-12-01', '40,000 KRW'],
+      ],
+    ]) {
+      const page = pdf.addPage([480, 400]);
+      rows.forEach((row, rowIndex) => {
+        row.forEach((cell, columnIndex) => {
+          page.drawText(cell, {
+            x: 30 + 140 * columnIndex,
+            y: 350 - 26 * rowIndex,
+            size: 11,
+          });
+        });
+      });
+    }
+    const parsed = await parseSourceFile({
+      bytes: await pdf.save(),
+      fileName: 'adjacent-tables.pdf',
+      ocr: null,
+    });
+    assert.equal(parsed.status, 'ok');
+    assert.ok(
+      !parsed.warnings.some((w) => w.code === 'table_merged_across_pages'),
+    );
+    const rows = tableRows(parsed.text);
+    assert.equal(rows.length, 4);
+    assert.deepEqual(rows[0].location.header, [
+      'Class',
+      'Weekday',
+      'Monthly fee',
+    ]);
+    assert.deepEqual(rows[2].location.header, [
+      'Class',
+      'Valid from',
+      'Materials fee',
+    ]);
+    assert.deepEqual(rows[2].location.cells, [
+      'Alpha',
+      '2026-11-01',
+      '30,000 KRW',
+    ]);
+    assert.match(rows[2].location.label, /^2쪽 · 표 2 · 1행$/);
+  });
+  test('드물게 채워진 열과 빈 칸을 행마다 유지한다', async () => {
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage([600, 440]);
+    const header = ['Class', 'Weekday', 'Valid from', 'Monthly fee'];
+    const rows = Array.from({ length: 8 }, (_, i) => [
+      'Class ' + (i + 1),
+      'Monday',
+      i === 5 ? '2026-11-01' : '',
+      '210,000 KRW',
+    ]);
+    [header, ...rows].forEach((row, rowIndex) => {
+      row.forEach((cell, columnIndex) => {
+        if (!cell) return;
+        page.drawText(cell, {
+          x: 30 + 140 * columnIndex,
+          y: 380 - 24 * rowIndex,
+          size: 11,
+        });
+      });
+    });
+    const parsed = await parseSourceFile({
+      bytes: await pdf.save(),
+      fileName: 'sparse-period.pdf',
+      ocr: null,
+    });
+    assert.equal(parsed.status, 'ok');
+    const result = tableRows(parsed.text);
+    assert.deepEqual(result[0].location.header, header);
+    assert.deepEqual(
+      result.map(({ location }) => location.cells),
+      rows,
+    );
+    assert.match(result[5].location.label, /^1쪽 · 표 1 · 6행$/);
+  });
   test('혼합 PDF: 텍스트 페이지는 텍스트로, 이미지 페이지는 OCR(끄면 검수 필요)로 표시', async () => {
     const parsed = await parse('PX_MIXED__r1.pdf');
     assert.equal(parsed.pages[0].method, 'text');

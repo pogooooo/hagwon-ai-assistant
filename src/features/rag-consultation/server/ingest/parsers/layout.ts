@@ -240,10 +240,15 @@ function buildTable(
     else clusters.push([x]);
   }
   const multiLines = lines.filter((l) => l.segments.length >= 2).length;
+  const headerStarts = new Set(lines[0].segments.map((segment) => segment.x0));
   const anchors = clusters
     .filter(
       (cluster, index) =>
-        index === 0 || cluster.length >= Math.max(2, multiLines * 0.3),
+        index === 0 ||
+        cluster.length >= Math.max(2, multiLines * 0.3) ||
+        // Sparse columns still belong to the schema when the header and
+        // at least one body cell share the same alignment.
+        (cluster.length >= 2 && cluster.some((x) => headerStarts.has(x))),
     )
     .map((cluster) => Math.min(...cluster));
   const anchorOf = (x: number) => {
@@ -414,16 +419,19 @@ export function mergeAcrossPages(blocks: LayoutBlock[]): {
       block.page === (previous.rowPages?.at(-1) ?? previous.page) + 1 &&
       previous.rows &&
       block.rows &&
-      previous.rows[0].length === block.rows[0].length
+      normalizeRow(previous.rows[0]) === normalizeRow(block.rows[0])
     ) {
-      const repeatedHeader =
-        normalizeRow(block.rows[0]) === normalizeRow(previous.rows[0]);
-      const rows = repeatedHeader ? block.rows.slice(1) : block.rows;
-      previous.rows.push(...rows);
-      previous.rowPages = [
-        ...(previous.rowPages ?? []),
-        ...rows.map(() => block.page),
-      ];
+      // Equal width alone does not establish a shared schema. A new header
+      // would otherwise become a data row under the preceding page's columns.
+      const rows = block.rows.slice(1);
+      out[out.length - 1] = {
+        ...previous,
+        rows: [...previous.rows, ...rows],
+        rowPages: [
+          ...(previous.rowPages ?? previous.rows.map(() => previous.page)),
+          ...(block.rowPages?.slice(1) ?? rows.map(() => block.page)),
+        ],
+      };
       merged += 1;
       continue;
     }

@@ -4,7 +4,7 @@
 3·5·7·8·9번 기능이 없어도 합성 데이터와 mock 어댑터로 전체 흐름을 실행하고 테스트할 수 있습니다.
 
 > ⚠️ 모든 테스트 데이터는 완전한 가상 데이터입니다. 합성 데이터에서 테스트가 통과했다고 실제 원생 개인정보를 다루는 운영 환경이 안전하다는 뜻은 아닙니다.
-> 외부 생성 API 연동은 **검증되지 않았습니다**(키·공급자 미선정, 약관·개인정보 처리 조건 미확인). 원생 개인정보는 외부 API 로 보내지 않습니다(기본 `RAG_GENERATION_ALLOW_PERSONAL_DATA=false`).
+> CLOVA Studio와 Gemini의 생성 공급자를 서버 설정으로 선택할 수 있습니다. 실계정 API 호출은 키를 설정한 환경에서 별도로 확인해야 합니다. 두 공급자로 원생 자료를 전송하지 않습니다.
 
 | 문서                             | 내용                                                                                  |
 | -------------------------------- | ------------------------------------------------------------------------------------- |
@@ -133,15 +133,17 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 
 ### 환경 변수(서버 전용, `.env.example` 참고)
 
-| 이름                                                                        | 의미                                                   | 기본값                    |
-| --------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------- |
-| `RAG_GENERATION_PROVIDER`                                                   | `disabled` / `mock` / `openai-compatible`              | `disabled`                |
-| `RAG_GENERATION_BASE_URL`, `RAG_GENERATION_MODEL`, `RAG_GENERATION_API_KEY` | OpenAI 호환 공급자 연결 정보(하나라도 없으면 disabled) | 없음                      |
-| `RAG_GENERATION_ALLOW_PERSONAL_DATA`                                        | 약관·미성년 이용·국외 처리 검토 완료 시에만 `true`     | `false`                   |
-| `RAG_GENERATION_DAILY_CALL_LIMIT`                                           | 일일 생성 호출 상한                                    | 제한 없음                 |
-| `RAG_MODEL_CACHE_DIR`                                                       | OCR 학습 데이터·로컬 모델·파싱 캐시 위치               | `~/.cache/axr-rag-models` |
-| `RAG_DEV_PORT`, `RAG_DEV_RETRIEVER`                                         | dev 서버 포트, 검색기(`bm25`·`dense`·`dense-rerank`)   | `8787`, `bm25`            |
-| `NEXT_PUBLIC_RAG_API_BASE_URL`                                              | 클라이언트가 호출할 상담 API 주소(비밀값 아님)         | 없음                      |
+| 이름                                                                        | 의미                                                                    | 기본값                    |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------- |
+| `RAG_GENERATION_PROVIDER`                                                   | `auto` / `clova` / `gemini` / `disabled` / `mock` / `openai-compatible` | Gemini (키 없으면 비활성) |
+| `RAG_CLOVA_API_KEY`, `RAG_CLOVA_MODEL`                                      | CLOVA Studio 키와 모델                                                  | 서버 환경 변수            |
+| `RAG_GEMINI_API_KEY`, `RAG_GEMINI_MODEL`                                    | Gemini API 키와 모델                                                    | 서버 환경 변수            |
+| `RAG_GENERATION_BASE_URL`, `RAG_GENERATION_MODEL`, `RAG_GENERATION_API_KEY` | OpenAI 호환 공급자 연결 정보(하나라도 없으면 disabled)                  | 없음                      |
+| `RAG_GENERATION_ALLOW_PERSONAL_DATA`                                        | 약관·미성년 이용·국외 처리 검토 완료 시에만 `true`                      | `false`                   |
+| `RAG_GENERATION_DAILY_CALL_LIMIT`                                           | 일일 생성 호출 상한                                                     | 제한 없음                 |
+| `RAG_MODEL_CACHE_DIR`                                                       | OCR 학습 데이터·로컬 모델·파싱 캐시 위치                                | `~/.cache/axr-rag-models` |
+| `RAG_DEV_PORT`, `RAG_DEV_RETRIEVER`                                         | dev 서버 포트, 검색기(`bm25`·`dense`·`dense-rerank`)                    | `8787`, `bm25`            |
+| `NEXT_PUBLIC_RAG_API_BASE_URL`                                              | 클라이언트가 호출할 상담 API 주소(비밀값 아님)                          | 없음                      |
 
 ### 의존성
 
@@ -223,3 +225,31 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 대상 반이 확정된 단순 수강료·교재비·재료비 요청은 승인 비용표에서 원본 행·열을 먼저 선택합니다. 가로형 반별 표와 반 메타데이터가 있는 세로형 항목표를 지원합니다. 금액의 청구 주기와 항목별 인용을 보존합니다. 복합 할인·개정 시점·이력, 정형 사실만 있는 요청에는 기존 어댑터를 사용합니다.
 
 계획 경로에서 교재비와 재료비는 별도 요청 슬롯입니다. 원본 표의 행 또는 열에서 각각 검증하며, 한 항목만 확인되면 나머지는 미확인으로 표시합니다.
+
+계획 엔진은 명확한 대상과 적용 조건을 확인할 수 있는 시간표 질문에서 원본 표의 선택 셀을 먼저 검증합니다. 비용은 금액 표기의 쉼표 차이와 실제 청구 주기 차이를 구별합니다. 평가 CLI의 --gold-v2 옵션은 문항 ID를 키로 하는 GoldV2 주석을 받아 별도 슬롯 결과를 저장합니다.
+
+### 생성 공급자 설정
+
+PowerShell에서 같은 터미널로 실행합니다. 기본 공급자는 Gemini입니다. `auto`를 명시하면 시작할 때 CLOVA Studio 키가 있으면 CLOVA Studio, 없고 Gemini 키가 있으면 Gemini를 선택합니다. 네이버 계정이나 키를 사용할 수 없으면 Gemini를 명시할 수 있습니다.
+
+```powershell
+$env:RAG_GENERATION_PROVIDER = 'clova'
+$env:RAG_CLOVA_API_KEY = Read-Host 'CLOVA Studio API key' -MaskInput
+npm.cmd run rag:dev
+```
+
+```powershell
+$env:RAG_GENERATION_PROVIDER = 'gemini'
+$env:RAG_GEMINI_API_KEY = Read-Host 'Gemini API key' -MaskInput
+npm.cmd run rag:dev
+```
+
+실패한 요청은 다른 업체로 재전송하지 않습니다. 원생 기록을 쓰는 학습 분석과 조언은 외부 전송 없이 기존 처리 정책을 따릅니다.
+
+키를 설정한 터미널에서 다음 명령으로 연결을 확인할 수 있습니다. 외부로 보내는 내용은 코드에 고정된 가상 학원 안내 한 건입니다.
+
+```powershell
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/generation/smoke-provider.ts
+```
+
+현재 정확도 목표는 새 학원 독립 평가에서 95%입니다. 평가 문항과 판정 기준은 [TEST_REPORT.md](TEST_REPORT.md), 기술 채택·제외 근거와 추적 파일 분류는 [RAG_TECHNIQUES.md](RAG_TECHNIQUES.md)를 참조합니다.

@@ -1,6 +1,6 @@
 /**
- * 환경 변수 → 생성 공급자. 키가 없거나 공급자가 미선정이면 disabled(정형 답변·검색·권한·검증은 계속 동작).
- * 실제 키는 서버 환경 변수로만 주입하며 NEXT_PUBLIC_ 접두어를 쓰지 않는다.
+ * 서버 환경 변수로 생성 공급자를 선택한다. 외부 키가 없으면 disabled.
+ * 공급자는 인스턴스 생성 때 확정하며 요청 실패 시 다른 공급자로 전환하지 않는다.
  */
 import type { GenerationPort } from '../ports.ts';
 import {
@@ -8,15 +8,59 @@ import {
   DisabledGenerationProvider,
   GuardedGenerationProvider,
   MockGenerationProvider,
+  type OpenAICompatibleOptions,
 } from './providers.ts';
 
-/** RAG_GENERATION_PROVIDER, _BASE_URL, _MODEL, _API_KEY, _ALLOW_PERSONAL_DATA, _DAILY_CALL_LIMIT */
 export type GenerationEnv = Readonly<Record<string, string | undefined>>;
+
+function externalOptions(
+  env: GenerationEnv,
+  provider: string,
+): OpenAICompatibleOptions | undefined {
+  const clovaKey = env.RAG_CLOVA_API_KEY?.trim();
+  const geminiKey = env.RAG_GEMINI_API_KEY?.trim();
+
+  if (clovaKey && (provider === 'auto' || provider === 'clova')) {
+    const model = env.RAG_CLOVA_MODEL?.trim() || 'HCX-DASH-002';
+    return {
+      providerId: `clova:${model}`,
+      baseUrl: 'https://clovastudio.stream.ntruss.com/v1/openai',
+      model,
+      apiKey: clovaKey,
+    };
+  }
+  if (geminiKey && (provider === 'auto' || provider === 'gemini')) {
+    const model = env.RAG_GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
+    return {
+      providerId: `gemini:${model}`,
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      model,
+      apiKey: geminiKey,
+    };
+  }
+  if (provider === 'openai-compatible') {
+    const {
+      RAG_GENERATION_BASE_URL: baseUrl,
+      RAG_GENERATION_MODEL: model,
+      RAG_GENERATION_API_KEY: apiKey,
+    } = env;
+    if (baseUrl && model && apiKey)
+      return {
+        providerId: `openai-compatible:${model}`,
+        baseUrl,
+        model,
+        apiKey,
+        personalDataApproved: env.RAG_GENERATION_ALLOW_PERSONAL_DATA === 'true',
+      };
+  }
+  return undefined;
+}
 
 export function createGenerationProviderFromEnv(
   env: GenerationEnv,
+  fetchImpl?: typeof fetch,
 ): GenerationPort {
-  const provider = (env.RAG_GENERATION_PROVIDER ?? 'disabled').trim();
+  const provider = (env.RAG_GENERATION_PROVIDER ?? 'gemini').trim();
   const dailyCallLimit = env.RAG_GENERATION_DAILY_CALL_LIMIT
     ? Number(env.RAG_GENERATION_DAILY_CALL_LIMIT)
     : undefined;
@@ -24,23 +68,11 @@ export function createGenerationProviderFromEnv(
     return new GuardedGenerationProvider(new MockGenerationProvider('ok'), {
       dailyCallLimit,
     });
-  if (provider === 'openai-compatible') {
-    const {
-      RAG_GENERATION_BASE_URL: baseUrl,
-      RAG_GENERATION_MODEL: model,
-      RAG_GENERATION_API_KEY: apiKey,
-    } = env;
-    if (!baseUrl || !model || !apiKey) return new DisabledGenerationProvider();
-    return new GuardedGenerationProvider(
-      createOpenAICompatibleProvider({
-        providerId: `openai-compatible:${model}`,
-        baseUrl,
-        model,
-        apiKey,
-        personalDataApproved: env.RAG_GENERATION_ALLOW_PERSONAL_DATA === 'true',
-      }),
-      { dailyCallLimit },
-    );
-  }
-  return new DisabledGenerationProvider();
+  const options = externalOptions(env, provider);
+  return options
+    ? new GuardedGenerationProvider(
+        createOpenAICompatibleProvider({ ...options, fetchImpl }),
+        { dailyCallLimit },
+      )
+    : new DisabledGenerationProvider();
 }

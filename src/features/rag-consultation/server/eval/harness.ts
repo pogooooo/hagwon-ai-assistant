@@ -288,6 +288,7 @@ export async function runCase(
       Parameters<typeof createRagConsultationService>[1]
     >['refineFrame'];
     observe: (observation: ObservationV2) => void;
+    generation?: import('../ports.ts').GenerationPort;
   },
 ): Promise<CaseResult> {
   const { dataset } = prepared.suite;
@@ -344,7 +345,7 @@ export async function runCase(
         facts: prepared.store,
         documents: prepared.store,
         catalog: prepared.catalog,
-        generation: provider,
+        generation: diagnostics?.generation ?? provider,
         handoff: new InMemoryHandoffStore(),
         conversations,
         clock: new FixedClock(now),
@@ -395,7 +396,9 @@ export async function runCase(
     };
     intent = output.trace.intent as typeof intent;
     internalErrors = output.trace.internalErrors;
-    generationCalls = mock.calls.length;
+    generationCalls = diagnostics?.generation
+      ? output.trace.generationCalls
+      : mock.calls.length;
     generationInputs = mock.calls.map((call) => JSON.stringify(call));
   }
 
@@ -470,13 +473,15 @@ export async function runCase(
       cited.some((id) => e.sourceIds.includes(id)),
     generation: generationCalls <= e.generationBudgetMax,
   };
-  const correct = Object.values(checks).every(Boolean);
+  const correct =
+    violations.length === 0 && Object.values(checks).every(Boolean);
   const goldRetrieved = e.sourceIds.some((id) => touched.includes(id));
 
   let errorStage: string | null = null;
   if (!correct) {
     const expectsAnswer = e.status === 'answered' || e.status === 'partial';
-    if (
+    if (violations.length > 0) errorStage = 'guard';
+    else if (
       internalErrors.some((x) =>
         ['NUMBER_UNSUPPORTED', 'CITATION_UNSUPPORTED', 'WRONG_ENTITY'].includes(
           x,

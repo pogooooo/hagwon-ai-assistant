@@ -192,7 +192,13 @@ const oracle: ChunkRanker = {
     ];
   },
 };
-const variant: Variant = { id: 'engine', kind: 'engine', ranker: () => oracle };
+const planned = process.argv.includes('--planned');
+const variant: Variant = {
+  id: planned ? 'engine-planned' : 'engine',
+  kind: 'engine',
+  engine: planned ? 'planned' : 'legacy',
+  ranker: () => oracle,
+};
 const prepared = await prepareSuite(suite, variant);
 const results: Array<{
   id: string;
@@ -314,6 +320,7 @@ const summary = ['A', 'B', 'C', 'D'].map((mode) => {
 });
 console.table(summary);
 writeFileSync(
-  process.argv[2] ?? 'oracle-results.json',
+  process.argv.slice(2).find((arg) => !arg.startsWith('--')) ??
+    'oracle-results.json',
   JSON.stringify({ summary, results }, null, 2) + '\n',
 );

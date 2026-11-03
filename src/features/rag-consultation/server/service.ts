@@ -7,6 +7,7 @@
  */
 import type { RagAnswer, RagCitation } from '../contract.ts';
 import { collectEvidence, validateEvidence } from './answer/evidence-bundle.ts';
+import { answerFromScheduleEvidence } from './answer/schedule-evidence.ts';
 import { answerFromCostEvidence } from './answer/cost-evidence.ts';
 import { composeRequests } from './answer/composer.ts';
 import { isRosterRequest, planQuery, requiredCostSlots } from './query/plan.ts';
@@ -541,6 +542,8 @@ export function createRagConsultationService(
         );
       const cost = await answerFromCostEvidence(ctx);
       if (cost) return cost;
+      const schedule = await answerFromScheduleEvidence(ctx);
+      if (schedule) return schedule;
       // A monthly price request may precede an explicit textbook question.
       // Keep both topics when the legacy structured facts are the only source.
       if (

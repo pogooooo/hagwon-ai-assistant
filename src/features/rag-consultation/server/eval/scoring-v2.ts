@@ -93,24 +93,36 @@ export function scoreV2(gold: GoldV2, observation: ObservationV2) {
     throw new Error('V2 requires explicit claim and evidence sets for answers');
   }
   const slots = gold.slots.map((slot) => {
-    const claim = answer.answer
+    const claimLines = answer.answer
       .split('\n')
-      .some((line) => hasTerms(line, slot.claim));
-    const cited = slot.evidence.some((set) =>
-      set.every((ref) =>
-        (observation.citationLocations ?? answer.citations).some((citation) =>
-          matchesCitation(citation, ref),
-        ),
+      .flatMap((line, index) =>
+        hasTerms(line, slot.claim) ? [index + 1] : [],
+      );
+    const citations = observation.citationLocations ?? answer.citations;
+    const evidenceSets = slot.evidence.map((set) => ({
+      missingCitations: set.filter(
+        (ref) => !citations.some((citation) => matchesCitation(citation, ref)),
       ),
-    );
-    const retrieved = slot.evidence.some((set) =>
-      set.every((ref) =>
+      missingRetrieval: set.filter((ref) =>
         ref.chunkId
-          ? observation.retrievedChunkIds.includes(ref.chunkId)
-          : observation.retrievedSourceIds.includes(ref.sourceId),
+          ? !observation.retrievedChunkIds.includes(ref.chunkId)
+          : !observation.retrievedSourceIds.includes(ref.sourceId),
       ),
+    }));
+    const claim = claimLines.length > 0;
+    const cited = evidenceSets.some((set) => set.missingCitations.length === 0);
+    const retrieved = evidenceSets.some(
+      (set) => set.missingRetrieval.length === 0,
     );
-    return { id: slot.id, claim, cited, retrieved, fulfilled: claim && cited };
+    return {
+      id: slot.id,
+      claim,
+      cited,
+      retrieved,
+      fulfilled: claim && cited,
+      claimLines,
+      evidenceSets,
+    };
   });
   const missing = (gold.missingFields ?? []).every((field) =>
     (answer.missingFields ?? []).some((actual) => hasTerms(actual, [field])),

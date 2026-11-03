@@ -1,6 +1,11 @@
 import { canReadRecord } from '../retrieval/access-filter.ts';
 import { compactText } from '../text/normalize.ts';
-import { isValidAt } from '../text/time.ts';
+import {
+  formatKstDate,
+  isValidAt,
+  kstStartOfDay,
+  toKstDate,
+} from '../text/time.ts';
 import type { ApprovedFact, RagChunk } from '../types.ts';
 import {
   abstain,
@@ -12,6 +17,7 @@ import {
   type AnswerDraft,
   type EvidenceExcerpt,
 } from './context.ts';
+import { formatKrw } from './format.ts';
 import { explicitClassIds } from './info.ts';
 import { supportsExcerpt } from './verify.ts';
 
@@ -25,6 +31,12 @@ const COST_KEYS = {
 const AMOUNT =
   /^(?:(?:월|매월|\d+\s*(?:주|개월)(?:당|\s*기준)?)\s*)?(\d{1,3}(?:,\d{3})+|\d+)\s*원(?:\s*\((?:월|\d+\s*(?:주|개월))(?:당|\s*기준)?\))?$/;
 
+/** Compare billing units independently of how the original amount is printed. */
+function billingPeriods(text: string): string[] {
+  return [...text.matchAll(/(\d+)\s*(개월|주)|매월|월/g)].map((match) =>
+    match[1] ? `${Number(match[1])}${match[2]}` : '1개월',
+  );
+}
 interface CostEvidence extends EvidenceExcerpt {
   classId: string;
   field: CostSlot;
@@ -114,6 +126,76 @@ function selectCosts(
   });
 }
 
+async function answerUpcomingFee(
+  ctx: AnswerContext,
+  classId: string,
+): Promise<AnswerDraft> {
+  const year = toKstDate(ctx.asOf).year + 1;
+  const from = kstStartOfDay({ year, month: 1, day: 1 });
+  const until = kstStartOfDay({ year: year + 1, month: 1, day: 1 });
+  const scope = {
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    factTypes: ['monthly_fee'] as const,
+  };
+  const eligible = (fact: ApprovedFact) =>
+    fact.academyId === ctx.access.academyId &&
+    fact.subjectType === 'class' &&
+    fact.subjectId === classId &&
+    fact.factType === 'monthly_fee' &&
+    fact.approvalStatus === 'approved';
+  const facts = await ctx.facts.queryApprovedFacts({
+    ...scope,
+    startsIn: { from, until },
+  });
+  recordFacts(ctx.trace, facts);
+  const first = facts
+    .filter(
+      (fact) =>
+        eligible(fact) && fact.validFrom >= from && fact.validFrom < until,
+    )
+    .sort((a, b) => a.validFrom - b.validFrom)[0];
+  if (!first || first.value.kind !== 'money')
+    return abstain(
+      '승인된 내년 수강료 개정 자료를 확인할 수 없습니다.',
+      'INSUFFICIENT_EVIDENCE',
+    );
+
+  const at = first.validFrom;
+  const amount = first.value.amount;
+  const effective = await ctx.facts.queryApprovedFacts({
+    ...scope,
+    effectiveAt: at,
+  });
+  recordFacts(ctx.trace, effective);
+  if (
+    effective.some(
+      (fact) =>
+        eligible(fact) &&
+        isValidAt(fact.validFrom, fact.validTo, at) &&
+        (fact.value.kind !== 'money' || fact.value.amount !== amount),
+    )
+  )
+    return abstain(
+      '같은 시점의 승인 자료에서 비용이 서로 다릅니다.',
+      'CONFLICTING_EVIDENCE',
+    );
+  ctx.trace.intent = 'upcoming_fee';
+  return {
+    status: 'answered',
+    text:
+      className(ctx.catalog, classId) +
+      ' 수강료는 ' +
+      formatKstDate(at) +
+      '부터 ' +
+      formatKrw(amount) +
+      '입니다.',
+    citations: [{ kind: 'fact', fact: first, effectiveAt: at }],
+    usedFacts: [first],
+    instants: [at],
+  };
+}
 /** Returns undefined for requests whose semantics still use the legacy adapter. */
 export async function answerFromCostEvidence(
   ctx: AnswerContext,
@@ -125,12 +207,32 @@ export async function answerFromCostEvidence(
       ? ctx.plannedRequest.costSlots
       : requiredCostSlots(frame);
   if (
+    classIds.length === 1 &&
+    fields.length === 1 &&
+    fields[0] === 'fee' &&
+    frame.topics.every(({ id }) => id === 'fee') &&
+    /내년|다음\s*해/.test(frame.normalized) &&
+    /개정|인상|오르|올라|바뀌/.test(frame.normalized) &&
+    frame.months.length === 0 &&
+    frame.explicitDates.length === 0 &&
+    !frame.flags.compare
+  )
+    return answerUpcomingFee(ctx, classIds[0]);
+  const distinctMaterials =
+    fields.includes('textbook') && fields.includes('supplies');
+  if (distinctMaterials && /포함|들어\s*있/.test(frame.normalized))
+    return abstain(
+      '교재비와 재료비의 포함 관계를 확인할 수 없습니다.',
+      'INSUFFICIENT_EVIDENCE',
+    );
+  if (
     !classIds.length ||
     !fields.length ||
     !frame.topics.every(({ id }) => id === 'fee' || id === 'material') ||
     frame.flags.compare ||
     frame.flags.previousRevision ||
-    frame.relativePeriod !== null ||
+    (frame.relativePeriod !== null &&
+      !(frame.relativePeriod === 'this_month' && distinctMaterials)) ||
     frame.months.length > 0 ||
     frame.explicitDates.length > 0 ||
     frame.amountsKrw.length ||
@@ -164,8 +266,6 @@ export async function answerFromCostEvidence(
   const candidates = hits.flatMap(({ chunk }) =>
     selectCosts(ctx, chunk, classIds, fields, at),
   );
-  const distinctMaterials =
-    fields.includes('textbook') && fields.includes('supplies');
   if (!candidates.length)
     return distinctMaterials
       ? abstain(
@@ -214,20 +314,32 @@ export async function answerFromCostEvidence(
           value.kind === 'money' ? [value.amount] : [],
         ),
       ]);
+      const explicitPeriodOptions = options.filter(
+        ({ label, value }) => billingPeriods(label + ' ' + value).length > 0,
+      );
       if (
         amounts.size > 1 ||
-        new Set(options.map(({ label, value }) => compactText(label + value)))
-          .size > 1
+        (field === 'material' &&
+          new Set(options.map(({ label }) => label.includes('교재비'))).size >
+            1) ||
+        new Set(
+          options.flatMap(({ label, value }) =>
+            billingPeriods(label + ' ' + value),
+          ),
+        ).size > 1
       ) {
         return abstain(
           '같은 시점의 승인 자료에서 비용이 서로 다릅니다. 담당자에게 확인해 주세요.',
           'CONFLICTING_EVIDENCE',
         );
       }
+      const comparable = explicitPeriodOptions.length
+        ? explicitPeriodOptions
+        : options;
       const choice =
-        options.find((option) =>
+        comparable.find((option) =>
           scopedFacts.some((fact) => fact.sourceId === option.chunk.sourceId),
-        ) ?? options[0];
+        ) ?? comparable[0];
       if (choice) {
         selected.push(choice);
         usedFacts.push(

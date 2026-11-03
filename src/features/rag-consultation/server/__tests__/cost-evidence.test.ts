@@ -67,7 +67,7 @@ async function createFixture() {
       },
       { engine: 'planned', userId: scope.actorId, asOf, question: query },
     );
-  return { register, ask };
+  return { register, ask, store };
 }
 
 test('비용 행의 기간·값·열을 보존하고 미승인·만료·다른 반 자료를 제외한다', async () => {
@@ -161,4 +161,152 @@ test('교재비와 재료비는 다른 표 열로 확인하고 하나만 있으�
     complete.citations.map(({ documentId }) => documentId),
     ['BOOK', 'MATERIAL'],
   );
+});
+
+test('이번 달의 교재비와 재료비를 별개로 확인하고 만료 자료를 제외한다', async () => {
+  const { register, ask } = await createFixture();
+  const current =
+    '| 반 | 교재비 | 재료비 |\n|---|---|---|\n| 금속 조형반 | 17,000원 | 23,000원 |';
+  await register('CURRENT', current, null);
+  await register(
+    'EXPIRED',
+    current.replace('23,000원', '99,000원'),
+    null,
+    true,
+    '2026-11-01T00:00:00+09:00',
+  );
+  const { answer, trace } = await ask(
+    '금속 조형반 이번 달 교재비와 재료비 각각 얼마예요?',
+  );
+  assert.equal(trace.intent, 'cost_evidence');
+  assert.equal(answer.status, 'answered', answer.answer);
+  assert.match(answer.answer, /교재비: 17,000원/);
+  assert.match(answer.answer, /재료비: 23,000원/);
+  assert.doesNotMatch(answer.answer, /99,000원/);
+});
+
+test('비용 액수는 포함 관계를 증명하지 않는다', async () => {
+  const { register, ask } = await createFixture();
+  await register(
+    'COST',
+    '| 반 | 교재비 | 재료비 |\n|---|---|---|\n| 금속 조형반 | 17,000원 | 23,000원 |',
+    null,
+  );
+  const { answer } = await ask('금속 조형반 교재비는 재료비에 포함인가요?');
+  assert.equal(answer.status, 'abstained');
+  assert.deepEqual(answer.citations, []);
+});
+
+test('같은 청구 금액의 숫자 서식은 충돌이 아니지만 청구 단위는 충돌이다', async () => {
+  const { register, ask } = await createFixture();
+  await register(
+    'MONTHLY',
+    '| 반 | 월 수강료 |\n|---|---|\n| 금속 조형반 | 17,000원 |',
+    null,
+  );
+  await register(
+    'EQUIVALENT',
+    '| 반 | 매월 수강료 |\n|---|---|\n| 금속 조형반 | 17000원 |',
+    null,
+  );
+  const question = '금속 조형반 수강료 얼마예요?';
+  const matching = await ask(question);
+  assert.equal(matching.answer.status, 'answered', matching.answer.answer);
+  assert.match(matching.answer.answer, /17,?000원/);
+  await register(
+    'DIFFERENT_PERIOD',
+    '| 반 | 6주 수강료 |\n|---|---|\n| 금속 조형반 | 17,000원 |',
+    null,
+  );
+  const conflict = await ask(question);
+  assert.equal(conflict.answer.status, 'abstained');
+  assert.equal(conflict.trace.reasonCode, 'CONFLICTING_EVIDENCE');
+});
+
+test('교습비와 담당 강사를 한 문장에 물으면 근거가 있는 비용만 부분 답변한다', async () => {
+  const { register, ask } = await createFixture();
+  await register('FEE_ONLY', table);
+  const { answer } = await ask('금속 조형반 교습비랑 담당 강사는 누구예요?');
+  assert.equal(answer.status, 'partial', answer.answer);
+  assert.match(answer.answer, /190,000원/);
+  assert.ok(answer.missingFields?.length);
+  assert.deepEqual(
+    answer.citations.map(({ documentId }) => documentId),
+    ['FEE_ONLY'],
+  );
+});
+
+test('내년 승인 수강료의 첫 적용일과 금액을 조회하고 같은 시점 충돌을 감지한다', async () => {
+  const { ask, store } = await createFixture();
+  const registerChange = async (
+    documentId: string,
+    validFrom: string,
+    amount: number,
+    approve: boolean,
+  ) => {
+    const sourceId = documentId + ':r1:body';
+    const result = await store.upsertIndexedRevision({
+      approve,
+      document: {
+        academyId: scope.academyId,
+        classId: 'METAL',
+        documentId,
+        revision: 1,
+        documentType: 'fee',
+        visibility: 'academy_public',
+        title: '조형 수업 비용',
+        validFrom,
+        approvedAt: '2026-08-01T00:00:00+09:00',
+        text: '금속 조형반 수강료 ' + amount.toLocaleString('en-US') + '원',
+      },
+      facts: [
+        {
+          factId: documentId + '_FACT',
+          academyId: scope.academyId,
+          sourceId,
+          documentId,
+          revision: 1,
+          subjectType: 'class',
+          subjectId: 'METAL',
+          factType: 'monthly_fee',
+          value: { kind: 'money', amount, currency: 'KRW' },
+          period: null,
+          validFrom,
+          approvalStatus: approve ? 'approved' : 'pending_review',
+        },
+      ],
+    });
+    assert.notEqual(result.status, 'rejected');
+  };
+  await registerChange('APPROVED', '2027-01-09T00:00:00+09:00', 180_000, true);
+  await registerChange(
+    'UNAPPROVED',
+    '2027-01-01T00:00:00+09:00',
+    99_000,
+    false,
+  );
+  await registerChange(
+    'FAR_FUTURE',
+    '2028-01-01T00:00:00+09:00',
+    360_000,
+    true,
+  );
+  const query = '금속 조형반 내년 수강료가 얼마로 오르나요? 언제부터요?';
+  const upcoming = await ask(query);
+  assert.equal(upcoming.trace.intent, 'upcoming_fee');
+  assert.equal(upcoming.answer.status, 'answered', upcoming.answer.answer);
+  assert.match(upcoming.answer.answer, /2027년 1월 9일부터 180,000원/);
+  assert.deepEqual(
+    upcoming.answer.citations.map(({ documentId }) => documentId),
+    ['APPROVED'],
+  );
+  await registerChange(
+    'OVERLAPPING',
+    '2026-08-01T00:00:00+09:00',
+    150_000,
+    true,
+  );
+  const conflict = await ask(query);
+  assert.equal(conflict.answer.status, 'abstained');
+  assert.equal(conflict.trace.reasonCode, 'CONFLICTING_EVIDENCE');
 });

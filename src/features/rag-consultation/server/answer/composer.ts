@@ -14,14 +14,12 @@ export function composeRequests(
   );
   if (gave.length === 0)
     return drafts.find((d) => d.status === 'handoff') ?? drafts[0];
-  const missing = drafts.flatMap((d, i) =>
-    d.status === 'answered'
+  const missing = drafts.flatMap((draft, index) =>
+    draft.status === 'answered'
       ? []
-      : d.status === 'partial'
-        ? (d.missingFields ?? [])
-        : d.missingFields?.length
-          ? d.missingFields
-          : [parts[i].replace(/[?？]$/, '')],
+      : draft.missingFields?.length
+        ? draft.missingFields
+        : [parts[index].replace(/[?？]$/, '')],
   );
   const lines = [...new Set(gave.flatMap((d) => d.text.split('\n')))];
   if (
