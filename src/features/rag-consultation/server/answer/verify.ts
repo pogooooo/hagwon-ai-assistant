@@ -1,3 +1,4 @@
+import type { EvidenceExcerpt } from './context.ts';
 /**
  * 답변 사후 검사(CiteFix 아이디어의 규칙형 변형, 추가 API 호출 없음).
  * 답변에 등장하는 숫자가 근거 사실·날짜·코드 계산값에서 왔는지, 다른 학생/학원 식별자가
@@ -118,4 +119,33 @@ export function findForbiddenNames(
     .flatMap((entry) =>
       entry.names.filter((name) => mentionsName(normalized, name)),
     );
+}
+
+/** Verify an extractive claim against the original selected cells or paragraph. */
+export function supportsExcerpt(excerpt: EvidenceExcerpt): boolean {
+  const normalize = (value: string) =>
+    value
+      .replace(/\*\*|__/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const { line, chunk, tableColumns } = excerpt;
+  if (!normalize(line)) return false;
+  if (!tableColumns) return normalize(chunk.text).includes(normalize(line));
+  const { header, cells, kind } = chunk.location;
+  if (kind !== 'table_row' || !header || !cells) return false;
+  const indices = [...new Set([0, ...tableColumns])];
+  if (
+    indices.some(
+      (index) =>
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= header.length ||
+        index >= cells.length,
+    )
+  )
+    return false;
+  const projection = indices
+    .map((index) => header[index] + ': ' + cells[index])
+    .join(' / ');
+  return normalize(projection) === normalize(line);
 }

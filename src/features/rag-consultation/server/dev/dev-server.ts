@@ -296,6 +296,7 @@ async function devApi(request: Request, path: string): Promise<Response> {
     };
     const ports = instrumentStore(store, recorder, documentIds);
     const devService = createRagConsultationService({
+      engine: process.env.RAG_DEV_ENGINE === 'planned' ? 'planned' : 'legacy',
       facts: ports.facts,
       documents: ports.documents,
       catalog,

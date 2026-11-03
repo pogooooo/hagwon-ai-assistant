@@ -23,6 +23,7 @@ export interface AnswerContext {
   catalog: AcademyCatalog;
   frame: QueryFrame;
   question: string;
+  engine?: 'legacy' | 'planned';
   asOf: number;
   state: ConversationState | null;
   config: RagConfig;
@@ -46,7 +47,14 @@ export type CitationRequest =
     }
   | { kind: 'chunk'; chunk: RagChunk; tableColumns?: readonly number[] };
 
+export interface EvidenceExcerpt {
+  line: string;
+  chunk: RagChunk;
+  tableColumns?: readonly number[];
+}
+
 export interface AnswerDraft {
+  excerpts?: EvidenceExcerpt[];
   status: RagAnswerStatus;
   text: string;
   citations: CitationRequest[];

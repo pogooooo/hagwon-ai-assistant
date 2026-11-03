@@ -6,6 +6,10 @@
  *       → 인용·숫자·대상 사후 검사 → 답변/보류/확인/거부/담당자 연결
  */
 import type { RagAnswer, RagCitation } from '../contract.ts';
+import { collectEvidence, validateEvidence } from './answer/evidence-bundle.ts';
+import { composeRequests } from './answer/composer.ts';
+import { planQuery } from './query/plan.ts';
+export { splitQuestion } from './query/plan.ts';
 import { answerAdvice } from './answer/advice.ts';
 import { answerAnalysis } from './answer/analysis.ts';
 import {
@@ -35,6 +39,7 @@ import {
   findForbiddenIdentifiers,
   findForbiddenNames,
   findUnsupportedNumbers,
+  supportsExcerpt,
 } from './answer/verify.ts';
 import { DEFAULT_RAG_CONFIG, type RagConfig } from './config.ts';
 import type {
@@ -62,7 +67,10 @@ export interface RagConsultationDeps {
   logger?: RagLogger;
   config?: Partial<RagConfig>;
   createRequestId?: () => string;
+  engine?: 'legacy' | 'planned';
 }
+
+export type FrameRefinement = Pick<QueryFrame, 'classIds' | 'topics'>;
 
 export interface RagQueryInput {
   /** 반드시 서버 세션에서 계산한 값 */
@@ -120,108 +128,13 @@ function studentClassIdsFor(
   return [...new Set(classIds)];
 }
 
-/** 질문을 물음표·마침표 경계로 나눈다(내용어가 있는 부분이 둘 이상일 때만). */
-export function splitQuestion(question: string): string[] {
-  const parts = question
-    .split(/(?<=[?？])\s*|(?<=[다요]\.)\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  // 질문 형태(물음표·의문사·의문 어미)인 부분만 따로 답한다. "~하고 싶다는데" 같은 사정 설명은 앞 질문에 붙인다.
-  const isQuestion = (part: string) =>
-    /[?？]$|얼마|언제|몇|어디|누구|무엇|뭐|뭘|어떻게|왜|어느|무슨|(나요|까요|가요|어요|아요|죠|니|냐|래요|되나|있나)\s*[.?？]?$/.test(
-      part,
-    );
-  const merged: string[] = [];
-  for (const part of parts) {
-    if (
-      merged.length > 0 &&
-      (!isQuestion(part) || keywordsOf(part).length === 0)
-    )
-      merged[merged.length - 1] = `${merged[merged.length - 1]} ${part}`;
-    else merged.push(part);
-  }
-  const meaningful = merged.filter((part) => keywordsOf(part).length > 0);
-  return meaningful.length >= 2 && meaningful.length <= 4 ? meaningful : [];
-}
-
-/** 부분 질문이 대상(학생·반)·시점을 말하지 않으면 전체 문장의 것을 이어받는다. */
-function inheritAnchors(part: QueryFrame, full: QueryFrame): QueryFrame {
-  const out: QueryFrame = { ...part };
-  const ownTarget =
-    part.matchedStudentIds.length > 0 ||
-    part.unresolvedRelationWords.length > 0 ||
-    part.classIds.length > 0 ||
-    part.selfReference ||
-    part.groupReference;
-  if (!ownTarget) {
-    out.matchedStudentIds = full.matchedStudentIds;
-    out.unresolvedRelationWords = full.unresolvedRelationWords;
-    out.classIds = full.classIds;
-    out.negatedClassIds = full.negatedClassIds;
-    out.selfReference = full.selfReference;
-    out.groupReference = full.groupReference;
-    out.subjects = part.subjects.length ? part.subjects : full.subjects;
-  }
-  const ownTime =
-    part.explicitDates.length > 0 ||
-    part.months.length > 0 ||
-    part.relativeDay !== null ||
-    part.relativeWeek !== null ||
-    part.relativePeriod !== null;
-  if (!ownTime) {
-    out.explicitDates = full.explicitDates;
-    out.months = full.months;
-    out.relativeDay = full.relativeDay;
-    out.relativeWeek = full.relativeWeek;
-    out.relativePeriod = full.relativePeriod;
-  }
-  if (part.units.length === 0) out.units = full.units;
-  return out;
-}
-
-/** 부분 답변 합치기: 거부가 하나라도 있으면 거부(fail-closed), 확인 질문이 있으면 확인 질문, 일부만 답하면 일부 답변. */
-function mergeDrafts(drafts: AnswerDraft[], parts: string[]): AnswerDraft {
-  const denied = drafts.find((d) => d.status === 'denied');
-  if (denied) return denied;
-  const clarify = drafts.find((d) => d.status === 'clarify');
-  if (clarify) return clarify;
-  const gave = drafts.filter(
-    (d) => d.status === 'answered' || d.status === 'partial',
-  );
-  if (gave.length === 0)
-    return drafts.find((d) => d.status === 'handoff') ?? drafts[0];
-  const missing = drafts.flatMap((d, i) =>
-    d.status === 'answered'
-      ? []
-      : d.status === 'partial'
-        ? (d.missingFields ?? [])
-        : d.missingFields?.length
-          ? d.missingFields
-          : [parts[i].replace(/[?？]$/, '')],
-  );
-  const lines = [...new Set(gave.flatMap((d) => d.text.split('\n')))];
-  if (
-    missing.length > 0 &&
-    !gave.some((d) => d.text.includes('확인되지 않은 항목'))
-  )
-    lines.push(`확인되지 않은 항목: ${missing.join(', ')}.`);
-  return {
-    status: missing.length > 0 ? 'partial' : 'answered',
-    text: lines.join('\n'),
-    citations: gave.flatMap((d) => d.citations),
-    usedFacts: gave.flatMap((d) => d.usedFacts),
-    missingFields: missing.length > 0 ? missing : undefined,
-    reasonCode: missing.length > 0 ? 'PARTIAL_EVIDENCE' : undefined,
-    derivedNumbers: gave.flatMap((d) => d.derivedNumbers ?? []),
-    instants: gave.flatMap((d) => d.instants ?? []),
-    generated: gave.some((d) => d.generated),
-    internalErrors: drafts.flatMap((d) => d.internalErrors ?? []),
-    conversationUpdate: gave.at(-1)?.conversationUpdate,
-  };
-}
-
 export function createRagConsultationService(
   deps: RagConsultationDeps,
+  // Server-side diagnostics only. Public request fields cannot override the parser.
+  diagnostics?: {
+    refineFrame?: (frame: Readonly<QueryFrame>) => FrameRefinement;
+    observeLocations?: (citations: RagCitation[]) => void;
+  },
 ): RagConsultationService {
   const config: RagConfig = { ...DEFAULT_RAG_CONFIG, ...deps.config };
   const createRequestId =
@@ -329,8 +242,14 @@ export function createRagConsultationService(
       access.allowedStudentIds.length > 0 ||
       hasStudentReference ||
       asksResultValues;
+    const teacherIdentity =
+      hasInfoTopics &&
+      ctx.frame.topics.every((topic) => topic.id === 'teacher') &&
+      /누구|누군지|누가|이름|성함/.test(frame.normalized) &&
+      !asksResultValues;
     const isAnalysis =
       canHaveAnalysis &&
+      !teacherIdentity &&
       (frame.hasAnalysisTerms ||
         flags.generationRequest ||
         periodOnlyQuestion ||
@@ -609,10 +528,45 @@ export function createRagConsultationService(
         },
       };
     }
+    const asksMinutes =
+      /몇\s*분/.test(frame.normalized) &&
+      /수업|한\s*번|1회/.test(frame.normalized);
+    const asksHours =
+      /몇\s*시간/.test(frame.normalized) &&
+      /수업|한\s*달|월/.test(frame.normalized);
+    if (asksMinutes || asksHours) {
+      const evidence = await retrieveEvidence(ctx, {
+        documentTypes: ['fee', 'academy_info', 'schedule'],
+        limit: 18,
+        searchTerms: [
+          '수업 시간',
+          '수업 횟수',
+          ...(asksHours ? ['월 수업 시간'] : []),
+        ],
+      });
+      return answerFromDocuments(ctx, evidence, (line) => {
+        const durations = line.replace(/\d{1,2}\s*시\s*\d{1,2}\s*분/g, '');
+        return (
+          (!asksMinutes || /(?:^|[^\d:])\d+\s*분(?!의)/.test(durations)) &&
+          (!asksHours || /\d+\s*시간/.test(durations))
+        );
+      });
+    }
     const issuance = issuanceRequirement(ctx.question);
     if (issuance)
       return answerFromDocuments(ctx, await retrieveEvidence(ctx), issuance);
     const types = expectedAnswerTypes(ctx.question);
+    if (types.includes('deadline') && /시간표/.test(frame.normalized)) {
+      const evidence = await retrieveEvidence(ctx, {
+        documentTypes: ['schedule', 'announcement'],
+        searchTerms: ['적용 기간', '정규 시간표', '종료'],
+        limit: 20,
+      });
+      const deadline = await answerFromDocuments(ctx, evidence, (line) =>
+        satisfiesAnswerTypes(line, ['deadline']),
+      );
+      if (deadline.status === 'answered') return deadline;
+    }
     const noTopic = frame.topics.length === 0;
     const weak = noTopic || hasOnlyGenericTopics(ctx);
     // (시험 후 제외) 자료에 없는 낱말을 묻는 질문을 보류하는 규칙(unknownConcepts)은 형태소 분석 없이
@@ -658,6 +612,10 @@ export function createRagConsultationService(
     const tryEvidence = async (topicIds: string[] = []) => {
       const evidence = await retrieveEvidence(ctx, {
         documentTypes: documentTypesFor(topicIds),
+        searchTerms:
+          types.includes('deadline') && /시간표|일정/.test(frame.normalized)
+            ? ['적용 기간', '정규 시간표', '종료']
+            : undefined,
       });
       return answerByPlan(
         ctx,
@@ -757,6 +715,20 @@ export function createRagConsultationService(
     });
 
     if (draft.citations.length === 0) return failClosed('CITATION_UNSUPPORTED');
+    if (
+      draft.excerpts?.some(
+        (excerpt) =>
+          !supportsExcerpt(excerpt) ||
+          !draft.citations.some(
+            (citation) =>
+              citation.kind === 'chunk' &&
+              citation.chunk === excerpt.chunk &&
+              citation.tableColumns === excerpt.tableColumns,
+          ),
+      )
+    ) {
+      return failClosed('CITATION_UNSUPPORTED');
+    }
 
     // 인용 재검증: 이 요청의 권한·승인·유효 버전으로 다시 조회되는 출처만 표시
     const merged = new Map<string, RagCitation & { locations: Set<string> }>();
@@ -776,6 +748,12 @@ export function createRagConsultationService(
         effectiveAt: isFact ? request.effectiveAt : undefined,
         includeHistory: isFact ? request.includeHistory : undefined,
         locate: isFact ? request.fact : undefined,
+        locateClassNames:
+          isFact && request.fact.subjectType === 'class'
+            ? ctx.catalog.classes
+                .filter((klass) => klass.classId === request.fact.subjectId)
+                .flatMap((klass) => [klass.name, ...klass.aliases])
+            : undefined,
       });
 
       if (!summary) return failClosed('CITATION_UNSUPPORTED');
@@ -899,6 +877,13 @@ export function createRagConsultationService(
         location: locations.size > 0 ? [...locations].join(', ') : undefined,
       }),
     );
+    diagnostics?.observeLocations?.(
+      [...merged.values()].flatMap(({ locations, ...citation }) =>
+        locations.size
+          ? [...locations].map((location) => ({ ...citation, location }))
+          : [citation],
+      ),
+    );
     return { ...draft, resolvedCitations };
   }
 
@@ -953,6 +938,17 @@ export function createRagConsultationService(
               catalog,
               config,
             });
+            const refined = diagnostics?.refineFrame?.(frame);
+            if (refined) {
+              frame.classIds = refined.classIds.filter(
+                (id) =>
+                  !frame.negatedClassIds.includes(id) &&
+                  catalog.classes.some((klass) => klass.classId === id),
+              );
+              frame.topics = config.topics.filter((topic) =>
+                refined.topics.some((selected) => selected.id === topic.id),
+              );
+            }
             const ctx: AnswerContext = {
               access: input.access,
               catalog,
@@ -963,6 +959,7 @@ export function createRagConsultationService(
                 input.studentIdHint,
               ),
               question,
+              engine: deps.engine,
               asOf: started,
               state,
               config,
@@ -972,86 +969,80 @@ export function createRagConsultationService(
               clock: deps.clock,
               trace,
             };
-            const sentences = splitQuestion(question);
-            const clauses =
-              sentences.length === 0
-                ? question
-                    .split(/(?:이랑|랑|하고|과|와)\s+|\s+(?:및|그리고)\s+/)
-                    .map((clause) => clause.trim())
-                : [];
-            const inline =
-              clauses.length === 2 &&
-              clauses.every(Boolean) &&
-              /(?:[월화수목금토일]요일|\d{1,2}월\s*\d{1,2}일)/.test(clauses[1]);
-            const parts = inline ? clauses : sentences;
-            // 문장 전체에 적용되는 보안·정책 판단(다른 학원·전체 명단·원인/예측·미승인 프로그램)이 있으면 나누지 않는다.
-            const blocked =
-              frame.flags.crossTenant ||
-              frame.flags.bulkStudent ||
-              frame.flags.shareOrPermission ||
-              frame.flags.sessionChange ||
-              frame.flags.citationForgery ||
-              frame.flags.causal ||
-              frame.flags.attitude ||
-              frame.flags.prediction ||
-              frame.flags.misattribution ||
-              frame.unknownPrograms.length > 0 ||
-              frame.unauthorizedStudentRefs.length > 0;
-            const parsedParts = parts.map((part) =>
-              parseQuery(part, { access: input.access, catalog, config }),
+            const plan = planQuery(
+              question,
+              frame,
+              input.access,
+              catalog,
+              config,
+              deps.engine === 'planned',
             );
-            const shared = inline ? parsedParts[0] : frame;
-            const partFrames = parsedParts.map((part) =>
-              inheritAnchors(part, shared),
-            );
-            const distinctInlineTopics =
-              !inline ||
-              (parsedParts.every((part) => part.topics.length > 0) &&
-                !parsedParts[0].topics.some((topic) =>
-                  parsedParts[1].topics.some((other) => other.id === topic.id),
-                ));
-            // 부분마다 스스로 해석 가능한 주제(일반어가 아닌 주제어)나 분석 용어가 있을 때만 나눈다
-            // ("셔틀 몇 시에 와요? 이용료도 알려주세요"의 뒤 문장처럼 앞 문장에 기대는 경우는 통째로 처리).
-            const selfContained = (part: QueryFrame) =>
-              part.hasAnalysisTerms ||
-              part.topics.some((topic) => {
-                const matched = topic.terms.filter((term) =>
-                  part.compact.includes(term.replace(/\s/g, '')),
-                );
-                return matched.some(
-                  (term) => !topic.genericTerms?.includes(term),
-                );
-              });
             let draft: AnswerDraft;
-            if (
-              parts.length >= 2 &&
-              !blocked &&
-              distinctInlineTopics &&
-              partFrames.every(selfContained)
-            ) {
-              // 여러 질문이 섞인 문장: 부분마다 따로 해석·답변하고 합친다(학생·반·날짜는 전체 문장에서 이어받음).
+            if (plan.requests.length > 1) {
               const drafts: AnswerDraft[] = [];
-              for (const [index, part] of parts.entries()) {
-                const partFrame = partFrames[index];
-                const answer = await route(
-                  {
-                    ...ctx,
-                    frame: partFrame,
-                    question: part,
-                    studentClassIds: studentClassIdsFor(
-                      input.access,
-                      partFrame,
-                      input.studentIdHint,
-                    ),
-                  },
+              for (const [index, request] of plan.requests.entries()) {
+                const { frame: partFrame, question: part } = request;
+                let classes = studentClassIdsFor(
+                  input.access,
+                  partFrame,
                   input.studentIdHint,
                 );
-                // 연결된 절의 정형 요청을 다른 절의 근거로 대신 답하지 않는다.
-                const asksAmount =
-                  inline &&
-                  partFrame.topics.some((topic) =>
-                    ['fee', 'material'].includes(topic.id),
+                if (
+                  plan.analysisAndTeacher &&
+                  index === 1 &&
+                  partFrame.classIds.length === 0
+                ) {
+                  // Bind a follow-up to the authorized learner selected by the first clause.
+                  const resolved = trace.targetStudentIds.filter((id) =>
+                    input.access.allowedStudentIds.includes(id),
                   );
+                  classes = studentClassIdsFor(
+                    input.access,
+                    { ...partFrame, matchedStudentIds: resolved },
+                    input.studentIdHint,
+                  ).filter(
+                    (id) =>
+                      partFrame.subjects.length === 0 ||
+                      catalog.classes.some(
+                        (klass) =>
+                          klass.classId === id &&
+                          klass.subject &&
+                          partFrame.subjects.includes(klass.subject),
+                      ),
+                  );
+                  if (resolved.length !== 1 || classes.length !== 1) {
+                    drafts.push(
+                      abstain(
+                        '담당 강사를 확인할 반이나 과목을 지정해 주세요.',
+                        'AMBIGUOUS_SUBJECT',
+                      ),
+                    );
+                    continue;
+                  }
+                }
+                const partContext = {
+                  ...ctx,
+                  frame: partFrame,
+                  question: part,
+                  studentClassIds:
+                    deps.engine === 'planned'
+                      ? classes
+                      : studentClassIdsFor(
+                          input.access,
+                          partFrame,
+                          input.studentIdHint,
+                        ),
+                };
+                const proposal = await route(partContext, input.studentIdHint);
+                const answer =
+                  deps.engine === 'planned'
+                    ? validateEvidence(
+                        partContext,
+                        collectEvidence(request, proposal),
+                      ).draft
+                    : proposal;
+                // 연결된 절의 정형 요청을 다른 절의 근거로 대신 답하지 않는다.
+                const asksAmount = request.requiredFields.includes('amount');
                 drafts.push(
                   asksAmount &&
                     (answer.status === 'answered' ||
@@ -1064,10 +1055,20 @@ export function createRagConsultationService(
                     : answer,
                 );
               }
-              trace.intent = `multi(${parts.length})`;
-              draft = mergeDrafts(drafts, parts);
+              trace.intent = `multi(${plan.requests.length})`;
+              draft = composeRequests(
+                drafts,
+                plan.requests.map((request) => request.question),
+              );
             } else {
-              draft = await route(ctx, input.studentIdHint);
+              const proposal = await route(ctx, input.studentIdHint);
+              draft =
+                deps.engine === 'planned'
+                  ? validateEvidence(
+                      ctx,
+                      collectEvidence(plan.requests[0], proposal),
+                    ).draft
+                  : proposal;
             }
             final = await finalize(ctx, draft);
           }

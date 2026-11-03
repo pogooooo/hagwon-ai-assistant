@@ -36,6 +36,7 @@ import {
   MockGenerationProvider,
 } from '../generation/providers.ts';
 import type { CatalogPort } from '../ports.ts';
+import type { ObservationV2 } from './scoring-v2.ts';
 import { mentionsName } from '../query/parse-query.ts';
 import type { ChunkRanker } from '../retrieval/rankers.ts';
 import {
@@ -202,6 +203,7 @@ export interface Variant {
   id: string;
   /** rag: 검색 1위 청크를 그대로 답으로(생성·보류 없음) / engine: 상담 엔진 */
   kind: 'rag' | 'engine';
+  engine?: RagConsultationDeps['engine'];
   ranker?: () => Promise<ChunkRanker> | ChunkRanker;
   config?: RagConsultationDeps['config'];
   /** rag 변형의 보류 규칙(없으면 검색 결과가 없을 때만 보류) */
@@ -274,6 +276,12 @@ export async function runCase(
   prepared: PreparedSuite,
   variant: Variant,
   c: EvalCase,
+  diagnostics?: {
+    refineFrame?: NonNullable<
+      Parameters<typeof createRagConsultationService>[1]
+    >['refineFrame'];
+    observe: (observation: ObservationV2) => void;
+  },
 ): Promise<CaseResult> {
   const { dataset } = prepared.suite;
   const user = dataset.users.find((u) => u.user_id === c.userId);
@@ -289,6 +297,15 @@ export async function runCase(
   let generationCalls = 0;
   let generationInputs: string[] = [];
   let latencyMs: number;
+  let observed:
+    | Pick<
+        ObservationV2,
+        | 'answer'
+        | 'citationLocations'
+        | 'retrievedChunkIds'
+        | 'retrievedSourceIds'
+      >
+    | undefined;
 
   if (variant.kind === 'rag') {
     const started = performance.now();
@@ -314,19 +331,30 @@ export async function runCase(
       const state = toConversationState(c.session, toKstDate(now).year);
       if (state) await conversations.save(access.actorId, c.id, state);
     }
-    const service = createRagConsultationService({
-      facts: prepared.store,
-      documents: prepared.store,
-      catalog: prepared.catalog,
-      generation: provider,
-      handoff: new InMemoryHandoffStore(),
-      conversations,
-      clock: new FixedClock(now),
-      config: variant.config,
-    });
+    let citationLocations: ObservationV2['citationLocations'];
+    const service = createRagConsultationService(
+      {
+        facts: prepared.store,
+        documents: prepared.store,
+        catalog: prepared.catalog,
+        generation: provider,
+        handoff: new InMemoryHandoffStore(),
+        conversations,
+        clock: new FixedClock(now),
+        config: variant.config,
+        engine: variant.engine,
+      },
+      diagnostics && {
+        refineFrame: diagnostics.refineFrame,
+        observeLocations: (citations) => {
+          citationLocations = citations;
+        },
+      },
+    );
     for (const turn of c.history) {
       await service.query({ access, question: turn, conversationId: c.id });
     }
+    citationLocations = undefined;
     const started = performance.now();
     const output = await service.query({
       access,
@@ -349,6 +377,15 @@ export async function runCase(
       ...output.trace.generationInputSourceIds,
       ...cited,
     ];
+    observed = {
+      answer: output.answer,
+      citationLocations,
+      retrievedChunkIds: output.trace.retrievedChunkIds,
+      retrievedSourceIds: [
+        ...output.trace.retrievedChunkIds.map(sourceOfChunk),
+        ...output.trace.retrievedFactIds.map(factSource),
+      ],
+    };
     intent = output.trace.intent as typeof intent;
     internalErrors = output.trace.internalErrors;
     generationCalls = mock.calls.length;
@@ -394,6 +431,9 @@ export async function runCase(
       if (input.includes(student.name))
         violations.push(`generation_input_name:${student.student_id}`);
   }
+
+  if (observed)
+    diagnostics?.observe({ ...observed, generationCalls, violations });
 
   // 채점
   const e = c.expected;

@@ -1,3 +1,4 @@
+import { supportsExcerpt } from '../answer/verify.ts';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
@@ -587,4 +588,68 @@ test('쪽마다 열 순서가 달라도 선택한 셀만 인용하고 개정·�
   const revoked = await askTable(ctx);
   assert.equal(revoked.status, 'abstained');
   assert.deepEqual(revoked.citations, []);
+});
+
+test('수업 시각과 수업 길이를 구분해 분·시간을 같은 반의 근거로 답한다', async () => {
+  const markdown =
+    '| 반 | 수업 시작 | 1회 수업 시간 | 월 수업 시간 |\n|---|---|---|---|\n| 중2 심화반 | 16:30 | 95분 | 6시간 |\n| 중1 기본반 | 18:00 | 60분 | 4시간 |';
+  const question = '중2 심화반 한 번 수업이 몇 분이고 한 달에 몇 시간이에요?';
+  const answer = await askTable(await context(markdown, question));
+  assert.equal(answer.status, 'answered');
+  assert.match(answer.answer, /95분/);
+  assert.match(answer.answer, /6시간/);
+  assert.doesNotMatch(answer.answer, /60분|4시간/);
+  assert.match(answer.citations[0]?.location ?? '', /1행/);
+});
+
+test('분 단위 길이를 물으면 시작 시각의 분을 수업 길이로 내보내지 않는다', async () => {
+  const markdown = '| 반 | 수업 시작 |\n|---|---|\n| 중2 심화반 | 16시 30분 |';
+  const question = '중2 심화반 한 번 수업이 몇 분이에요?';
+  const answer = await askTable(await context(markdown, question));
+  assert.equal(answer.status, 'abstained');
+  assert.deepEqual(answer.citations, []);
+});
+
+test('planned engine preserves the requested weekday and marks an unsupported fee as partial', async () => {
+  const ctx = await context(
+    '| 시간 | 월요일 | 화요일 |\n|---|---|---|\n| 16:00 | 중2 심화반 | |\n| 17:30 | | 중2 심화반 |',
+    '중2 심화반 수강료랑 화요일 몇 시 수업인지 알려줘',
+  );
+  const result = await runQuery(
+    {
+      store: ctx.documents,
+      catalog: {
+        async getAcademyCatalog() {
+          return ctx.catalog;
+        },
+      },
+      resolveScope: () => access,
+    },
+    {
+      engine: 'planned',
+      userId: access.actorId,
+      question: ctx.question,
+      asOf: '2026-11-03T12:00:00+09:00',
+    },
+  );
+  assert.equal(result.answer.status, 'partial', result.answer.answer);
+  assert.match(result.answer.answer, /17:30/);
+  assert.doesNotMatch(result.answer.answer, /16:00/);
+  assert.match(result.answer.citations[0]?.location ?? '', /2행 · 열 화요일/);
+  assert.equal(result.generationCalls, 0);
+});
+
+test('planned claim verification checks the selected source cell, not any value in the row', () => {
+  const [chunk] = rows(
+    '| 시간 | 월요일 | 화요일 |\n|---|---|---|\n| 17:30 | 중1 기본반 | 중2 심화반 |',
+  );
+  const selected = { chunk, tableColumns: [2] };
+  assert.equal(
+    supportsExcerpt({ ...selected, line: '시간: 17:30 / 화요일: 중2 심화반' }),
+    true,
+  );
+  assert.equal(
+    supportsExcerpt({ ...selected, line: '시간: 17:30 / 월요일: 중1 기본반' }),
+    false,
+  );
 });

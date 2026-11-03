@@ -207,3 +207,13 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 5. **OCR**: 스캔 품질이 낮으면 숫자를 불확실로 표시하고 그 숫자는 답에 쓰지 않습니다(보류 쪽으로 처리). 관리자 검수 흐름은 7번 기능과 함께 정해야 합니다.
 6. **메모리 구현**: 저장소·작업 큐·호출 제한·대화 상태는 단일 프로세스 메모리입니다.
 7. **법·약관 검토**: 미성년 원생 데이터의 외부 전송·국외 이전·보존 정책은 법무·개인정보 담당 검토가 필요합니다.
+
+## 계획 기반 엔진 비교 실행
+
+기존 엔진은 기본 경로입니다. 개발 테스트 화면의 `/dev/api/ask`에서만 `RAG_DEV_ENGINE=planned`로 계획 기반 경로를 선택할 수 있습니다. 공개 요청과 응답 계약은 동일합니다.
+
+```bash
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/run-eval.ts --suite v2-dev,v1-90,v1-paraphrase-100 --variant engine,engine-planned --label architecture-final --out .git/rag-validation
+```
+
+`QueryPlan`은 요청별 조건을 보관합니다. 실험 경로는 도메인 어댑터가 제공한 원본 인용을 `EvidenceBundle`로 받아 검증하고, 검증을 통과한 하위 답변을 합친 뒤 기존 최종 검증기를 실행합니다. 일부 정형·학습 분석 어댑터는 기존 템플릿을 후보로 사용합니다. 비교 결과와 전환 조건은 [TEST_REPORT.md](TEST_REPORT.md)에 있습니다.

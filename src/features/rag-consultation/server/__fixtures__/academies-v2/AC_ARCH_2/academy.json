@@ -1,0 +1,54 @@
+{
+  "academy_id": "AC_ARCH_2",
+  "display_name": "오솔길 글쓰기학원",
+  "aliases": [],
+  "classes": [
+    {
+      "class_id": "AC_ARCH_2_C0",
+      "name": "초3 관찰반",
+      "grade": "초3",
+      "subject": "국어",
+      "aliases": [
+        "초3 관찰 수업"
+      ]
+    },
+    {
+      "class_id": "AC_ARCH_2_C1",
+      "name": "초4 독후반",
+      "grade": "초4",
+      "subject": "국어",
+      "aliases": [
+        "초4 독후 수업"
+      ]
+    },
+    {
+      "class_id": "AC_ARCH_2_C2",
+      "name": "초5 취재반",
+      "grade": "초5",
+      "subject": "국어",
+      "aliases": [
+        "초5 취재 수업"
+      ]
+    },
+    {
+      "class_id": "AC_ARCH_2_C3",
+      "name": "초6 토론반",
+      "grade": "초6",
+      "subject": "국어",
+      "aliases": [
+        "초6 토론 수업"
+      ]
+    },
+    {
+      "class_id": "AC_ARCH_2_C4",
+      "name": "중1 논증반",
+      "grade": "중1",
+      "subject": "국어",
+      "aliases": [
+        "중1 논증 수업"
+      ]
+    }
+  ],
+  "units": [],
+  "question_types": []
+}

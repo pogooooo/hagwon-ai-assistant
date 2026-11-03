@@ -112,6 +112,7 @@ export function generationFor(
 }
 
 export interface RunOptions {
+  engine?: 'legacy' | 'planned';
   userId: string;
   question: string;
   asOf: string;
@@ -141,6 +142,9 @@ export async function runQuery(
     ? { mock: null, provider: options.generation }
     : generationFor('ok', now);
   const service = createRagConsultationService({
+    engine:
+      options.engine ??
+      (process.env.RAG_TEST_ENGINE === 'planned' ? 'planned' : 'legacy'),
     facts: env.store,
     documents: env.store,
     catalog: env.catalog,

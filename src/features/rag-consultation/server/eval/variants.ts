@@ -21,6 +21,7 @@ const retriever =
 export const VARIANTS: Record<string, Variant> = {
   'rag-bm25': { id: 'rag-bm25', kind: 'rag' },
   engine: { id: 'engine', kind: 'engine' },
+  'engine-planned': { id: 'engine-planned', kind: 'engine', engine: 'planned' },
   'engine-dense': {
     id: 'engine-dense',
     kind: 'engine',

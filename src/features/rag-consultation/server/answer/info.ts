@@ -1383,7 +1383,14 @@ export function selectTableRows(
   const selectedRows = (
     matches.size > 0 || boundRows.length <= 4 || bestRow === 0
       ? boundRows
-      : boundRows.filter((chunk) => rowScore(chunk) === bestRow)
+      : boundRows.filter((chunk) => {
+          const { header, cells } = chunk.location;
+          const key = compactText(cells?.[0] ?? '');
+          const explicitKey =
+            /^(항목|구분)$/.test(compactText(header?.[0] ?? '')) &&
+            words.some((word) => compactText(word) === key);
+          return rowScore(chunk) === bestRow || explicitKey;
+        })
   ).slice(0, 8);
   const askedDays = [
     ...new Set([

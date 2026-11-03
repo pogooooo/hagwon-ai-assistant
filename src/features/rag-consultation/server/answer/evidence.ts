@@ -1,3 +1,4 @@
+import { supportsExcerpt } from './verify.ts';
 /**
  * 검색 기반 질문 해석과 근거 답변(계층적 라우팅의 2단계).
  *
@@ -143,6 +144,7 @@ export async function retrieveEvidence(
     studentIds?: readonly string[];
     limit?: number;
     documentTypes?: readonly string[];
+    searchTerms?: readonly string[];
   } = {},
 ): Promise<ScoredChunk[]> {
   // 질문·계정·대화로 정해진 반 이름을 키워드 질의에 더해 그 반의 행·문장이 위로 오게 한다(근거 바인딩).
@@ -153,7 +155,9 @@ export async function retrieveEvidence(
         access: ctx.access,
         studentIds: options.studentIds ?? ctx.access.allowedStudentIds,
         asOf: ctx.asOf,
-        query: [ctx.question, ...bound].join(' '),
+        query: [ctx.question, ...bound, ...(options.searchTerms ?? [])].join(
+          ' ',
+        ),
         question: ctx.question,
         limit: options.limit ?? 8,
         rerank: 'auto',
@@ -499,14 +503,18 @@ export async function answerFromDocuments(
       ...renderParagraphs(paragraphs, words, [], keepText),
       ...selectTableRows(
         tables,
-        words,
+        supports ? [] : words,
         [],
         keepText,
         boundClassNames(ctx),
         ctx,
       ),
     ]
-      .filter(({ line }) => !supports || supports(line))
+      .filter(
+        (excerpt) =>
+          (!supports || supports(excerpt.line)) &&
+          (ctx.engine !== 'planned' || supportsExcerpt(excerpt)),
+      )
       .slice(0, 8);
     if (lines.length === 0) continue;
     const text = lines
@@ -523,6 +531,7 @@ export async function answerFromDocuments(
         tableColumns,
       })),
       usedFacts: [],
+      excerpts: ctx.engine === 'planned' ? lines : undefined,
       instants: [ctx.asOf],
     };
   }

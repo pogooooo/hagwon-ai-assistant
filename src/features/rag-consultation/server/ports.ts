@@ -95,6 +95,8 @@ export interface RagDocumentsPort {
     includeHistory?: boolean;
     /** 이 사실 값이 실제로 등장하는 위치(표 행 등)를 함께 찾는다. */
     locate?: ApprovedFact;
+    /** Optional catalog identity for locating a class-specific fact in a table. */
+    locateClassNames?: readonly string[];
   }): Promise<SourceSummary | null>;
   upsertIndexedRevision(input: {
     document: SourceDocumentInput;

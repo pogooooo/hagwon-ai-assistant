@@ -492,6 +492,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
     effectiveAt?: number;
     includeHistory?: boolean;
     locate?: ApprovedFact;
+    locateClassNames?: readonly string[];
   }): Promise<SourceSummary | null> {
     const targets = restrictToAllowedStudents(input.access, input.studentIds);
     const at = input.effectiveAt ?? input.asOf;
@@ -506,13 +507,23 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         stored.validTo !== null &&
         stored.validTo <= at;
       if (!current && !past) return null;
-      const located = input.locate ? this.locateFact(input.locate) : null;
+      const located = input.locate
+        ? this.locateFact(input.locate, {
+            classNames: input.locateClassNames ?? [],
+          })
+        : null;
+      let location = located?.location.label;
+      if (located && input.locate?.value.kind === 'money') {
+        const columns = moneyColumns(located, input.locate.value.amount);
+        if (columns.length === 1)
+          location += ' · 열 ' + located.location.header?.[columns[0]];
+      }
       return {
         sourceId: stored.sourceId,
         documentId: stored.documentId,
         revision: stored.revision,
         title: stored.title,
-        location: located?.location.label,
+        location,
       };
     }
     return null;
@@ -575,13 +586,41 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   }
 
   /** 사실 값이 실제로 등장하는 청크 위치(표 행 등)를 찾는다. */
-  private locateFact(fact: ApprovedFact): RagChunk | null {
+  private locateFact(
+    fact: ApprovedFact,
+    citation?: { classNames: readonly string[] },
+  ): RagChunk | null {
     const stored = this.revisions.get(keyOf(fact.documentId, fact.revision));
     if (!stored) return null;
     const chunks = stored.chunkIds
       .map((id) => this.chunks.get(id))
       .filter((chunk): chunk is RagChunk => Boolean(chunk));
+    if (citation && fact.value.kind === 'money') {
+      const amount = fact.value.amount;
+      const rows = chunks.filter(
+        (chunk) => moneyColumns(chunk, amount).length > 0,
+      );
+      // Same amount in more than one row does not locate the class or period.
+      return rows.length === 1 ? rows[0] : null;
+    }
     const needles = factNeedles(fact);
+    if (fact.factType === 'teacher' && citation?.classNames.length) {
+      const names = citation.classNames.map((name) =>
+        name.replace(/\s/g, '').toLowerCase(),
+      );
+      const rows = chunks.filter(
+        (chunk) =>
+          !chunk.suspicious &&
+          chunk.location.kind === 'table_row' &&
+          chunk.location.cells?.some((cell) =>
+            names.includes(cell.replace(/\s/g, '').toLowerCase()),
+          ) &&
+          needles.some((needle) =>
+            chunk.text.replace(/\s/g, '').includes(needle),
+          ),
+      );
+      return rows.length === 1 ? rows[0] : null;
+    }
     return (
       chunks.find((chunk) =>
         needles.some((needle) =>
@@ -602,6 +641,18 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       revision: document.revision,
     });
   }
+}
+
+function moneyColumns(chunk: RagChunk, amount: number): number[] {
+  if (chunk.location.kind !== 'table_row' || chunk.suspicious) return [];
+  return (chunk.location.cells ?? []).flatMap((cell, index) => {
+    const amountCell = cell.trim().match(/^(\d[\d,]*)\s*원?$/);
+    return index > 0 &&
+      amountCell &&
+      Number(amountCell[1].replace(/,/g, '')) === amount
+      ? [index]
+      : [];
+  });
 }
 
 function factNeedles(fact: ApprovedFact): string[] {

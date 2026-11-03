@@ -199,7 +199,9 @@ function matchClasses(compact: string, catalog: AcademyCatalog) {
         !keywordGrade &&
         grade &&
         grades.length > 0 &&
-        !grades.includes(grade)
+        !(grade.match(/(?:초|중|고)[1-6]/g) ?? [grade]).some((item) =>
+          grades.includes(item),
+        )
       )
         continue;
       let index = compact.indexOf(keyword);
@@ -317,7 +319,13 @@ export function abbreviatedClasses(
       const grade = klass.grade
         ? compactText(klass.grade)
         : (compactText(klass.name).match(/^(초|중|고)[1-6]/)?.[0] ?? null);
-      return grades.length === 0 || !grade || grades.includes(grade);
+      return (
+        grades.length === 0 ||
+        !grade ||
+        (grade.match(/(?:초|중|고)[1-6]/g) ?? [grade]).some((item) =>
+          grades.includes(item),
+        )
+      );
     });
     // 질문한 학생(또는 학생 본인)이 듣는 반 중에 후보가 있으면 그 반만 고른다.
     const preferred = candidates.filter((klass) =>
@@ -599,7 +607,23 @@ export function parseQuery(
     Number(m[1]),
   );
 
-  let topics = selectTopics(compact, config);
+  // A trailing explanation can contain entities, but does not add a requested topic.
+  const clauses = normalized
+    .split(/[?？]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const background =
+    clauses.length === 2 &&
+    /(?:다는데|려고요|거든요|라서요)[.!]?$/.test(clauses[1]);
+  const focus = background ? clauses[0] : normalized;
+  let topics = selectTopics(compactText(focus), config);
+  if (
+    topics.some((topic) => topic.id === 'hours') &&
+    /문\s*열|영업\s*시간|운영\s*시간/.test(focus) &&
+    !/수업\s*(?:시간|일정|요일)|시간표/.test(focus)
+  ) {
+    topics = topics.filter((topic) => topic.id !== 'schedule');
+  }
   const makeupClassContext =
     test(/보충/g, normalized) &&
     (dates.length > 0 ||
