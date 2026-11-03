@@ -286,38 +286,101 @@ async function answerClassFacts(
  * 셀 안 공백("중2 내신B 반")은 무시하고 비교한다.
  */
 
-/** 요일 낱말이 묻는 요일을 포함하는지(평일=월~금, 주말=토·일). */
+const WEEKDAY_AXIS = /^[월화수목금토일](요일)?$/;
+const CLASS_COLUMN = /^(대상|수강)?(반|강좌|과정)(명|이름|구분)?$/;
+const WEEKDAY_TOKEN =
+  /(?<![가-힣a-z0-9])(?:평일|주말|매일|[월화수목금토일]+(?:요일)?)(?![가-힣a-z0-9])/gi;
+const DAY_GROUPS: Record<string, string> = {
+  평일: '월화수목금',
+  주말: '토일',
+  매일: '월화수목금토일',
+};
+
+function weekdayTokens(text: string): Set<string> {
+  const days = new Set<string>();
+  const tokens = [...text.matchAll(WEEKDAY_TOKEN)];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i];
+    const value = token[0].replace(/요일$/, '');
+    const next = tokens[i + 1];
+    const end = next?.[0].replace(/요일$/, '');
+    if (
+      value.length === 1 &&
+      end?.length === 1 &&
+      /^\s*[~\-–]\s*$/.test(
+        text.slice(token.index + token[0].length, next.index),
+      )
+    ) {
+      const startIndex = WEEKDAYS.indexOf(value);
+      const endIndex = WEEKDAYS.indexOf(end);
+      for (let index = startIndex; ; index = (index + 1) % WEEKDAYS.length) {
+        days.add(WEEKDAYS[index]);
+        if (index === endIndex) break;
+      }
+      i += 1;
+      continue;
+    }
+    for (const day of DAY_GROUPS[value] ?? value) days.add(day);
+  }
+  return days;
+}
+
+/** 요일 목록과 예외 문구를 분리해 일정을 확인한다. */
+function weekdayAvailability(
+  word: string,
+  day: string,
+  explicitDay?: number | null,
+  holiday = false,
+): boolean | undefined {
+  const included = new Set<string>();
+  const excluded = new Set<string>();
+  const expression = normalizeText(word).replace(
+    /\s+(?=(?:공휴일|휴일)\s*(?:제외|휴강|수업\s*없))/g,
+    ';',
+  );
+  for (const clause of expression.split(/[()[\]／/;,\n]+/)) {
+    if (/미정|추후\s*공지|확인\s*필요/.test(clause)) return false;
+    const negative =
+      /휴강|제외|수업\s*(?:없|안\s*함|미실시)|미운영|^없음$/.test(
+        clause.trim(),
+      );
+    const datePattern = /(?:(\d{4})년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/g;
+    const dates = [...clause.matchAll(datePattern)];
+    if (negative && dates.length > 0) {
+      if (explicitDay != null) {
+        const { year, month, day: date } = toKstDate(explicitDay);
+        if (
+          dates.some(
+            (match) =>
+              (!match[1] || Number(match[1]) === year) &&
+              Number(match[2]) === month &&
+              Number(match[3]) === date,
+          )
+        )
+          return false;
+      }
+      continue;
+    }
+    const holidayClause = /공휴일|휴일/.test(clause);
+    if (negative && holidayClause && holiday) return false;
+    const days = weekdayTokens(clause.replace(datePattern, ' '));
+    if (negative && days.size === 0 && !holidayClause) return false;
+    for (const value of days) (negative ? excluded : included).add(value);
+  }
+  if (excluded.has(day)) return false;
+  return included.size > 0 ? included.has(day) : undefined;
+}
+
 function dayWordCovers(word: string, day: string): boolean {
-  const w = word.replace(/요일/g, '');
-  if (w.includes('평일') && '월화수목금'.includes(day)) return true;
-  if (w.includes('주말') && '토일'.includes(day)) return true;
-  const schedule = w.replace(/평일|주말/g, '');
-  const ranges = [
-    ...schedule.matchAll(/([월화수목금토일])\s*[~\-–]\s*([월화수목금토일])/g),
-  ];
-  const days = '월화수목금토일';
-  if (
-    ranges.some((range) => {
-      const start = days.indexOf(range[1]);
-      const end = days.indexOf(range[2]);
-      const index = days.indexOf(day);
-      return start <= end
-        ? index >= start && index <= end
-        : index >= start || index <= end;
-    })
-  )
-    return true;
-  return (
-    schedule
-      .replace(/([월화수목금토일])\s*[~\-–]\s*([월화수목금토일])/g, '')
-      .match(/[월화수목금토일]/g) ?? []
-  ).some((candidate) => candidate === day);
+  return weekdayAvailability(word, day) === true;
 }
 
 function rowMatchesWeekday(
   cells: string[],
   header: string[],
   weekday: string,
+  ctx?: AnswerContext,
+  effective?: EffectiveTime,
 ): boolean {
   const dayColumns = header
     .map((h, index) =>
@@ -326,9 +389,30 @@ function rowMatchesWeekday(
         : -1,
     )
     .filter((index) => index >= 0);
-  return (
+  const holiday = /공휴일|휴일/.test(ctx?.question ?? '');
+  const allowed =
     dayColumns.length === 0 ||
-    dayColumns.some((i) => dayWordCovers(cells[i] ?? '', weekday))
+    dayColumns.some(
+      (i) =>
+        weekdayAvailability(
+          cells[i] ?? '',
+          weekday,
+          effective?.explicitDay,
+          holiday,
+        ) === true,
+    );
+  return (
+    allowed &&
+    header.every(
+      (label, index) =>
+        !/^(비고|예외|휴강일)$/.test(compactText(label)) ||
+        weekdayAvailability(
+          cells[index] ?? '',
+          weekday,
+          effective?.explicitDay,
+          holiday,
+        ) !== false,
+    )
   );
 }
 
@@ -338,16 +422,18 @@ function askedWeekday(
   effective?: EffectiveTime,
 ): string | null {
   const named = ctx.frame.normalized.match(/([월화수목금토일])요일/);
-  if (named) return named[1];
+
   // “21일부터”처럼 기간의 시작을 말한 날짜는 특정 요일을 묻는 것이 아니다.
   if (
     effective?.explicitDay != null &&
     ctx.frame.explicitDates[0]?.operator === 'at'
   ) {
     const { year, month, day } = toKstDate(effective.explicitDay);
-    return WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+    const actual =
+      WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+    return named && named[1] !== actual ? '불일치' : actual;
   }
-  return null;
+  return named?.[1] ?? null;
 }
 
 /** "1교시 (평일 16:40~18:10 / 토 13:00~14:30)"처럼 요일별 시각이 함께 든 칸에서 묻는 요일의 시각만 남긴다. */
@@ -393,6 +479,7 @@ export async function classTableRows(
   effective?: EffectiveTime,
   seen: { offDay: boolean } = { offDay: false },
 ): Promise<Array<{ chunk: RagChunk; line: string }>> {
+  effective ??= resolveEffectiveTime(ctx.frame, ctx.asOf);
   const weekday = askedWeekday(ctx, effective);
   const klass = ctx.catalog.classes.find((c) => c.classId === classId);
   if (!klass) return [];
@@ -416,28 +503,12 @@ export async function classTableRows(
     const cells = chunk.location.cells;
     const header = chunk.location.header;
     if (chunk.location.kind !== 'table_row' || !cells || !header) continue;
-    const columns = cells
-      .map((cell, index) =>
-        index > 0 && names.some((n) => compactText(cell).includes(n))
-          ? index
-          : -1,
-      )
-      .filter((index) => index > 0);
-    const rowNamed = names.some((n) => compactText(cells[0] ?? '').includes(n));
-    if (columns.length === 0 && !rowNamed) continue;
-    // 요일×교시 격자: 반이 든 칸의 머리글이 요일이다. 그렇지 않은 표(반 열이 있는 기록 표)는
-    // 시간·요일 열이 있을 때만 그 행 전체를 시간표 근거로 쓴다(주차별 커리큘럼 등은 제외).
-    const gridColumns = columns.filter((i) =>
-      /^[월화수목금토일](요일)?$/.test((header[i] ?? '').trim()),
-    );
-    const record = rowNamed || gridColumns.length === 0;
-    if (record && !header.some((h) => /시간|요일|교시/.test(h))) continue;
-    if (record && weekday) {
-      if (!rowMatchesWeekday(cells, header, weekday)) {
-        seen.offDay = true;
-        continue;
-      }
-    }
+
+    const key = classColumn(header, cells, names);
+    const grid = key < 0;
+    if (!grid && !matchesClassCell(cells[key] ?? '', names)) continue;
+    if (!header.some((h) => /시간|요일|교시/.test(h) || WEEKDAY_AXIS.test(h)))
+      continue;
     if (
       !rowCoversDay(
         cells.join(' '),
@@ -445,19 +516,45 @@ export async function classTableRows(
       )
     )
       continue;
-    let days = gridColumns;
-    if (!record && weekday) {
-      days = gridColumns.filter((i) => dayWordCovers(header[i], weekday));
-      if (days.length === 0) {
-        seen.offDay = true;
-        continue;
-      }
+    if (grid && !cells.slice(1).some((cell) => matchesClassCell(cell, names)))
+      continue;
+    const selected = grid
+      ? gridColumns(
+          header,
+          cells,
+          names,
+          weekday ? [weekday] : [],
+          ctx,
+          effective,
+        )
+      : [];
+    if (
+      weekday &&
+      (weekday === '불일치' ||
+        (grid
+          ? selected.length === 0
+          : !rowMatchesWeekday(cells, header, weekday, ctx, effective)))
+    ) {
+      seen.offDay = true;
+      continue;
     }
     const label = weekday ? focusDay(cells[0] ?? '', weekday) : cells[0];
-    const line = record
-      ? header.map((h, i) => `${h}: ${cells[i] ?? ''}`).join(' / ')
-      : `${header[0]}: ${label} / ${days.map((i) => header[i]).join('·')}`;
-    if (!out.some((entry) => entry.line === line)) out.push({ chunk, line });
+    const weekdayGrid =
+      grid &&
+      selected.every((index) =>
+        WEEKDAY_AXIS.test(compactText(header[index] ?? '')),
+      );
+    const indices = grid ? [0, ...selected] : header.map((_, index) => index);
+    const line = weekdayGrid
+      ? header[0] +
+        ': ' +
+        label +
+        ' / ' +
+        selected.map((i) => header[i]).join('·')
+      : formatCells(header, cells, indices);
+    const evidence = selectedTableChunk(chunk, line, grid ? selected : indices);
+    if (!out.some((entry) => entry.line === line))
+      out.push({ chunk: evidence, line });
   }
   return out.slice(0, 6);
 }
@@ -1088,15 +1185,100 @@ export function classSimilarity(className: string, text: string): number {
   return score;
 }
 
+function matchesClassCell(cell: string, names: readonly string[]): boolean {
+  const value = compactText(cell);
+  return names.some(
+    (name) =>
+      value === name ||
+      (value.startsWith(name) && /^[([:·,/\-]/.test(value.slice(name.length))),
+  );
+}
+
+function classColumn(
+  header: string[],
+  cells: string[],
+  names: readonly string[],
+): number {
+  const index = header.findIndex((label) =>
+    CLASS_COLUMN.test(compactText(label)),
+  );
+  if (index >= 0) return index;
+  return matchesClassCell(cells[0] ?? '', names) ? 0 : -1;
+}
+
+function gridColumns(
+  header: string[],
+  cells: string[],
+  names: readonly string[],
+  days: string[],
+  ctx?: AnswerContext,
+  effective?: EffectiveTime,
+): number[] {
+  const weekdayGrid = header
+    .slice(1)
+    .some((label) => WEEKDAY_AXIS.test(compactText(label)));
+  return cells.flatMap((cell, index) =>
+    index > 0 &&
+    matchesClassCell(cell, names) &&
+    (days.length === 0 ? [''] : days).some(
+      (day) =>
+        weekdayAvailability(
+          cell,
+          day,
+          effective?.explicitDay,
+          /공휴일|휴일/.test(ctx?.question ?? ''),
+        ) !== false,
+    ) &&
+    (!weekdayGrid ||
+      days.length === 0 ||
+      days.some((day) => dayWordCovers(header[index] ?? '', day)))
+      ? [index]
+      : [],
+  );
+}
+
+function formatCells(
+  header: string[],
+  cells: string[],
+  indices: number[],
+): string {
+  return indices
+    .map((index) => header[index] + ': ' + (cells[index] ?? ''))
+    .join(' / ');
+}
+
+function selectedTableChunk(
+  chunk: RagChunk,
+  line: string,
+  indices: number[],
+): RagChunk {
+  const labels = indices
+    .map((index) => chunk.location.header?.[index])
+    .filter(Boolean);
+  return {
+    ...chunk,
+    text: line,
+    location: {
+      ...chunk.location,
+      label: chunk.location.label + ' · 열 ' + labels.join(', '),
+    },
+  };
+}
+
+interface EvidenceLine {
+  line: string;
+  chunk: RagChunk;
+}
+
 /** 표 행 청크에서 질문과 관련된 행·열만 골라 "헤더: 값" 형태로 만든다(다른 칸 값이 섞이지 않게). */
-export function renderTableRows(
+export function selectTableRows(
   chunks: RagChunk[],
   words: string[],
   evidenceTerms: readonly string[],
   keepText: (text: string) => boolean,
   targetNames: readonly string[] = [],
   ctx?: AnswerContext,
-): string[] {
+): EvidenceLine[] {
   const has = (text: string) =>
     words.filter((word) => compactText(text).includes(compactText(word)))
       .length;
@@ -1112,16 +1294,19 @@ export function renderTableRows(
       chunk.location.header &&
       keepText((chunk.location.cells ?? []).join(' ')) &&
       (chunk.documentType !== 'schedule' ||
-        ((!effective ||
-          rowCoversDay(
-            (chunk.location.cells ?? []).join(' '),
-            kstStartOfDay(toKstDate(effective.at)),
-          )) &&
+        (weekday !== '불일치' &&
+          (!effective ||
+            rowCoversDay(
+              (chunk.location.cells ?? []).join(' '),
+              kstStartOfDay(toKstDate(effective.at)),
+            )) &&
           (!weekday ||
             rowMatchesWeekday(
               chunk.location.cells ?? [],
               chunk.location.header ?? [],
               weekday,
+              ctx,
+              effective,
             )))),
   );
   // 행이 적으면 모두 보여 주고, 많으면 질문 단어·근거어와 가장 많이 맞는 행만 고른다.
@@ -1134,36 +1319,64 @@ export function renderTableRows(
   const matches = new Set<RagChunk>();
   for (const name of targets) {
     const exact = rows.filter((chunk) =>
-      chunk.location.cells?.some((cell) => compactText(cell).includes(name)),
+      (chunk.location.cells ?? []).some((cell, index, cells) => {
+        const key = classColumn(chunk.location.header ?? [], cells, targets);
+        return (key < 0 || key === index) && matchesClassCell(cell, [name]);
+      }),
     );
     if (exact.length > 0) {
       exact.forEach((chunk) => matches.add(chunk));
       continue;
     }
     const similarity = (chunk: RagChunk) =>
-      classSimilarity(name, chunk.location.cells?.[0] ?? '');
+      classSimilarity(
+        name,
+        chunk.location.cells?.[
+          Math.max(
+            0,
+            classColumn(
+              chunk.location.header ?? [],
+              chunk.location.cells ?? [],
+              targets,
+            ),
+          )
+        ] ?? '',
+      );
     const best = Math.max(0, ...rows.map(similarity));
     if (best >= 1.3)
       rows
         .filter((chunk) => similarity(chunk) === best)
         .forEach((chunk) => matches.add(chunk));
   }
+  const knownNames = [
+    ...targets,
+    ...(ctx?.catalog.classes ?? []).flatMap((klass) =>
+      [klass.name, ...klass.aliases].map(compactText),
+    ),
+  ].filter((name) => name.length >= 2);
+  const tableKey = (chunk: RagChunk) =>
+    chunk.sourceId + '#' + (chunk.location.tableIndex ?? chunk.chunkId);
+  const classTables = new Set(
+    rows
+      .filter(
+        ({ location }) =>
+          location.header?.some((label) =>
+            CLASS_COLUMN.test(compactText(label)),
+          ) ||
+          location.cells?.some(
+            (cell) =>
+              /^(초|중|고)[1-6]/.test(compactText(cell)) ||
+              matchesClassCell(cell, knownNames),
+          ),
+      )
+      .map(tableKey),
+  );
   const boundRows =
     targets.length === 0
       ? rows
-      : matches.size > 0
-        ? rows.filter((chunk) => matches.has(chunk))
-        : rows.filter(
-            (chunk) =>
-              !chunk.location.header?.some((h) =>
-                /^(대상|수강)?(반|강좌|과정)(명|이름|구분)?$/.test(
-                  compactText(h),
-                ),
-              ) &&
-              !chunk.location.cells?.some((cell) =>
-                /^(초|중|고)[1-6]/.test(compactText(cell)),
-              ),
-          );
+      : rows.filter(
+          (chunk) => matches.has(chunk) || !classTables.has(tableKey(chunk)),
+        );
   const bestRow = Math.max(0, ...boundRows.map(rowScore));
   const selectedRows = (
     matches.size > 0 || boundRows.length <= 4 || bestRow === 0
@@ -1187,37 +1400,35 @@ export function renderTableRows(
     const keep = header.map(
       (_, index) => index === 0 || best === 0 || headerScores[index] === best,
     );
-    const targetColumns = cells
-      .map((cell, index) =>
-        index > 0 && targets.some((t) => compactText(cell).includes(t))
-          ? index
-          : -1,
-      )
-      .filter((index) => index > 0);
-    const gridColumns = targetColumns.filter((i) =>
-      /^[월화수목금토일](요일)?$/.test(header[i] ?? ''),
-    );
-    const selectedColumns = gridColumns.filter((i) =>
-      askedDays.length > 0
-        ? askedDays.some((day) => dayWordCovers(header[i], day))
-        : keep[i],
-    );
-    if (gridColumns.length > 0 && selectedColumns.length === 0) return [];
-    const keepRow =
-      gridColumns.length > 0
-        ? cells.map(
-            (_, index) => index === 0 || selectedColumns.includes(index),
-          )
-        : keep;
+
+    const key = classColumn(header, cells, targets);
+    const grid =
+      key < 0 &&
+      targets.length > 0 &&
+      cells.slice(1).some((cell) => matchesClassCell(cell, targets));
+    const selected = grid
+      ? gridColumns(header, cells, targets, askedDays, ctx, effective)
+      : [];
+    if (grid && selected.length === 0) return [];
+    const indices = grid
+      ? [0, ...selected]
+      : header.flatMap((_, index) =>
+          keep[index] || index === key ? [index] : [],
+        );
+    const line = formatCells(header, cells, indices);
     return [
-      header
-        .map((name, index) =>
-          keepRow[index] ? `${name}: ${cells[index] ?? ''}` : null,
-        )
-        .filter(Boolean)
-        .join(' / '),
+      {
+        line,
+        chunk: selectedTableChunk(chunk, line, grid ? selected : indices),
+      },
     ];
   });
+}
+
+export function renderTableRows(
+  ...args: Parameters<typeof selectTableRows>
+): string[] {
+  return selectTableRows(...args).map(({ line }) => line);
 }
 
 /** 문단 청크에서 질문 단어·근거어가 들어간 문장을 고른다(없으면 앞 3문장). */
@@ -1226,19 +1437,22 @@ export function renderParagraphs(
   words: string[],
   evidenceTerms: readonly string[],
   keepText: (text: string) => boolean,
-): string[] {
+): EvidenceLine[] {
   const sentences = chunks
-    .flatMap((chunk) => splitSentences(chunk.text))
+    .flatMap((chunk) =>
+      splitSentences(chunk.text).map((line) => ({ line, chunk })),
+    )
     .filter(
-      (sentence) => !isDataAbsenceStatement(sentence) && keepText(sentence),
+      ({ line: sentence }) =>
+        !isDataAbsenceStatement(sentence) && keepText(sentence),
     );
   const relevant = sentences.filter(
-    (sentence) =>
+    ({ line: sentence }) =>
       containsAny(sentence, evidenceTerms) ||
       words.some((word) => compactText(sentence).includes(compactText(word))),
   );
   return (relevant.length > 0 ? relevant : sentences.slice(0, 3)).filter(
-    (sentence) => !/^\d+\.?$/.test(sentence.trim()),
+    ({ line: sentence }) => !/^\d+\.?$/.test(sentence.trim()),
   );
 }
 
@@ -1355,7 +1569,7 @@ async function answerSection(
       evidenceTerms,
       keepText,
     );
-    const tableLines = renderTableRows(
+    const tableLines = selectTableRows(
       tableChunks,
       words,
       evidenceTerms,
@@ -1364,28 +1578,29 @@ async function answerSection(
       ctx,
     );
     // 질문 단어가 표 행에 있으면 표를 먼저 보여 준다(길이 제한에 표가 잘리지 않게).
-    const tableFirst = tableLines.some((line) =>
+    const tableFirst = tableLines.some(({ line }) =>
       words.some((word) => compactText(line).includes(compactText(word))),
     );
-    for (const text of tableFirst
+    for (const { line: text, chunk } of tableFirst
       ? [...tableLines, ...paragraphLines]
       : [...paragraphLines, ...tableLines]) {
       if (length + text.length > SECTION_MAX_CHARS && lines.length > 0) break;
       lines.push(text);
+      part.citations.push({ kind: 'chunk', chunk });
       length += text.length;
     }
-    const best = group.best.chunk;
+    if (lines.length === 0) continue;
+    const source =
+      (tableFirst ? tableLines : paragraphLines)[0]?.chunk ??
+      tableLines[0].chunk;
     // 원문 Markdown 강조 기호는 인용할 때 뺀다.
     for (let i = 0; i < lines.length; i += 1)
       lines[i] = lines[i].replace(/\*\*|__/g, '');
     part.lines.push(
-      `[${best.location.section ?? topic.label}] ${best.title} 기준 안내입니다.\n${lines.join('\n')}`,
-    );
-    part.citations.push(
-      ...chunks.map((chunk) => ({ kind: 'chunk' as const, chunk })),
+      `[${source.location.section ?? topic.label}] ${source.title} 기준 안내입니다.\n${lines.join('\n')}`,
     );
   }
-  return part;
+  return part.lines.length > 0 ? part : emptyPart('missing', [topic.label]);
 }
 
 async function answerGeneric(ctx: AnswerContext): Promise<AnswerDraft> {

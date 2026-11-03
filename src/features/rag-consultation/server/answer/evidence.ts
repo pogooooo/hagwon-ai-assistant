@@ -25,7 +25,7 @@ import {
   contentWords,
   explicitClassIds,
   renderParagraphs,
-  renderTableRows,
+  selectTableRows,
 } from './info.ts';
 
 /** 대상 반 이름(질문의 반, "우리 반"·자녀의 반) — 검색 바인딩·표 칸 선택용. */
@@ -461,7 +461,7 @@ export async function answerFromDocuments(
     );
     const lines = [
       ...renderParagraphs(paragraphs, words, [], keepText),
-      ...renderTableRows(
+      ...selectTableRows(
         tables,
         words,
         [],
@@ -469,17 +469,17 @@ export async function answerFromDocuments(
         boundClassNames(ctx),
         ctx,
       ),
-    ]
-      .map((line) => line.replace(/\*\*|__/g, ''))
-      .slice(0, 8);
+    ].slice(0, 8);
     if (lines.length === 0) continue;
-    const text = lines.join('\n');
+    const text = lines
+      .map(({ line }) => line.replace(/\*\*|__/g, ''))
+      .join('\n');
     if (!satisfiesAnswerTypes(text, types)) continue;
-    const best = chunks[0];
+    const best = lines[0].chunk;
     return {
       status: 'answered',
       text: `[${best.location.section ?? best.title}] ${best.title} 기준 안내입니다.\n${text}`,
-      citations: chunks.map((chunk) => ({ kind: 'chunk' as const, chunk })),
+      citations: lines.map(({ chunk }) => ({ kind: 'chunk' as const, chunk })),
       usedFacts: [],
       instants: [ctx.asOf],
     };

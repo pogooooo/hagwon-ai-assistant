@@ -270,3 +270,17 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 ```
 
 평가 근거는 `server/__fixtures__/eval-results/table-binding-20261103/`의 `before-summary.json`, `after-summary.json`, `changed-cases.json`에 있습니다. 전체 문항별 JSON/CSV와 검증 로그는 로컬 `.git/rag-validation/`에 보존했습니다. 동결된 평가 문서·정답은 수정하지 않았습니다.
+
+## 15. 요일 판별·격자 셀 선택 회귀 검증
+
+기준 커밋은 `debbf18`입니다. 동일한 BM25·Mock 설정과 OCR 캐시 환경에서 정답 여부를 문항 ID별로 비교했습니다.
+
+| 평가           | 수정 전 | 수정 후 | 새 오답 |
+| -------------- | ------: | ------: | ------: |
+| 개발 학원      | 121/153 | 121/153 |       0 |
+| 기존 가상 학원 |   90/90 |   90/90 |       0 |
+| 표현 변형      |  74/100 |  74/100 |       0 |
+
+기존 오답도 동일했습니다. 문항 ID, 오류 단계와 답변은 로컬 `.git/rag-validation/weekday-before/` 및 `.git/rag-validation/weekday-after/`에 기록했습니다. 공개된 393문항은 이번 검증에 사용하지 않았습니다.
+
+`table-binding.test.ts`에 요일 표현과 공휴일·휴강 예외, 날짜와 요일의 불일치, 교시·교실·강사 배치, 복수 반, 행과 열 인용, 공통 규정 표를 검증하는 사례를 추가했습니다. 텍스트 PDF 원본을 파싱해 승인 색인에 등록한 뒤 최종 답변의 쪽·행·열도 검증합니다. 공휴일은 질문이나 자료에 명시된 조건으로 처리하며 날짜를 달력과 대조하는 기능은 범위 밖입니다.

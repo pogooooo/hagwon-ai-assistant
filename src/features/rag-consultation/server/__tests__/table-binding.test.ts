@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, test } from 'node:test';
 
 import { FixedClock } from '../adapters/memory/index.ts';
@@ -10,6 +11,10 @@ import {
 } from '../answer/info.ts';
 import { DEFAULT_RAG_CONFIG } from '../config.ts';
 import { DisabledGenerationProvider } from '../generation/providers.ts';
+import {
+  prepareFileDocument,
+  type FileDocumentMeta,
+} from '../ingest/ingest-file.ts';
 import { splitIntoBlocks } from '../ingest/chunking.ts';
 import { parseQuery } from '../query/parse-query.ts';
 import { InMemoryRagStore } from '../store/in-memory-store.ts';
@@ -59,30 +64,39 @@ function rows(markdown: string): RagChunk[] {
 async function context(
   markdown: string,
   question: string,
+  pdf?: Uint8Array,
+  testCatalog = catalog,
 ): Promise<AnswerContext & { documents: InMemoryRagStore }> {
   const store = new InMemoryRagStore();
-  const result = await store.upsertIndexedRevision({
-    approve: true,
-    document: {
-      academyId: access.academyId,
-      documentId: 'TABLE',
-      revision: 1,
-      documentType: 'schedule',
-      visibility: 'academy_public',
-      title: '반별 시간표',
-      text: markdown,
-      validFrom: '2026-11-01T00:00:00+09:00',
-      validTo: null,
-      approvedAt: '2026-11-01T00:00:00+09:00',
-    },
-  });
+  const metadata: FileDocumentMeta = {
+    academyId: access.academyId,
+    documentId: 'TABLE',
+    revision: 1,
+    documentType: 'schedule',
+    visibility: 'academy_public',
+    title: '반별 시간표',
+    validFrom: '2026-11-01T00:00:00+09:00',
+    validTo: null,
+    approvedAt: '2026-11-01T00:00:00+09:00',
+  };
+  const document = pdf
+    ? (
+        await prepareFileDocument(
+          metadata,
+          { bytes: pdf, fileName: 'schedule.pdf' },
+          { ocr: null },
+        )
+      ).document
+    : { ...metadata, text: markdown };
+  assert.ok(document);
+  const result = await store.upsertIndexedRevision({ approve: true, document });
   assert.equal(result.status, 'activated');
   return {
     access,
-    catalog,
+    catalog: testCatalog,
     frame: parseQuery(question, {
       access,
-      catalog,
+      catalog: testCatalog,
       config: DEFAULT_RAG_CONFIG,
     }),
     question,
@@ -311,4 +325,141 @@ describe('행 형태 시간표의 요일·기간 귀속', () => {
     assert.doesNotMatch(result.answer.answer, /16:00/);
     assert.equal(result.answer.citations[0]?.documentId, 'TABLE');
   });
+});
+
+async function askTable(ctx: Awaited<ReturnType<typeof context>>) {
+  return (
+    await runQuery(
+      {
+        store: ctx.documents,
+        catalog: {
+          async getAcademyCatalog() {
+            return ctx.catalog;
+          },
+        },
+        resolveScope: () => access,
+      },
+      {
+        userId: access.actorId,
+        question: ctx.question,
+        asOf: '2026-11-03T12:00:00+09:00',
+      },
+    )
+  ).answer;
+}
+
+test('요일 열의 독립 표현, 휴강 및 예외를 상담에서 검증한다', async () => {
+  const cases = [
+    ['월·수 (공휴일 제외)', '일요일', false],
+    ['평일 (공휴일 제외)', '일요일', false],
+    ['일반 일정', '일요일', false],
+    ['월~금', '수요일', true],
+    ['월수금', '금요일', true],
+    ['월요일·수요일', '수요일', true],
+    ['주말', '일요일', true],
+    ['매일', '월요일', true],
+    ['토요일 수업 없음', '토요일', false],
+    ['매일 (토요일 휴강)', '토요일', false],
+    ['매일 (토요일 휴강)', '금요일', true],
+    ['평일 (공휴일 제외)', '공휴일인 월요일', false],
+    ['월·수 (11월 4일 휴강)', '11월 4일 수요일', false],
+    ['월·수 (11월 4일 휴강)', '11월 11일 수요일', true],
+    ['월·수', '11월 4일 월요일', false],
+  ] as const;
+  for (const [days, date, expected] of cases) {
+    const ctx = await context(
+      '| 반 | 요일 | 시간 |\n|---|---|---|\n| 중2 심화반 | ' +
+        days +
+        ' | 16:00~17:00 |',
+      '중2 심화반 ' + date + ' 시간표',
+    );
+    assert.equal(
+      (await askTable(ctx)).status,
+      expected ? 'answered' : 'abstained',
+      days + ' / ' + date,
+    );
+  }
+});
+
+test('교시 격자에서 여러 행의 대상 칸만 답하고 해당 열만 인용한다', async () => {
+  const ctx = await context(
+    '| 시간 | 1교시 | 2교시 |\n|---|---|---|\n| 16:00 | 중2 심화반 | 중1 기본반 |\n| 17:00 | 고2 심화반 | 중2 심화반 |\n| 18:00 | 중1 기본반 | 고2 심화반 |',
+    '중2 심화반 시간표',
+  );
+  const answer = await askTable(ctx);
+  assert.equal(answer.status, 'answered');
+  assert.match(answer.answer, /16:00 \/ 1교시: 중2 심화반/);
+  assert.match(answer.answer, /17:00 \/ 2교시: 중2 심화반/);
+  assert.doesNotMatch(answer.answer, /중1 기본반|고2 심화반|18:00/);
+  const location = answer.citations[0]?.location ?? '';
+  assert.match(location, /1행 · 열 1교시/);
+  assert.match(location, /2행 · 열 2교시/);
+  assert.doesNotMatch(location, /3행|1행 · 열 2교시|2행 · 열 1교시/);
+});
+
+test('교실·강사 격자는 열 순서와 상관없이 복수 대상 반만 선택한다', () => {
+  const tables = rows(
+    '| 시간 | 301호 | 302호 | 303호 |\n|---|---|---|---|\n| 16:00 | 중1 기본반 | 중2 심화반 | 고2 심화반 |\n\n| 시간 | 이 강사 | 김 강사 | 박 강사 |\n|---|---|---|---|\n| 16:00 | 고2 심화반 | 중1 기본반 | 중2 심화반 |',
+  );
+  assert.deepEqual(
+    renderTableRows(tables, [], [], () => true, ['중2 심화반', '고2 심화반']),
+    [
+      '시간: 16:00 / 302호: 중2 심화반 / 303호: 고2 심화반',
+      '시간: 16:00 / 이 강사: 고2 심화반 / 박 강사: 중2 심화반',
+    ],
+  );
+});
+
+test('반 열이 중간에 있는 행 기반 표는 같은 행의 배치 정보를 선택한다', () => {
+  const table = rows(
+    '| 강사 | 반 | 교실 |\n|---|---|---|\n| 김 강사 | 중1 기본반 | 301호 |\n| 박 강사 | 중2 심화반 | 302호 |',
+  );
+  assert.deepEqual(
+    renderTableRows(table, [], [], () => true, ['중2 심화반']),
+    ['강사: 박 강사 / 반: 중2 심화반 / 교실: 302호'],
+  );
+});
+
+test('대상 칸이 없거나 대상 요일의 칸이 휴강이면 보류한다', async () => {
+  for (const [markdown, question] of [
+    [
+      '| 시간 | 1교시 | 2교시 |\n|---|---|---|\n| 16:00 | 고2 심화반 | 중1 기본반 |',
+      '중2 심화반 시간표',
+    ],
+    [
+      '| 시간 | 월요일 | 토요일 |\n|---|---|---|\n| 16:00 | 중2 심화반 | 중2 심화반 (휴강) |',
+      '중2 심화반 토요일 시간표',
+    ],
+  ]) {
+    const answer = await askTable(await context(markdown, question));
+    assert.equal(answer.status, 'abstained');
+    assert.deepEqual(answer.citations, []);
+  }
+});
+
+test('PDF에서 추출한 요일 격자를 등록하고 선택한 쪽·행·열을 인용한다', async () => {
+  const path = new URL(
+    '../__fixtures__/academies-v2/AC_HANGYEOL/documents/HK_TIMETABLE_2026_2__r1.pdf',
+    import.meta.url,
+  );
+  const question = '중2 내신A반 월요일 시간표';
+  const ctx = await context('', question, readFileSync(path), {
+    ...catalog,
+    classes: [{ classId: 'C_ADV', name: '중2 내신A반', aliases: [] }],
+  });
+  const answer = await askTable(ctx);
+  assert.equal(answer.status, 'answered');
+  assert.match(answer.answer, /18:20~19:50/);
+  assert.doesNotMatch(answer.answer, /중2 내신B반|14:40~16:10/);
+  assert.match(answer.citations[0]?.location ?? '', /1쪽.*행 · 열 월(?:$| ·)/);
+});
+
+test('같은 절의 반별 표와 공통 규정 표를 각각 유지한다', () => {
+  const tables = rows(
+    '| 반 | 교실 |\n|---|---|\n| 중2 심화반 | 301호 |\n| 중1 기본반 | 201호 |\n\n| 반환 사유 | 반환 금액 |\n|---|---|\n| 시작 전 | 전액 |',
+  );
+  assert.deepEqual(
+    renderTableRows(tables, [], [], () => true, ['중2 심화반']),
+    ['반: 중2 심화반 / 교실: 301호', '반환 사유: 시작 전 / 반환 금액: 전액'],
+  );
 });
