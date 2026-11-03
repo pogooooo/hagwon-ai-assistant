@@ -90,6 +90,7 @@ export interface QueryFrame {
   topics: TopicDefinition[];
   /** 카탈로그 반과 일치하지 않는 프로그램 지칭(예: "겨울방학 특강") */
   unknownPrograms: string[];
+  unboundProgram?: boolean;
   amountsKrw: number[];
   percents: number[];
   hasAnalysisTerms: boolean;
@@ -839,6 +840,10 @@ export function parseQuery(
     subjects,
     topics,
     unknownPrograms,
+    unboundProgram:
+      /(?:보충|보강|집중|속성|예비|대비|심화|체험|특별)(?:수업반|과정|강좌|프로그램|반)/.test(
+        withoutClasses,
+      ),
     amountsKrw: parseAmounts(withoutDates),
     percents,
     hasAnalysisTerms:

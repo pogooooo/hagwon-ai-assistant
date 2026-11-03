@@ -79,6 +79,17 @@ export interface QueryPlan {
   analysisAndTeacher: boolean;
 }
 
+export function isRosterRequest({ normalized }: QueryFrame): boolean {
+  return (
+    /(?:학생|원생|아이|애|친구)(?:들|의)?\s*(?:전체|전원)?\s*(?:성적\s*)?(?:명단|목록|리스트)/.test(
+      normalized,
+    ) ||
+    /(?:학생|원생|아이|애|친구)들\s*(?:전체|전원)?\s*(?:이름|연락처|전화번호)/.test(
+      normalized,
+    ) ||
+    /(?:명단|목록|리스트).{0,12}(?:학생|원생|아이|애들)/.test(normalized)
+  );
+}
 export function planQuery(
   question: string,
   frame: QueryFrame,
@@ -121,6 +132,7 @@ export function planQuery(
   const blocked =
     frame.flags.crossTenant ||
     frame.flags.bulkStudent ||
+    (planned && (frame.unboundProgram || isRosterRequest(frame))) ||
     frame.flags.shareOrPermission ||
     frame.flags.sessionChange ||
     frame.flags.citationForgery ||

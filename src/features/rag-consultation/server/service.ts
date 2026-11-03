@@ -7,8 +7,9 @@
  */
 import type { RagAnswer, RagCitation } from '../contract.ts';
 import { collectEvidence, validateEvidence } from './answer/evidence-bundle.ts';
+import { answerFromCostEvidence } from './answer/cost-evidence.ts';
 import { composeRequests } from './answer/composer.ts';
-import { planQuery } from './query/plan.ts';
+import { isRosterRequest, planQuery } from './query/plan.ts';
 export { splitQuestion } from './query/plan.ts';
 import { answerAdvice } from './answer/advice.ts';
 import { answerAnalysis } from './answer/analysis.ts';
@@ -150,7 +151,11 @@ export function createRagConsultationService(
     // 1) 보안 차단(문서 존재 여부를 드러내지 않는 동일한 거부 응답)
     trace.domain = 'security';
     if (flags.crossTenant) return deny('CROSS_TENANT_REFERENCE');
-    if (flags.bulkStudent) return deny('BULK_STUDENT_REQUEST');
+    if (
+      flags.bulkStudent ||
+      (ctx.engine === 'planned' && isRosterRequest(frame))
+    )
+      return deny('BULK_STUDENT_REQUEST');
     if (flags.shareOrPermission || flags.sessionChange)
       return deny('SHARE_OR_PERMISSION_CHANGE');
     if (
@@ -527,6 +532,15 @@ export function createRagConsultationService(
           candidateStudentIds: [...access.allowedStudentIds],
         },
       };
+    }
+    if (ctx.engine === 'planned') {
+      if (frame.unboundProgram && classSpecific)
+        return abstain(
+          '문의하신 과정의 승인 자료를 확인할 수 없습니다.',
+          'INSUFFICIENT_EVIDENCE',
+        );
+      const cost = await answerFromCostEvidence(ctx);
+      if (cost) return cost;
     }
     const asksMinutes =
       /몇\s*분/.test(frame.normalized) &&
