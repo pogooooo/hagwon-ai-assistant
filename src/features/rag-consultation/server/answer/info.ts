@@ -1038,7 +1038,11 @@ async function answerMakeupPolicy(
 async function findSentence(
   ctx: AnswerContext,
   queryTerms: readonly string[],
-  predicate: (sentence: string) => boolean,
+  predicate: (
+    sentence: string,
+    chunk: RagChunk,
+    previousHeading?: string,
+  ) => boolean,
 ): Promise<{ chunk: RagChunk; sentence: string } | null> {
   const results = await ctx.documents.searchApprovedChunks({
     access: ctx.access,
@@ -1051,9 +1055,24 @@ async function findSentence(
     ctx.trace,
     results.map((result) => result.chunk),
   );
+  const headings = new Map(
+    results.flatMap(({ chunk }) =>
+      /^[■◆▶]\s*[^\n]+$/.test(chunk.text.trim())
+        ? [[chunk.chunkId, chunk.text]]
+        : [],
+    ),
+  );
   for (const { chunk } of results) {
+    const separator = chunk.chunkId.lastIndexOf('#');
+    const order = Number(chunk.chunkId.slice(separator + 1));
+    const heading = headings.get(
+      chunk.chunkId.slice(0, separator + 1) + (order - 1),
+    );
     for (const sentence of splitSentences(chunk.text)) {
-      if (!isDataAbsenceStatement(sentence) && predicate(sentence))
+      if (
+        !isDataAbsenceStatement(sentence) &&
+        predicate(sentence, chunk, heading)
+      )
         return { chunk, sentence };
     }
   }
@@ -1066,10 +1085,19 @@ async function answerAttribute(
   effective: EffectiveTime,
 ): Promise<Part> {
   const evidenceTerms = topic.evidenceTerms ?? topic.terms;
+  const asksStudyHours =
+    ctx.engine === 'planned' &&
+    topic.id === 'study_room' &&
+    /몇\s*시|운영\s*시간|열어|닫아/.test(ctx.frame.normalized);
+  const clock = /\d{1,2}:\d{2}|\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?/;
   const facts = await loadFacts(ctx, [...topic.factTypes], effective.at);
   const matchingFact = facts.find((fact) => {
     const text = textOf(fact);
-    return containsAny(text, evidenceTerms) && !isDataAbsenceStatement(text);
+    return (
+      containsAny(text, evidenceTerms) &&
+      (!asksStudyHours || clock.test(text)) &&
+      !isDataAbsenceStatement(text)
+    );
   });
   const part = emptyPart('ok');
   if (matchingFact) {
@@ -1084,8 +1112,21 @@ async function answerAttribute(
   }
   const evidence = await findSentence(
     ctx,
-    [...evidenceTerms, ...topic.terms],
-    (sentence) => containsAny(sentence, evidenceTerms),
+    [
+      ...evidenceTerms,
+      ...topic.terms,
+      ...(asksStudyHours ? ['운영 시간 평일 토요일'] : []),
+    ],
+    (sentence, chunk, previousHeading) =>
+      asksStudyHours
+        ? clock.test(sentence) &&
+          !chunk.suspicious &&
+          !isAssistantDirective(chunk.text) &&
+          containsAny(
+            sentence + ' ' + (chunk.location.section ?? previousHeading ?? ''),
+            evidenceTerms,
+          )
+        : containsAny(sentence, evidenceTerms),
   );
   if (!evidence) return emptyPart('missing', [topic.label]);
   part.lines.push(`등록된 안내 자료에 따르면: "${evidence.sentence}"`);
@@ -1499,7 +1540,18 @@ async function answerSection(
   ctx: AnswerContext,
   topic: TopicDefinition,
 ): Promise<Part> {
-  const evidenceTerms = topic.evidenceTerms ?? topic.terms;
+  const terms = topic.evidenceTerms ?? topic.terms;
+  const transit =
+    ctx.engine === 'planned' && topic.id === 'location'
+      ? ['버스', '지하철', '도보', '정류장'].filter((term) =>
+          ctx.frame.normalized.includes(term),
+        )
+      : [];
+  const testTerms =
+    ctx.engine === 'planned' && topic.id === 'level_test'
+      ? ['레벨 진단', '레벨 평가']
+      : [];
+  const evidenceTerms = [...terms, ...transit, ...testTerms];
   const words = contentWords(ctx.question).filter(
     (word) => !topic.terms.some((term) => compactText(term) === word),
   );
@@ -1615,6 +1667,14 @@ async function answerSection(
       targetNames,
       ctx,
     );
+    if (transit.length && !tableLines.some(({ line }) => /주소/.test(line))) {
+      const address = tableChunks.filter(
+        ({ location }) => compactText(location.cells?.[0] ?? '') === '주소',
+      );
+      tableLines.unshift(
+        ...selectTableRows(address, [], ['주소'], keepText, targetNames, ctx),
+      );
+    }
     // 질문 단어가 표 행에 있으면 표를 먼저 보여 준다(길이 제한에 표가 잘리지 않게).
     const tableFirst = tableLines.some(({ line }) =>
       words.some((word) => compactText(line).includes(compactText(word))),

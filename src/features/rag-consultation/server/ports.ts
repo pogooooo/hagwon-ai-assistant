@@ -45,6 +45,8 @@ export interface ChunkSearchQuery {
   asOf: number;
   query: string;
   limit: number;
+  /** 승인 시점은 asOf 그대로 두고, 이 시점까지 적용 예정인 공개 문서도 검색한다. */
+  upcomingUntil?: number;
   documentTypes?: readonly string[];
   /** 프롬프트 인젝션 의심 청크 포함 여부(기본 false). */
   includeSuspicious?: boolean;

@@ -20,12 +20,14 @@ import {
   matchesRequestedSubject,
   subjectOf,
   recordFacts,
+  recordChunks,
   studentLabel,
   subjectTag,
   type AnswerContext,
   type AnswerDraft,
 } from './context.ts';
 import { accuracyPercent, exactPercent } from './format.ts';
+import { supportsExcerpt } from './verify.ts';
 
 type AccuracyFact = ApprovedFact & {
   value: {
@@ -256,6 +258,163 @@ function seriesFacts(
   return facts.filter((fact) => dimensionOf(fact) === 'unit');
 }
 
+/** Combined reports may contain subject rows even when their class metadata
+ * describes only the homeroom. Use the approved report revision, then bind
+ * the subject and requested metric to the same row. */
+async function subjectReportRows(
+  ctx: AnswerContext,
+  targets: readonly string[],
+  periods: readonly string[],
+  labels: readonly string[],
+  facts: readonly AccuracyFact[],
+): Promise<AnswerDraft | undefined> {
+  const [subject] = ctx.frame.subjects;
+  const [studentId] = targets;
+  if (
+    ctx.engine !== 'planned' ||
+    !subject ||
+    ctx.frame.subjects.length !== 1 ||
+    targets.length !== 1 ||
+    labels.length > 1 ||
+    ctx.frame.flags.weakUnit ||
+    ctx.frame.flags.cumulative ||
+    ctx.frame.flags.trend ||
+    !/정답률|몇\s*(?:개|문항|프로|퍼)|맞았|맞혔/.test(ctx.frame.normalized)
+  )
+    return;
+  const own = facts.filter((fact) => fact.subjectId === studentId);
+  const latest = own
+    .map((fact) => fact.period ?? '')
+    .sort(comparePeriods)
+    .at(-1);
+  const requested = periods.length ? periods : latest ? [latest] : [];
+  if (!requested.length) return;
+  const evidence = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [studentId],
+    asOf: ctx.asOf,
+    query: [
+      subject,
+      ...labels,
+      labels.length ? '과목 유형 단원' : '소계',
+      '정답 문항 전체 문항 정답률',
+    ].join(' '),
+    limit: 80,
+    documentTypes: ['student_analysis'],
+  });
+  recordChunks(
+    ctx.trace,
+    evidence.map(({ chunk }) => chunk),
+  );
+  const matches = [];
+  for (const period of requested) {
+    const sources = new Set(
+      own.filter((fact) => fact.period === period).map((fact) => fact.sourceId),
+    );
+    const rows = evidence.flatMap(({ chunk }) => {
+      const { header, cells, kind } = chunk.location;
+      if (
+        chunk.studentId !== studentId ||
+        !sources.has(chunk.sourceId) ||
+        chunk.suspicious ||
+        chunk.extraction?.needsReview ||
+        chunk.extraction?.uncertainTokens.length ||
+        kind !== 'table_row' ||
+        !header ||
+        !cells ||
+        header.length !== cells.length
+      )
+        return [];
+      const subjectColumn = header.findIndex((name) =>
+        /^(과목|구분)$/.test(compactText(name)),
+      );
+      const correct = header.findIndex((name) =>
+        /^정답(?:문항|수|문항수)$/.test(compactText(name)),
+      );
+      const total = header.findIndex((name) =>
+        /^전체(?:문항|문항수)$/.test(compactText(name)),
+      );
+      const rate = header.findIndex((name) => compactText(name) === '정답률');
+      if ([subjectColumn, correct, total, rate].some((index) => index < 0))
+        return [];
+      const rowSubject = compactText(cells[subjectColumn]);
+      const labelColumn = labels.length
+        ? header.findIndex((name) =>
+            ctx.frame.flags.typeDimension
+              ? /^(유형|문항유형)$/.test(compactText(name))
+              : /^(단원|단원명|영역)$/.test(compactText(name)),
+          )
+        : -1;
+      if (
+        labels.length
+          ? rowSubject !== compactText(subject) ||
+            labelColumn < 0 ||
+            compactText(cells[labelColumn]) !== compactText(labels[0])
+          : rowSubject !== compactText(subject + ' 소계')
+      )
+        return [];
+      if (
+        !/^\d+\s*문항$/.test(cells[correct]) ||
+        !/^\d+\s*문항$/.test(cells[total]) ||
+        !/^\d+(?:\.\d+)?\s*%$/.test(cells[rate])
+      )
+        return [];
+      const columns = [
+        ...new Set(
+          [subjectColumn, labelColumn, correct, total, rate].filter(
+            (index) => index >= 0,
+          ),
+        ),
+      ];
+      return [
+        {
+          chunk,
+          columns,
+          values: [cells[correct], cells[total], cells[rate]],
+          line: columns
+            .map((index) => header[index] + ': ' + cells[index])
+            .join(' / '),
+        },
+      ];
+    });
+    const verified = rows.filter(({ chunk, columns, line }) =>
+      supportsExcerpt({ chunk, tableColumns: columns, line }),
+    );
+    if (!verified.length) return;
+    if (new Set(verified.map((row) => row.values.join('|'))).size > 1)
+      return abstain(
+        '같은 과목과 기간의 승인 표가 서로 달라 확인이 필요합니다.',
+        'CONFLICTING_EVIDENCE',
+      );
+    matches.push({ period, ...verified[0] });
+  }
+  ctx.trace.intent = 'subject_report_rows';
+  return {
+    status: 'answered',
+    text: matches
+      .map(({ period, line }) => formatPeriod(period) + ' ' + line)
+      .join('\n'),
+    citations: matches.map(({ chunk, columns }) => ({
+      kind: 'chunk',
+      chunk,
+      tableColumns: columns,
+    })),
+    usedFacts: [],
+    excerpts: matches.map(({ chunk, columns, line }) => ({
+      chunk,
+      tableColumns: columns,
+      line,
+    })),
+    instants: [
+      ctx.asOf,
+      ...matches.map(({ period }) => Date.parse(period + '-01T00:00:00+09:00')),
+    ],
+    conversationUpdate: {
+      selectedStudentId: studentId,
+      selectedPeriod: matches.at(-1)?.period,
+    },
+  };
+}
 export async function answerAnalysis(
   ctx: AnswerContext,
   targets: string[],
@@ -285,6 +444,20 @@ export async function answerAnalysis(
     );
   }
 
+  if (
+    ctx.engine === 'planned' &&
+    /미\s*제출|(?:안|못)\s*(?:냈|낸|내|제출)|제출\s*(?:안|못|하지\s*않)/.test(
+      frame.normalized,
+    ) &&
+    /몇\s*(?:번|회|개|건)|횟수|건수|개수/.test(frame.normalized)
+  ) {
+    ctx.trace.intent = 'unsubmitted_assignment_count';
+    return abstain(
+      '학습 리포트의 분석 대상 과제 목록만으로는 미제출 과제 수를 확인할 수 없습니다.',
+      'INSUFFICIENT_EVIDENCE',
+      ['미제출 과제 기록'],
+    );
+  }
   const periods = resolvePeriods(ctx);
   const labels = resolveLabels(ctx);
   const loaded = await ctx.facts.queryApprovedFacts({
@@ -322,6 +495,18 @@ export async function answerAnalysis(
     );
   }
 
+  const rows = await subjectReportRows(
+    ctx,
+    targets,
+    periods,
+    labels,
+    loaded.filter(isAccuracy),
+  );
+  if (rows) return rows;
+
+  const wantsReportedWeakness =
+    ctx.engine === 'planned' &&
+    /취약\s*(?:영역|단원)|약하다고/.test(frame.normalized);
   const wantsComparison =
     frame.flags.compare || frame.flags.trend || frame.flags.cumulative;
   if (wantsComparison && targets.length >= 2) {
@@ -377,7 +562,7 @@ export async function answerAnalysis(
       .sort(comparePeriods)
       .pop();
 
-  if (frame.flags.weakUnit && labels.length === 0) {
+  if ((frame.flags.weakUnit && labels.length === 0) || wantsReportedWeakness) {
     ctx.trace.intent = 'weak_area';
     return weakAreaAnswer(
       ctx,

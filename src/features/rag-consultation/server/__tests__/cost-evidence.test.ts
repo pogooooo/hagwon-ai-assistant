@@ -28,7 +28,7 @@ const table =
   '| 항목 | 금액 |\n|---|---|\n| 6주 교습비 | 190,000원 |\n| 실습 재료비 | 23,000원 |';
 const question = '금속 조형반 교습비랑 재료비 각각 얼마죠?';
 
-async function createFixture() {
+async function createFixture(fixtureCatalog = catalog, fixtureScope = scope) {
   const store = new InMemoryRagStore();
   const register = async (
     documentId: string,
@@ -60,10 +60,10 @@ async function createFixture() {
         store,
         catalog: {
           async getAcademyCatalog() {
-            return catalog;
+            return fixtureCatalog;
           },
         },
-        resolveScope: () => scope,
+        resolveScope: () => fixtureScope,
       },
       { engine: 'planned', userId: scope.actorId, asOf, question: query },
     );
@@ -309,4 +309,246 @@ test('내년 승인 수강료의 첫 적용일과 금액을 조회하고 같은 
   const conflict = await ask(query);
   assert.equal(conflict.answer.status, 'abstained');
   assert.equal(conflict.trace.reasonCode, 'CONFLICTING_EVIDENCE');
+});
+
+test('같은 강좌명은 대상 학년으로 구분하고 학기당 청구액을 인용한다', async () => {
+  const { ask, register } = await createFixture({
+    ...catalog,
+    classes: [
+      {
+        classId: 'JUNIOR',
+        name: '공예반(초3·4)',
+        aliases: ['저학년 공예반'],
+        grade: '초3~초4',
+      },
+      {
+        classId: 'SENIOR',
+        name: '공예반(초5·6)',
+        aliases: ['고학년 공예반'],
+        grade: '초5~초6',
+      },
+    ],
+  });
+  await register(
+    'SEMESTER',
+    '| 강좌 | 대상 | 교재비 |\n|---|---|---|\n| 공예반 | 초3·4 | 학기당 34,000원 |\n| 공예반 | 초5·6 | 학기당 38,000원 |',
+    null,
+  );
+  const { answer } = await ask('공예반(초3·4) 교재비는 매달 내요?');
+  assert.equal(answer.status, 'answered', answer.answer);
+  assert.match(answer.answer, /학기당 34,000원/);
+  assert.doesNotMatch(answer.answer, /38,000원/);
+  assert.match(
+    answer.citations[0]?.location ?? '',
+    /1행 · 열 강좌, 대상, 교재비/,
+  );
+});
+
+test('이용권 가격은 강좌 이름과 요청 회차가 함께 일치하는 셀만 인용한다', async () => {
+  const { ask, register } = await createFixture();
+  await register(
+    'PASSES',
+    '| 서비스 | 1회권 | 4회권 |\n|---|---|---|\n| 단체 판화 체험 | 31,000원 | 102,000원 |\n| 개인 판화 체험 | 39,000원 | 134,000원 |',
+    null,
+  );
+  const result = await ask('개인 판화 체험 4회권 가격 얼마예요?');
+  assert.equal(result.trace.intent, 'pass_price_evidence');
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /개인 판화 체험 4회권: 134,000원/);
+  assert.doesNotMatch(result.answer.answer, /31,000원|39,000원|102,000원/);
+  assert.match(
+    result.answer.citations[0]?.location ?? '',
+    /2행 · 열 서비스, 4회권/,
+  );
+});
+
+test('대여와 차량 비용은 요금 단위와 같은 행의 적용 조건을 보존한다', async () => {
+  const { ask, register } = await createFixture();
+  await register(
+    'SERVICES',
+    '| 항목 | 금액(월) | 안내 |\n|---|---|---|\n| 태블릿 대여료 | 12,000원 | 정규반만 신청 가능 |\n| 차량 이용료(왕복) | 38,000원 | 등하원 모두 이용 |\n| 차량 이용료(편도) | 21,000원 | 한 방향만 이용 |\n| 간식비 | 27,000원 | 별도 |',
+    null,
+  );
+  const rental = await ask('태블릿을 빌리면 얼마예요?');
+  assert.equal(rental.trace.intent, 'ancillary_price_evidence');
+  assert.match(rental.answer.answer, /12,000원 \(월 기준\).*정규반만/);
+  assert.doesNotMatch(rental.answer.answer, /38,000원|21,000원|27,000원/);
+  assert.match(
+    rental.answer.citations[0]?.location ?? '',
+    /1행 · 열 항목, 금액\(월\), 안내/,
+  );
+  const rides = await ask('차량비 얼마예요? 등원만 타도 똑같나요?');
+  assert.equal(rides.trace.intent, 'ancillary_price_evidence');
+  assert.match(rides.answer.answer, /왕복.*38,000원/);
+  assert.match(rides.answer.answer, /편도.*21,000원/);
+  assert.doesNotMatch(rides.answer.answer, /12,000원|27,000원/);
+});
+
+test('적용 전 납부 공지는 이미 승인된 같은 기수의 행만 인용한다', async () => {
+  const { ask, store } = await createFixture();
+  const registerNotice = async (
+    documentId: string,
+    approvedAt: string,
+    visibility: 'academy_public' | 'staff_only',
+    window: string,
+  ) =>
+    store.upsertIndexedRevision({
+      approve: true,
+      document: {
+        academyId: scope.academyId,
+        documentId,
+        revision: 1,
+        documentType: 'fee',
+        visibility,
+        title: '수강료 납부 일정',
+        validFrom: '2026-12-10T00:00:00+09:00',
+        approvedAt,
+        text:
+          '| 항목 | 기간 |\n|---|---|\n| 12기 수강료 납부 | 11월 1일 ~ 11월 7일 |\n| 2기 수강료 납부 | ' +
+          window +
+          ' |\n| 2기 교재비 납부 | 12월 9일 ~ 12월 14일 |',
+      },
+    });
+  await registerNotice(
+    'PUBLISHED',
+    '2026-11-01T00:00:00+09:00',
+    'academy_public',
+    '11월 21일 ~ 12월 4일',
+  );
+  await registerNotice(
+    'LATER_APPROVAL',
+    '2026-11-05T00:00:00+09:00',
+    'academy_public',
+    '11월 22일 ~ 12월 5일',
+  );
+  await registerNotice(
+    'RESTRICTED',
+    '2026-11-01T00:00:00+09:00',
+    'staff_only',
+    '11월 23일 ~ 12월 6일',
+  );
+  const result = await ask('2기 수강료는 언제부터 언제까지 내나요?');
+  assert.equal(result.trace.intent, 'payment_window_evidence');
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /11월 21일 ~ 12월 4일/);
+  assert.deepEqual(
+    result.answer.citations.map(({ documentId }) => documentId),
+    ['PUBLISHED'],
+  );
+  assert.match(
+    result.answer.citations[0]?.location ?? '',
+    /2행 · 열 항목, 기간/,
+  );
+  assert.ok(
+    result.trace.retrievedChunkIds.every((id) => id.startsWith('PUBLISHED:')),
+  );
+});
+
+test('일반 카드 결제와 할부 가능 여부를 별개로 판정한다', async () => {
+  const { ask, register } = await createFixture();
+  await register(
+    'PAYMENT',
+    '납부 기한: 매월 9일까지 (카드 결제 또는 계좌 이체)',
+    null,
+  );
+  const query = '수강료 카드 할부 되나요? 납부는 언제까지 해야 돼요?';
+  const incomplete = await ask(query);
+  assert.equal(incomplete.answer.status, 'partial', incomplete.answer.answer);
+  assert.match(incomplete.answer.answer, /매월 9일까지/);
+  assert.match(incomplete.answer.answer, /확인되지 않은 항목: 할부 가능 여부/);
+  await register('INSTALLMENT', '카드 할부는 지원하지 않습니다.', null);
+  const complete = await ask(query);
+  assert.equal(complete.answer.status, 'answered', complete.answer.answer);
+  assert.match(complete.answer.answer, /할부는 지원하지 않습니다/);
+  assert.match(complete.answer.answer, /매월 9일까지/);
+});
+
+test('교재비 비교는 두 반의 값과 같은 청구 기준이 있어야 완료한다', async () => {
+  const { ask, register } = await createFixture();
+  await register(
+    'COMPARE',
+    '| 반 | 교재비(월) |\n|---|---|\n| 금속 조형반 | 21,000원 |\n| 목재 조형반 | 19,000원 |',
+    null,
+  );
+  const result = await ask('금속 조형반이랑 목재 조형반 교재비가 같은가요?');
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /금속 조형반 교재비\(월\): 21,000원/);
+  assert.match(result.answer.answer, /목재 조형반 교재비\(월\): 19,000원/);
+  assert.match(result.answer.answer, /금액은 서로 다릅니다/);
+  assert.match(result.answer.citations[0]?.location ?? '', /1행.*2행|2행.*1행/);
+});
+
+test('현재 수강료와 간식비를 각각 검증하고 이전 가격이나 합계를 안내하지 않는다', async () => {
+  const { ask, store } = await createFixture();
+  const documentId = 'CURRENT_COSTS';
+  const validFrom = '2026-10-01T00:00:00+09:00';
+  await store.upsertIndexedRevision({
+    approve: true,
+    document: {
+      academyId: scope.academyId,
+      documentId,
+      revision: 1,
+      documentType: 'fee',
+      visibility: 'academy_public',
+      title: '새 학기 수강료',
+      validFrom,
+      approvedAt: '2026-09-01T00:00:00+09:00',
+      text: '금속 조형반 월 수강료 220,000원\n\n| 항목 | 현행 | 개정 |\n|---|---|---|\n| 간식비(월) | 10,000원 | 12,000원 |',
+    },
+    facts: [
+      {
+        factId: 'METAL_FEE',
+        academyId: scope.academyId,
+        sourceId: documentId + ':r1:body',
+        documentId,
+        revision: 1,
+        subjectType: 'class',
+        subjectId: 'METAL',
+        factType: 'monthly_fee',
+        value: { kind: 'money', amount: 220_000, currency: 'KRW' },
+        period: null,
+        validFrom,
+        approvalStatus: 'approved',
+      },
+    ],
+  });
+  const result = await ask('금속 조형반 이번달 수강료 얼마예요? 간식비까지요.');
+  assert.equal(result.trace.intent, 'tuition_and_snacks');
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /월 수강료: 220,000원/);
+  assert.match(result.answer.answer, /간식비\(월\): 12,000원/);
+  assert.doesNotMatch(result.answer.answer, /10,000원|232,000원/);
+  assert.match(result.answer.citations[0]?.location ?? '', /열 항목, 개정/);
+});
+
+test('할인 예시는 같은 원생의 반 조합과 산식·결과를 모두 확인한다', async () => {
+  const { ask, register } = await createFixture(catalog, {
+    ...scope,
+    role: 'guardian',
+    allowedStudentIds: ['S1'],
+    studentRefs: [
+      {
+        studentId: 'S1',
+        displayLabel: '민수',
+        aliases: ['민수'],
+        classIds: ['METAL', 'WOOD'],
+      },
+    ],
+  });
+  await register(
+    'EXAMPLES',
+    '## 할인 계산 예시\n\n| 조합 | 계산 | 할인 후 월 수강료 |\n|---|---|---|\n| 금속 조형반 + 목재 조형반 | 60,000원 + (40,000원 − 9,000원) | 91,000원 |\n| 금속 조형반 + 사진반 | 60,000원 + (30,000원 − 8,000원) | 82,000원 |',
+    null,
+  );
+  const result = await ask(
+    '민수 금속 조형반이랑 목재 조형반 월 수강료 합치면 얼마예요?',
+  );
+  assert.equal(result.trace.intent, 'combined_tuition_example');
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /할인 계산 예시.*9,000원.*91,000원/);
+  assert.doesNotMatch(result.answer.answer, /82,000원/);
+  assert.match(
+    result.answer.citations[0]?.location ?? '',
+    /1행 · 열 조합, 계산, 할인 후 월 수강료/,
+  );
 });

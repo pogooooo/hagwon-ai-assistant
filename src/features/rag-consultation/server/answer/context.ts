@@ -47,7 +47,12 @@ export type CitationRequest =
       effectiveAt?: number;
       includeHistory?: boolean;
     }
-  | { kind: 'chunk'; chunk: RagChunk; tableColumns?: readonly number[] };
+  | {
+      kind: 'chunk';
+      chunk: RagChunk;
+      tableColumns?: readonly number[];
+      effectiveAt?: number;
+    };
 
 export interface EvidenceExcerpt {
   line: string;

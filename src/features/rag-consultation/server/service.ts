@@ -7,6 +7,9 @@
  */
 import type { RagAnswer, RagCitation } from '../contract.ts';
 import { collectEvidence, validateEvidence } from './answer/evidence-bundle.ts';
+import { answerWeeklyRefund } from './answer/refund-evidence.ts';
+import { answerWeeklyCurriculum } from './answer/curriculum-evidence.ts';
+import { answerTeacherProfile } from './answer/teacher-profile.ts';
 import { answerFromScheduleEvidence } from './answer/schedule-evidence.ts';
 import { answerFromCostEvidence } from './answer/cost-evidence.ts';
 import { composeRequests } from './answer/composer.ts';
@@ -205,8 +208,43 @@ export function createRagConsultationService(
       );
     }
 
+    const predictsOutcome =
+      flags.prediction ||
+      /\d+(?:\.\d+)?\s*점.{0,10}(?:넘|받|나오|되)겠/.test(frame.normalized) ||
+      /(?:붙|합격|갈|들어갈|오를|받)\S{0,2}\s*수\s*있을\s*거\s*같/.test(
+        frame.normalized,
+      ); // An individual learning-risk question remains in the analysis domain
+    // even when "class time" or "teacher" also matches an info topic.
+    if (
+      ctx.engine === 'planned' &&
+      (frame.matchedStudentIds.length > 0 ||
+        frame.selfReference ||
+        frame.unresolvedRelationWords.length > 0 ||
+        studentIdHint !== undefined) &&
+      (flags.attitude ||
+        predictsOutcome ||
+        (flags.causal && frame.hasAnalysisTerms))
+    ) {
+      if (predictsOutcome && !flags.prediction)
+        ctx.frame = { ...frame, flags: { ...flags, prediction: true } };
+      return routeAnalysis(ctx, studentIdHint);
+    }
     // 2) 학습 분석 vs 학원 정보
     // "선생님이 어떻게 지도해 주신대요?"처럼 원생을 가리키며 강사의 지도·연습을 묻는 말은 강사 정보가 아니라 학습 방향 질문이다.
+    const recordedGuidance =
+      ctx.engine === 'planned' &&
+      (frame.matchedStudentIds.length > 0 ||
+        frame.selfReference ||
+        frame.unresolvedRelationWords.length > 0 ||
+        (frame.flags.elliptical &&
+          state?.previousFrame?.domain === 'analysis') ||
+        (frame.hasAnalysisTerms && access.allowedStudentIds.length > 0)) &&
+      /(?:지도|중점).{0,24}(?:신대|준대|해준|한다고)|(?:뭐|뭘|무엇)\s*(?:더\s*)?하라고/.test(
+        frame.normalized,
+      );
+    if (recordedGuidance) {
+      return routeAnalysis(ctx, studentIdHint, { recordedGuidance: true });
+    }
     const teacherGuidance =
       frame.topics.length > 0 &&
       frame.topics.every((topic) => topic.id === 'teacher') &&
@@ -380,7 +418,7 @@ export function createRagConsultationService(
   async function routeAnalysis(
     ctx: AnswerContext,
     studentIdHint: string | undefined,
-    options: { forceAdvice?: boolean } = {},
+    options: { forceAdvice?: boolean; recordedGuidance?: boolean } = {},
   ): Promise<AnswerDraft> {
     const { frame, access, state, trace } = ctx;
     const flags = frame.flags;
@@ -409,7 +447,10 @@ export function createRagConsultationService(
       flags.causal ||
       flags.attitude ||
       flags.prediction ||
+      /\d+(?:\.\d+)?\s*점.{0,10}(?:넘|받|나오|되)겠/.test(frame.normalized) ||
       flags.misattribution;
+    if (options.recordedGuidance && !blocksGeneration)
+      return answerAdvice(ctx, resolution.studentIds, { recordedOnly: true });
     if ((flags.generationRequest || options.forceAdvice) && !blocksGeneration) {
       return answerAdvice(ctx, resolution.studentIds);
     }
@@ -534,6 +575,46 @@ export function createRagConsultationService(
         },
       };
     }
+    if (
+      ctx.engine === 'planned' &&
+      frame.topics.some(({ id }) => id === 'enrollment') &&
+      /대기|대기자|대기열/.test(frame.normalized) &&
+      /(?:\d{1,2}\s*월|다음\s*달|언제쯤).{0,24}(?:들어갈|등록할|자리.{0,4}날)\s*수\s*있을|(?:\d{1,2}\s*월|다음\s*달|언제쯤).{0,16}자리.{0,6}날까요/.test(
+        frame.normalized,
+      )
+    ) {
+      return abstain(
+        '대기 현황만으로 특정 시점에 입학할 수 있는지는 확인할 수 없습니다.',
+        'INSUFFICIENT_EVIDENCE',
+      );
+    }
+    const season = /(?:여름|겨울)\s*방학/.exec(frame.normalized)?.[0];
+    if (
+      ctx.engine === 'planned' &&
+      season &&
+      frame.topics.some(({ id }) => id === 'shuttle') &&
+      /운행\s*시간표|몇\s*시|언제\s*오/.test(frame.normalized)
+    ) {
+      const evidence = await retrieveEvidence(ctx, {
+        documentTypes: ['schedule', 'academy_info', 'announcement'],
+        searchTerms: [season, '차량 운행 정류장'],
+        limit: 30,
+      });
+      const seasonal = evidence.filter(({ chunk }) => {
+        const title = (
+          chunk.title +
+          ' ' +
+          (chunk.location.section ?? '')
+        ).replace(/\s+/g, '');
+        return (
+          title.includes(season.replace(/\s+/g, '')) &&
+          /차량|셔틀|통학/.test(title)
+        );
+      });
+      return answerFromDocuments(ctx, seasonal, (line) =>
+        /\d{1,2}:\d{2}|\d{1,2}\s*시\s*\d{1,2}\s*분/.test(line),
+      );
+    }
     if (ctx.engine === 'planned') {
       if (frame.unboundProgram && classSpecific)
         return abstain(
@@ -542,6 +623,12 @@ export function createRagConsultationService(
         );
       const cost = await answerFromCostEvidence(ctx);
       if (cost) return cost;
+      const refund = await answerWeeklyRefund(ctx);
+      if (refund) return refund;
+      const curriculum = await answerWeeklyCurriculum(ctx);
+      if (curriculum) return curriculum;
+      const teacherProfile = await answerTeacherProfile(ctx);
+      if (teacherProfile) return teacherProfile;
       const schedule = await answerFromScheduleEvidence(ctx);
       if (schedule) return schedule;
       // A monthly price request may precede an explicit textbook question.
@@ -776,7 +863,7 @@ export function createRagConsultationService(
         studentIds: studentId ? [studentId] : [],
         sourceId: isFact ? request.fact.sourceId : request.chunk.sourceId,
         asOf: ctx.asOf,
-        effectiveAt: isFact ? request.effectiveAt : undefined,
+        effectiveAt: request.effectiveAt,
         includeHistory: isFact ? request.includeHistory : undefined,
         locate: isFact ? request.fact : undefined,
         locateClassNames:

@@ -6,7 +6,7 @@ import { describe, test } from 'node:test';
 
 import { MemoryRagLogger } from '../adapters/memory/index.ts';
 import { parseInstant } from '../text/time.ts';
-import { runQuery, scopeFor, sharedEnv } from './helpers.ts';
+import { freshEnv, runQuery, scopeFor, sharedEnv } from './helpers.ts';
 
 const env = await sharedEnv();
 const asOf = '2026-11-01T18:00:00+09:00';
@@ -183,4 +183,95 @@ describe('기본 로그에 개인정보·원문이 남지 않는다', () => {
       );
     }
   });
+});
+
+test('계획 엔진은 수업 시간 표현이 섞인 개인 태도 질문에 일반 학원 정보를 대신 답하지 않는다', async () => {
+  const result = await runQuery(env, {
+    engine: 'planned',
+    userId: 'GUARDIAN_A',
+    question: 'A01 수업 시간에 딴짓해서 성적이 낮은 건가요?',
+    asOf,
+  });
+  assert.equal(result.answer.status, 'abstained');
+  assert.equal(result.trace.reasonCode, 'CAUSAL_CLAIM_NOT_SUPPORTED');
+  assert.deepEqual(result.answer.citations, []);
+  assert.equal(result.generationCalls, 0);
+});
+
+test('계획 엔진은 본선 진출 가능성의 구어체 질문도 결과 예측으로 처리한다', async () => {
+  const result = await runQuery(env, {
+    engine: 'planned',
+    userId: 'GUARDIAN_A',
+    question: 'A01 이번 대회에 나가면 본선에 갈 수 있을 거 같아?',
+    asOf,
+  });
+  assert.equal(result.answer.status, 'abstained');
+  assert.equal(result.trace.reasonCode, 'PREDICTION_NOT_SUPPORTED');
+  assert.deepEqual(result.answer.citations, []);
+  assert.equal(result.generationCalls, 0);
+});
+
+test('시험 점수 기준을 넘겠냐는 질문에서 현재 성적을 대신 제시하지 않는다', async () => {
+  const result = await runQuery(env, {
+    engine: 'planned',
+    userId: 'GUARDIAN_A',
+    question: 'A01 이대로 하면 기말에 90점은 넘겠죠?',
+    asOf,
+  });
+  assert.equal(result.answer.status, 'abstained');
+  assert.equal(result.trace.reasonCode, 'PREDICTION_NOT_SUPPORTED');
+  assert.deepEqual(result.answer.citations, []);
+  assert.equal(result.generationCalls, 0);
+});
+
+test('대기 현황으로 미래 등록 가능 시점을 단정하지 않는다', async () => {
+  const result = await runQuery(env, {
+    engine: 'planned',
+    userId: 'VISITOR_A',
+    question: '중2 기본반 대기인데 12월엔 들어갈 수 있을까요?',
+    asOf,
+  });
+  assert.equal(result.answer.status, 'abstained');
+  assert.deepEqual(result.answer.citations, []);
+  assert.equal(result.generationCalls, 0);
+});
+
+test('방학 셔틀 시각은 학기 표를 대신 쓰지 않고 같은 시즌 운행표를 인용한다', async () => {
+  const transport = await freshEnv();
+  const register = async (documentId: string, title: string, time: string) =>
+    transport.store.upsertIndexedRevision({
+      approve: true,
+      document: {
+        academyId: 'AC_A',
+        documentId,
+        revision: 1,
+        documentType: 'schedule',
+        visibility: 'academy_public',
+        title,
+        validFrom: '2026-10-01T00:00:00+09:00',
+        approvedAt: '2026-10-01T00:00:00+09:00',
+        text:
+          '| 정류장 | 차량 시각 |\n|---|---|\n| 은행나무역 | ' + time + ' |',
+      },
+    });
+  await register('TERM_BUS', '2학기 셔틀 차량 운행 시간표', '17:40');
+  const ask = () =>
+    runQuery(transport, {
+      engine: 'planned',
+      userId: 'VISITOR_A',
+      question: '겨울방학 셔틀 운행 시간표에서 은행나무역 몇 시에 와요?',
+      asOf,
+    });
+  const missing = await ask();
+  assert.equal(missing.answer.status, 'abstained');
+  assert.deepEqual(missing.answer.citations, []);
+  await register('WINTER_BUS', '겨울방학 셔틀 차량 운행 시간표', '14:20');
+  const answer = await ask();
+  assert.equal(answer.answer.status, 'answered', answer.answer.answer);
+  assert.match(answer.answer.answer, /14:20/);
+  assert.doesNotMatch(answer.answer.answer, /17:40/);
+  assert.deepEqual(
+    answer.answer.citations.map(({ sourceId }) => sourceId),
+    ['WINTER_BUS:r1:body'],
+  );
 });

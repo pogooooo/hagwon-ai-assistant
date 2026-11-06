@@ -315,3 +315,59 @@ describe('OpenAI 호환 HTTP 어댑터(가짜 fetch)', () => {
     );
   });
 });
+
+test('기록된 지도 질문은 보고서 월과 지도 시행 월을 구분하고 생성하지 않는다', async () => {
+  const academy = await freshEnv();
+  const generation = new MockGenerationProvider('ok');
+  const report = analysisReportToIndexInput({
+    academyId: 'AC_A',
+    studentId: 'ST_A01',
+    reportId: 'RPT_GUIDANCE_SCOPE',
+    revision: 1,
+    period: '2026-10',
+    title: '강사 확인 리포트',
+    publishedAt: '2026-10-31T09:00:00+09:00',
+    units: [{ unitName: '어휘', correctCount: 7, questionCount: 10 }],
+  });
+  const guidance = '11월에는 어려운 단어에 밑줄을 긋는 연습을 진행하겠습니다.';
+  await academy.store.upsertIndexedRevision({
+    approve: true,
+    document: {
+      ...report.document,
+      text: report.document.text + '\n\n' + guidance,
+    },
+    facts: [
+      ...report.facts,
+      {
+        ...report.facts[0],
+        factId: 'F_GUIDANCE_SCOPE',
+        factType: 'learning_guidance',
+        value: { kind: 'text', text: guidance },
+      },
+    ],
+  });
+  const input = {
+    engine: 'planned' as const,
+    userId: 'GUARDIAN_A',
+    asOf,
+    generation,
+  };
+  const answer = await runQuery(academy, {
+    ...input,
+    question: 'A01 11월엔 수업 때 뭘 중점적으로 해주신대요?',
+  });
+  assert.equal(answer.answer.status, 'answered', answer.answer.answer);
+  assert.match(answer.answer.answer, /밑줄/);
+  assert.deepEqual(
+    answer.answer.citations.map((citation) => citation.sourceId),
+    ['RPT_GUIDANCE_SCOPE:r1:body'],
+  );
+
+  const missing = await runQuery(academy, {
+    ...input,
+    question: 'A01 11월 리포트에서는 뭘 하라고 했어요?',
+  });
+  assert.equal(missing.answer.status, 'abstained');
+  assert.deepEqual(missing.answer.citations, []);
+  assert.equal(generation.calls.length, 0);
+});

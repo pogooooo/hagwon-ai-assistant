@@ -56,6 +56,7 @@ function valueLine(fact: ApprovedFact): string {
 export async function answerAdvice(
   ctx: AnswerContext,
   targets: string[],
+  options: { recordedOnly?: boolean } = {},
 ): Promise<AnswerDraft> {
   ctx.trace.intent = 'learning_advice';
   if (targets.length !== 1) {
@@ -81,6 +82,47 @@ export async function answerAdvice(
   markMultiSubjectStudents(ctx, loaded);
   const relevant = loaded.filter((fact) => matchesRequestedSubject(ctx, fact));
 
+  if (options.recordedOnly) {
+    let candidates = relevant.filter(
+      (fact) =>
+        fact.factType === 'learning_guidance' && fact.value.kind === 'text',
+    );
+    const months = ctx.frame.months;
+    const reportMonth = /\d{1,2}\s*월\s*(?:리포트|보고서|분석)/.test(
+      ctx.frame.normalized,
+    );
+    if (months.length) {
+      candidates = candidates.filter((fact) =>
+        reportMonth
+          ? months.includes(Number(fact.period?.split('-')[1]))
+          : fact.value.kind === 'text' &&
+            [
+              ...fact.value.text.matchAll(
+                /(?<!\d)(\d{1,2})\s*월(?:에|엔|부터|\s)/g,
+              ),
+            ].some((match) => months.includes(Number(match[1]))),
+      );
+    }
+    const selectedPeriod = !months.length
+      ? ctx.state?.selectedPeriod
+      : undefined;
+    const period = selectedPeriod ?? latestPeriodOf(candidates);
+    const selected = candidates.filter((fact) => fact.period === period);
+    if (!selected.length)
+      return abstain(
+        '승인된 리포트에서 요청하신 학습 지도를 확인할 수 없습니다.',
+        'INSUFFICIENT_EVIDENCE',
+      );
+    return {
+      status: 'answered',
+      text: selected
+        .map((fact) => '담당 강사가 확인한 학습 방향: ' + valueLine(fact))
+        .join('\n'),
+      citations: selected.map((fact) => ({ kind: 'fact', fact })),
+      usedFacts: selected,
+      conversationUpdate: { selectedStudentId: target, selectedPeriod: period },
+    };
+  }
   // "10월 리포트"처럼 달을 말하면 그 달, 아니면 가장 최근 확정 기간
   const available = relevant.filter((fact) => fact.factType === 'accuracy');
   const askedPeriods = ctx.frame.months

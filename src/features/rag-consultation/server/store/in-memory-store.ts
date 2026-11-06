@@ -465,7 +465,14 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
     const activeDocuments = new Set(active.map((stored) => stored.documentId));
     for (const stored of active) {
       if (!canReadRecord(query.access, stored, targets)) continue;
-      if (!isValidAt(stored.validFrom, stored.validTo, query.asOf)) continue;
+      const upcoming =
+        query.upcomingUntil !== undefined &&
+        stored.visibility === 'academy_public' &&
+        stored.studentId === null &&
+        stored.validFrom > query.asOf &&
+        stored.validFrom <= query.upcomingUntil;
+      if (!upcoming && !isValidAt(stored.validFrom, stored.validTo, query.asOf))
+        continue;
       if (stored.duplicateOf && activeDocuments.has(stored.duplicateOf))
         continue;
       if (

@@ -28,8 +28,14 @@ export function isSuspiciousInstruction(text: string): boolean {
 
 /** Directives addressed to the assistant, even in approved reference material. */
 export function isAssistantDirective(text: string): boolean {
-  return /(?:ai|인공지능)\s*(?:상담\s*)?(?:비서|봇|모델)(?:에게|한테).{0,20}(?:알립니다|지시|명령)/i.test(
-    normalizeText(text),
+  const normalized = normalizeText(text);
+  return (
+    /(?:ai|인공지능)\s*(?:상담\s*)?(?:비서|봇|모델)(?:에게|한테).{0,20}(?:알립니다|지시|명령)/i.test(
+      normalized,
+    ) ||
+    /(?:ai|인공지능)\s*(?:상담\s*)?(?:비서|봇|모델)\s*전용[\s\S]{0,240}(?:안내|출력|공개|첨부|붙이).{0,12}(?:할\s*것|하라|하십시오|해라)/i.test(
+      normalized,
+    )
   );
 }
 export function contentHash(
