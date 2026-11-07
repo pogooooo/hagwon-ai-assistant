@@ -236,6 +236,167 @@ test('교습비와 담당 강사를 한 문장에 물으면 근거가 있는 비
   );
 });
 
+test('원문 종료일이 지난 요금 사실을 개정 요금과 충돌시키지 않는다', async () => {
+  const { ask, store } = await createFixture();
+  const current = '2026-08-01T00:00:00+09:00';
+  const future = '2026-12-01T00:00:00+09:00';
+  const add = async (
+    id: string,
+    amount: number,
+    validFrom: string,
+    validTo: string | null,
+  ) =>
+    store.upsertIndexedRevision({
+      approve: true,
+      document: {
+        academyId: scope.academyId,
+        documentId: id,
+        classId: 'METAL',
+        revision: 1,
+        documentType: 'fee',
+        title: '조형반 월 수강료',
+        visibility: 'academy_public',
+        validFrom,
+        validTo,
+        approvedAt: current,
+        text:
+          '| 반 | 월 수강료 |\n|---|---|\n| 금속 조형반 | ' +
+          amount.toLocaleString('ko-KR') +
+          '원 |',
+      },
+      facts: [
+        {
+          academyId: scope.academyId,
+          factId: id + '-fee',
+          documentId: id,
+          sourceId: id + ':r1:body',
+          revision: 1,
+          subjectType: 'class',
+          subjectId: 'METAL',
+          factType: 'monthly_fee',
+          value: { kind: 'money', amount, currency: 'KRW' },
+          period: null,
+          validFrom,
+          validTo: null,
+          approvalStatus: 'approved',
+        },
+      ],
+    });
+  await add('EXPIRES', 170_000, current, future);
+  await add('REPLACES', 190_000, future, null);
+  const now = (await ask('금속 조형반 월 수강료 얼마예요?')).answer;
+  assert.match(now.answer, /170,000원/);
+  assert.deepEqual(
+    now.citations.map(({ documentId }) => documentId),
+    ['EXPIRES'],
+  );
+  const next = (await ask('금속 조형반 12월부터 월 수강료 얼마예요?')).answer;
+  assert.equal(next.status, 'answered', next.answer);
+  assert.match(next.answer, /190,000원/);
+  assert.doesNotMatch(next.answer, /170,000/);
+  assert.deepEqual(
+    next.citations.map(({ documentId, location }) => [documentId, location]),
+    [['REPLACES', '표 1 · 1행 · 열 월 수강료']],
+  );
+});
+
+test('선납 문의는 납부일과 수강월을 구분하고 같은 개정 안내의 적용 규정을 인용한다', async () => {
+  const { ask, store } = await createFixture();
+  const start = '2026-08-01T00:00:00+09:00';
+  const next = '2027-01-01T00:00:00+09:00';
+  const add = async (
+    id: string,
+    classId: string,
+    amount: number,
+    validFrom: string,
+    validTo: string | null,
+    rule: string,
+    approve = true,
+  ) => {
+    const result = await store.upsertIndexedRevision({
+      approve,
+      document: {
+        academyId: scope.academyId,
+        documentId: id,
+        revision: 1,
+        classId,
+        documentType: 'fee',
+        title: '수강료 개정 안내',
+        visibility: 'academy_public',
+        validFrom,
+        validTo,
+        approvedAt: start,
+        text: [
+          '| 반 | 월 수강료 |',
+          '|---|---|',
+          '| ' +
+            (classId === 'METAL' ? '금속 조형반' : '목재 조형반') +
+            ' | ' +
+            amount.toLocaleString('en-US') +
+            '원 |',
+          '',
+          rule,
+        ].join('\n'),
+      },
+      facts: [
+        {
+          academyId: scope.academyId,
+          factId: id + '_FACT',
+          documentId: id,
+          sourceId: id + ':r1:body',
+          revision: 1,
+          subjectType: 'class',
+          subjectId: classId,
+          factType: 'monthly_fee',
+          value: { kind: 'money', amount, currency: 'KRW' },
+          period: null,
+          validFrom,
+          validTo,
+          approvalStatus: approve ? 'approved' : 'pending_review',
+        },
+      ],
+    });
+    assert.notEqual(result.status, 'rejected');
+  };
+  const rule =
+    '납부일과 관계없이 2027년 1월 수강분부터 새 수강료를 적용합니다.';
+  const question =
+    '금속 조형반 2027년 1월 수강료 얼마예요? 12월에 1월분을 미리 내면 지금 가격으로 해주나요?';
+  await add('CURRENT_FEE', 'METAL', 170_000, start, next, '');
+  await add('OTHER_FEE', 'WOOD', 280_000, next, null, rule);
+  await add('DRAFT_FEE', 'METAL', 330_000, next, null, rule, false);
+  const absent = await ask(question);
+  assert.equal(absent.answer.status, 'abstained', absent.answer.answer);
+  assert.doesNotMatch(absent.answer.answer, /170,000|280,000|330,000/);
+  assert.deepEqual(absent.answer.citations, []);
+
+  await add('NEXT_BASE_FEE', 'METAL', 190_000, next, null, '');
+  const baseOnly = await ask(question);
+  assert.equal(baseOnly.answer.status, 'partial', baseOnly.answer.answer);
+  assert.match(baseOnly.answer.answer, /190,000원/);
+  assert.deepEqual(baseOnly.answer.missingFields, ['선납 시 적용 기준']);
+  assert.deepEqual(
+    baseOnly.answer.citations.map(({ documentId }) => documentId),
+    ['NEXT_BASE_FEE'],
+  );
+
+  await add('NEXT_FEE', 'METAL', 190_000, next, null, rule);
+  const known = await ask(question);
+  assert.equal(known.answer.status, 'answered', known.answer.answer);
+  assert.match(
+    known.answer.answer,
+    /2027년 1월 수강분.*190,000원.*\n납부일과 관계없이/,
+  );
+  assert.doesNotMatch(known.answer.answer, /170,000|280,000|330,000/);
+  assert.deepEqual(known.trace.usedFactIds, ['NEXT_FEE_FACT']);
+  assert.deepEqual(
+    known.answer.citations.map(({ documentId }) => documentId),
+    ['NEXT_FEE'],
+  );
+  assert.match(known.answer.citations[0].location ?? '', /열 월 수강료.*문단/);
+  assert.equal(known.generationCalls, 0);
+});
+
 test('내년 승인 수강료의 첫 적용일과 금액을 조회하고 같은 시점 충돌을 감지한다', async () => {
   const { ask, store } = await createFixture();
   const registerChange = async (
@@ -461,6 +622,52 @@ test('일반 카드 결제와 할부 가능 여부를 별개로 판정한다', a
   assert.equal(complete.answer.status, 'answered', complete.answer.answer);
   assert.match(complete.answer.answer, /할부는 지원하지 않습니다/);
   assert.match(complete.answer.answer, /매월 9일까지/);
+});
+
+test('구어체 수강료 납부 질문은 금액이나 신규 등록 조건 대신 기한 행과 예외를 인용한다', async () => {
+  const { register, ask } = await createFixture();
+  const header = '| 내용 | 내부 번호 | 항목 |\n| --- | --- | --- |\n';
+  await register(
+    'BILLING',
+    header +
+      [
+        '| 첫 수업 전 | 151 | 신규 등록 |',
+        '| 매월 7일까지 (공휴일이면 다음 영업일) | 152 | 납부 기한 |',
+        '| 월 180,000원 | 153 | 수강료 |',
+      ].join('\n'),
+    null,
+  );
+  await register(
+    'BILLING_DRAFT',
+    header + '| 매월 11일까지 | 154 | 납부 기한 |',
+    null,
+    false,
+  );
+
+  const question = '학원비 며칠까지 내야 돼요?';
+  const result = await ask(question);
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /매월 7일까지.*공휴일이면 다음 영업일/);
+  assert.doesNotMatch(result.answer.answer, /180,000원|첫 수업|내부 번호|11일/);
+  assert.deepEqual(
+    result.answer.citations.map(({ documentId }) => documentId),
+    ['BILLING'],
+  );
+  assert.match(
+    result.answer.citations[0]?.location ?? '',
+    /2행 · 열 항목, 내용/,
+  );
+  assert.equal(result.generationCalls, 0);
+
+  await register(
+    'OTHER_BILLING',
+    header + '| 매월 8일까지 | 155 | 납부 기한 |',
+    null,
+  );
+  const conflict = await ask(question);
+  assert.equal(conflict.answer.status, 'abstained', conflict.answer.answer);
+  assert.equal(conflict.trace.reasonCode, 'CONFLICTING_EVIDENCE');
+  assert.deepEqual(conflict.answer.citations, []);
 });
 
 test('교재비 비교는 두 반의 값과 같은 청구 기준이 있어야 완료한다', async () => {

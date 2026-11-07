@@ -8,22 +8,79 @@
 import type { RagAnswer, RagCitation } from '../contract.ts';
 import { collectEvidence, validateEvidence } from './answer/evidence-bundle.ts';
 import { answerWeeklyRefund } from './answer/refund-evidence.ts';
-import { answerWeeklyCurriculum } from './answer/curriculum-evidence.ts';
+import {
+  answerReadingAssignment,
+  answerWeeklyCurriculum,
+  isCalendarWeekQuery,
+} from './answer/curriculum-evidence.ts';
+import {
+  answerAdmissionTestDate,
+  answerSchoolExamSchedule,
+} from './answer/exam-evidence.ts';
+import { answerPolicyEvidence } from './answer/policy-evidence.ts';
+import { answerSiblingDiscountPolicy } from './answer/tuition-policy.ts';
+import { answerParkingEvidence } from './answer/parking-evidence.ts';
+import { answerEnrollmentEvidence } from './answer/enrollment-evidence.ts';
 import { answerTeacherProfile } from './answer/teacher-profile.ts';
-import { answerFromScheduleEvidence } from './answer/schedule-evidence.ts';
-import { answerFromCostEvidence } from './answer/cost-evidence.ts';
+import { answerTransitEvidence } from './answer/transit-evidence.ts';
+import { answerFacilityHours } from './answer/facility-evidence.ts';
+import { answerCourseOverview } from './answer/course-overview.ts';
+import {
+  answerCohortAssessment,
+  answerWorkshopEvidence,
+  answerWorkshopSession,
+} from './answer/workshop-evidence.ts';
+import {
+  answerClosureMakeup,
+  answerEventReading,
+  answerEventRegistration,
+} from './answer/event-evidence.ts';
+import { answerConsultationWindow } from './answer/consultation-window.ts';
+import { answerEventLogistics } from './answer/event-logistics.ts';
+import { answerAnnouncementConflict } from './answer/announcement-conflict.ts';
+import {
+  answerCohortBoundaries,
+  answerOfferingEvidence,
+} from './answer/offering-evidence.ts';
+import {
+  answerClassScheduleFields,
+  answerClinicHours,
+  answerScheduleOverlap,
+  answerScheduleValidityPeriod,
+  answerWeeklyMakeupWindow,
+  answerEventDayFollowUp,
+  answerFromScheduleEvidence,
+  isClassroomLookup,
+} from './answer/schedule-evidence.ts';
+import {
+  answerClassRentalPrice,
+  answerNumberedFeeFollowUp,
+  answerPrepaidTuition,
+  answerFromCostEvidence,
+} from './answer/cost-evidence.ts';
 import { composeRequests } from './answer/composer.ts';
 import { isRosterRequest, planQuery, requiredCostSlots } from './query/plan.ts';
 export { splitQuestion } from './query/plan.ts';
-import { answerAdvice } from './answer/advice.ts';
-import { answerAnalysis } from './answer/analysis.ts';
+import {
+  answerAdvice,
+  asksForRecordedLearningDirection,
+} from './answer/advice.ts';
+import {
+  answerAnalysis,
+  recordedDeductionRequest,
+  reportAssessmentRequest,
+} from './answer/analysis.ts';
 import {
   abstain,
+  abstainForUncertainOcr,
+  className,
   deny,
   studentLabel,
   type AnswerContext,
   type AnswerDraft,
+  type CitationWitness,
 } from './answer/context.ts';
+import { factText } from './answer/format.ts';
 import {
   answerFromDocuments,
   issuanceRequirement,
@@ -37,7 +94,11 @@ import {
   retrieveEvidence,
   satisfiesAnswerTypes,
 } from './answer/evidence.ts';
-import { answerInfo, explicitClassIds } from './answer/info.ts';
+import {
+  answerInfo,
+  explicitClassIds,
+  scheduleClosureCause,
+} from './answer/info.ts';
 import {
   allowedNumbersFor,
   extractNumbers,
@@ -45,6 +106,7 @@ import {
   findForbiddenNames,
   findUnsupportedNumbers,
   supportsExcerpt,
+  uncertainOcrNumbers,
 } from './answer/verify.ts';
 import { DEFAULT_RAG_CONFIG, type RagConfig } from './config.ts';
 import type {
@@ -59,6 +121,7 @@ import type {
 } from './ports.ts';
 import { parseQuery, type QueryFrame } from './query/parse-query.ts';
 import { resolveSubjects } from './query/resolve-subjects.ts';
+import { isStudentOnlyFollowUp, refersToPriorUnit } from './query/follow-up.ts';
 import type { ConversationState, RagAccessScope, RagTrace } from './types.ts';
 
 export interface RagConsultationDeps {
@@ -139,6 +202,7 @@ export function createRagConsultationService(
   diagnostics?: {
     refineFrame?: (frame: Readonly<QueryFrame>) => FrameRefinement;
     observeLocations?: (citations: RagCitation[]) => void;
+    observeWitnesses?: (witnesses: readonly CitationWitness[]) => void;
   },
 ): RagConsultationService {
   const config: RagConfig = { ...DEFAULT_RAG_CONFIG, ...deps.config };
@@ -208,6 +272,20 @@ export function createRagConsultationService(
       );
     }
 
+    if (
+      ctx.engine === 'planned' &&
+      /남자|남학생|남아/.test(frame.normalized) &&
+      /여자|여학생|여아/.test(frame.normalized) &&
+      /비율|몇\s*명|더\s*많|많아요|많나요|많은/.test(frame.normalized) &&
+      /반|학원/.test(frame.normalized)
+    ) {
+      trace.intent = 'class_demographics';
+      return abstain(
+        '해당 반의 구성 비율은 승인 상담 자료에서 확인할 수 없습니다.',
+        'INSUFFICIENT_EVIDENCE',
+      );
+    }
+
     const predictsOutcome =
       flags.prediction ||
       /\d+(?:\.\d+)?\s*점.{0,10}(?:넘|받|나오|되)겠/.test(frame.normalized) ||
@@ -229,8 +307,151 @@ export function createRagConsultationService(
         ctx.frame = { ...frame, flags: { ...flags, prediction: true } };
       return routeAnalysis(ctx, studentIdHint);
     }
+    if (ctx.engine === 'planned') {
+      if (
+        reportAssessmentRequest(frame.normalized) ||
+        recordedDeductionRequest(frame)
+      )
+        return routeAnalysis(ctx, studentIdHint);
+      const eventSchedule = await answerEventDayFollowUp(ctx);
+      if (eventSchedule) {
+        trace.domain = 'info';
+        return eventSchedule;
+      }
+      const parking = await answerParkingEvidence(ctx);
+      if (parking) {
+        trace.domain = 'info';
+        return parking;
+      }
+      const prepay = await answerPrepaidTuition(ctx);
+      if (prepay) {
+        trace.domain = 'info';
+        return prepay;
+      }
+      const feeFollowUp = await answerNumberedFeeFollowUp(ctx);
+      if (feeFollowUp) {
+        trace.domain = 'info';
+        return feeFollowUp;
+      }
+      const rentalPrice = await answerClassRentalPrice(ctx);
+      if (rentalPrice) {
+        trace.domain = 'info';
+        return rentalPrice;
+      }
+      const siblingDiscount = await answerSiblingDiscountPolicy(ctx);
+      if (siblingDiscount) {
+        trace.domain = 'info';
+        return siblingDiscount;
+      }
+      const consultationWindow = await answerConsultationWindow(ctx);
+      if (consultationWindow) {
+        trace.domain = 'info';
+        return consultationWindow;
+      }
+      const policy = await answerPolicyEvidence(ctx, studentIdHint);
+      if (policy) {
+        trace.domain = 'info';
+        return policy;
+      }
+      const exam =
+        (await answerAdmissionTestDate(ctx)) ??
+        (await answerSchoolExamSchedule(ctx));
+      if (exam) {
+        trace.domain = 'info';
+        return exam;
+      }
+      if (
+        scheduleClosureCause(ctx) &&
+        !frame.unknownPrograms.length &&
+        !frame.unboundProgram
+      ) {
+        trace.domain = 'info';
+        return answerInfo({
+          ...ctx,
+          frame: {
+            ...frame,
+            topics: frame.topics.filter(({ id }) => id === 'schedule_change'),
+          },
+        });
+      }
+      const closure = await answerClosureMakeup(ctx);
+      if (closure) {
+        trace.domain = 'info';
+        return closure;
+      }
+      const eventLogistics = await answerEventLogistics(ctx);
+      if (eventLogistics) {
+        trace.domain = 'info';
+        return eventLogistics;
+      }
+      const registration = await answerEventRegistration(ctx);
+      if (registration) {
+        trace.domain = 'info';
+        return registration;
+      }
+      const eventReading = await answerEventReading(ctx);
+      if (eventReading) {
+        trace.domain = 'info';
+        return eventReading;
+      }
+      const workshop =
+        (await answerWorkshopSession(ctx)) ??
+        (await answerWorkshopEvidence(ctx)) ??
+        (await answerCohortAssessment(ctx));
+      if (workshop) {
+        trace.domain = 'info';
+        return workshop;
+      }
+      const courseOverview = await answerCourseOverview(ctx);
+      if (courseOverview) {
+        trace.domain = 'info';
+        return courseOverview;
+      }
+      const facility = await answerFacilityHours(ctx);
+      if (facility) {
+        trace.domain = 'info';
+        return facility;
+      }
+      const overlap = await answerScheduleOverlap(ctx);
+      if (overlap) {
+        trace.domain = 'info';
+        return overlap;
+      }
+      const makeupWindow = await answerWeeklyMakeupWindow(ctx);
+      if (makeupWindow) {
+        trace.domain = 'info';
+        return makeupWindow;
+      }
+      const schedulePeriod = await answerScheduleValidityPeriod(ctx);
+      if (schedulePeriod) {
+        trace.domain = 'info';
+        return schedulePeriod;
+      }
+      const clinicHours = await answerClinicHours(ctx);
+      if (clinicHours) {
+        trace.domain = 'info';
+        return clinicHours;
+      }
+      const scheduleFields = await answerClassScheduleFields(ctx);
+      if (scheduleFields) {
+        trace.domain = 'info';
+        return scheduleFields;
+      }
+      const reading = await answerReadingAssignment(ctx);
+      if (reading) {
+        trace.domain = 'info';
+        return reading;
+      }
+    }
+
     // 2) 학습 분석 vs 학원 정보
     // "선생님이 어떻게 지도해 주신대요?"처럼 원생을 가리키며 강사의 지도·연습을 묻는 말은 강사 정보가 아니라 학습 방향 질문이다.
+    const asksToCheckGuidance =
+      asksForRecordedLearningDirection(frame.normalized) ||
+      (/리포트|보고서/.test(frame.normalized) &&
+        /(?:공부|학습).{0,16}(?:어떻게|무엇을|뭘)\s*하라고.{0,10}(?:돼|되어|적혀|나와)/.test(
+          frame.normalized,
+        ));
     const recordedGuidance =
       ctx.engine === 'planned' &&
       (frame.matchedStudentIds.length > 0 ||
@@ -239,9 +460,10 @@ export function createRagConsultationService(
         (frame.flags.elliptical &&
           state?.previousFrame?.domain === 'analysis') ||
         (frame.hasAnalysisTerms && access.allowedStudentIds.length > 0)) &&
-      /(?:지도|중점).{0,24}(?:신대|준대|해준|한다고)|(?:뭐|뭘|무엇)\s*(?:더\s*)?하라고/.test(
-        frame.normalized,
-      );
+      (asksToCheckGuidance ||
+        /(?:지도|중점).{0,24}(?:신대|준대|해준|한다고)|(?:뭐|뭘|무엇)\s*(?:더\s*)?하라고/.test(
+          frame.normalized,
+        ));
     if (recordedGuidance) {
       return routeAnalysis(ctx, studentIdHint, { recordedGuidance: true });
     }
@@ -257,7 +479,30 @@ export function createRagConsultationService(
       ctx.frame = { ...frame, topics: [] };
       return routeAnalysis(ctx, studentIdHint, { forceAdvice: true });
     }
+    if (
+      ctx.engine === 'planned' &&
+      access.allowedStudentIds.length &&
+      /공부\s*계획.{0,12}(?:잡아|세워|짜)|선생님\s*대신.{0,12}조언/.test(
+        frame.normalized,
+      )
+    )
+      return routeAnalysis(ctx, studentIdHint, { forceAdvice: true });
     carryOverFollowUp(ctx);
+    if (
+      ctx.engine === 'planned' &&
+      !ctx.frame.unknownPrograms.length &&
+      !ctx.frame.unboundProgram
+    ) {
+      const structured =
+        (await answerWeeklyCurriculum(ctx)) ??
+        (isClassroomLookup(ctx)
+          ? await answerFromScheduleEvidence(ctx)
+          : undefined);
+      if (structured) {
+        trace.domain = 'info';
+        return structured;
+      }
+    }
     const hasInfoTopics = ctx.frame.topics.length > 0;
     const hasStudentReference =
       frame.matchedStudentIds.length > 0 ||
@@ -294,7 +539,7 @@ export function createRagConsultationService(
     const isAnalysis =
       canHaveAnalysis &&
       !teacherIdentity &&
-      (frame.hasAnalysisTerms ||
+      (ctx.frame.hasAnalysisTerms ||
         flags.generationRequest ||
         periodOnlyQuestion ||
         (hasStudentReference && !hasInfoTopics) ||
@@ -339,6 +584,50 @@ export function createRagConsultationService(
     const previous = ctx.state?.previousFrame;
     const frame = ctx.frame;
     if (previous?.domain === 'analysis') {
+      const studentSwitch = isStudentOnlyFollowUp(ctx, true);
+      const namedUnit = refersToPriorUnit(frame.normalized);
+      const trendContinuation =
+        frame.months.length <= 1 &&
+        (frame.flags.compare || frame.flags.trend) &&
+        /나아|좋아|떨어|낮아|올라|높아|같|달라|변했/.test(frame.normalized) &&
+        !frame.matchedStudentIds.length &&
+        !frame.classIds.length &&
+        !frame.unresolvedRelationWords.length &&
+        !frame.selfReference;
+      if (
+        ctx.engine === 'planned' &&
+        !frame.topics.length &&
+        !frame.flags.generationRequest &&
+        !frame.flags.attitude &&
+        !frame.flags.causal &&
+        !frame.flags.prediction &&
+        !frame.groupReference &&
+        (studentSwitch || namedUnit || trendContinuation)
+      ) {
+        const subjects = frame.subjects.length
+          ? frame.subjects
+          : (previous.subjects ?? []);
+        const sameSubject =
+          !frame.subjects.length ||
+          frame.subjects.every((subject) =>
+            previous.subjects?.includes(subject),
+          );
+        ctx.frame = {
+          ...frame,
+          subjects,
+          units:
+            !frame.units.length && sameSubject && !studentSwitch
+              ? previous.units
+              : frame.units,
+          hasAnalysisTerms: true,
+          flags: {
+            ...frame.flags,
+            elliptical: true,
+            weakUnit: frame.flags.weakUnit || !!previous.weak,
+          },
+        };
+        return;
+      }
       // 직전이 취약 영역 답이고 "그거/같은 거야?"처럼 이어 묻으면 취약 영역을 기간 비교로 다시 본다.
       if (
         previous.weak &&
@@ -363,6 +652,8 @@ export function createRagConsultationService(
     if (previous?.domain !== 'info') return;
     const followUp =
       frame.flags.elliptical ||
+      (ctx.engine === 'planned' &&
+        /^(?:그|해당|아까\s*말한)\s*반(?:\s|$)/.test(frame.normalized)) ||
       /(은|는)요\s*\??$|도요|그럼|그러면|그건|그거|거기/.test(
         frame.normalized,
       ) ||
@@ -547,6 +838,13 @@ export function createRagConsultationService(
       ) ||
       (frame.topics.length === 0 &&
         expectedAnswerTypes(ctx.question).length > 0);
+    const asksClassEnd =
+      ctx.engine === 'planned' &&
+      /수업(?:은|이|이요)?\s*(?:몇\s*시(?:에)?\s*끝|언제\s*끝|종료\s*(?:시간|시각))/.test(
+        frame.normalized,
+      ) &&
+      !frame.groupReference &&
+      !/셔틀|차량|상담|설명회|업무|운영|폐원/.test(frame.normalized);
     const childClasses = access.studentRefs
       .filter((ref) => access.allowedStudentIds.includes(ref.studentId))
       .map((ref) => (ref.classIds ?? []).slice().sort().join(','));
@@ -554,8 +852,7 @@ export function createRagConsultationService(
       access.role === 'guardian' &&
       access.allowedStudentIds.length >= 2 &&
       new Set(childClasses).size >= 2 &&
-      singleChild &&
-      classSpecific &&
+      (asksClassEnd || (singleChild && classSpecific)) &&
       frame.matchedStudentIds.length === 0 &&
       frame.unresolvedRelationWords.length === 0 &&
       frame.classIds.length === 0 &&
@@ -615,17 +912,32 @@ export function createRagConsultationService(
         /\d{1,2}:\d{2}|\d{1,2}\s*시\s*\d{1,2}\s*분/.test(line),
       );
     }
+    // Exact bus-trip questions use the same table keys in both engines.
+    const transit = frame.unboundProgram
+      ? undefined
+      : await answerTransitEvidence(ctx);
+    if (transit) return transit;
     if (ctx.engine === 'planned') {
       if (frame.unboundProgram && classSpecific)
         return abstain(
           '문의하신 과정의 승인 자료를 확인할 수 없습니다.',
           'INSUFFICIENT_EVIDENCE',
         );
+      const conflict = await answerAnnouncementConflict(ctx);
+      if (conflict) return conflict;
+      const enrollment = await answerEnrollmentEvidence(ctx);
+      if (enrollment) return enrollment;
+      const boundaries = await answerCohortBoundaries(ctx);
+      if (boundaries) return boundaries;
+      const offering = await answerOfferingEvidence(ctx);
+      if (offering) return offering;
       const cost = await answerFromCostEvidence(ctx);
       if (cost) return cost;
       const refund = await answerWeeklyRefund(ctx);
       if (refund) return refund;
-      const curriculum = await answerWeeklyCurriculum(ctx);
+      const curriculum = isCalendarWeekQuery(ctx)
+        ? undefined
+        : await answerWeeklyCurriculum(ctx);
       if (curriculum) return curriculum;
       const teacherProfile = await answerTeacherProfile(ctx);
       if (teacherProfile) return teacherProfile;
@@ -851,6 +1163,9 @@ export function createRagConsultationService(
     // 인용 재검증: 이 요청의 권한·승인·유효 버전으로 다시 조회되는 출처만 표시
     const merged = new Map<string, RagCitation & { locations: Set<string> }>();
     const quotedNumbers: number[] = [];
+    const answerNumbers = new Set(extractNumbers(draft.text));
+    const witnesses: CitationWitness[] | undefined =
+      diagnostics?.observeWitnesses ? [] : undefined;
     for (const request of draft.citations) {
       const isFact = request.kind === 'fact';
       const studentId = isFact
@@ -876,6 +1191,25 @@ export function createRagConsultationService(
 
       if (!summary) return failClosed('CITATION_UNSUPPORTED');
       let location = isFact ? summary.location : request.chunk.location.label;
+      if (isFact && witnesses) {
+        const { fact } = request;
+        const value = fact.value;
+        witnesses.push({
+          sourceId: summary.sourceId,
+          location,
+          factId: fact.factId,
+          text: [
+            fact.subjectType === 'class'
+              ? className(ctx.catalog, fact.subjectId)
+              : '',
+            value.kind === 'schedule_change' ? value.date : '',
+            value.kind === 'schedule_change' ? value.time : '',
+            factText(fact),
+          ]
+            .filter(Boolean)
+            .join(' '),
+        });
+      }
       if (!isFact) {
         const { chunk, tableColumns } = request;
         if (
@@ -884,6 +1218,7 @@ export function createRagConsultationService(
         )
           return failClosed('CITATION_UNSUPPORTED');
         let quote = chunk.text;
+        let selectedHeaders: string[] | undefined;
         if (tableColumns) {
           const { header, cells, kind } = chunk.location;
           if (
@@ -900,21 +1235,65 @@ export function createRagConsultationService(
             )
           )
             return failClosed('CITATION_UNSUPPORTED');
+          selectedHeaders = tableColumns.map(
+            (index) => header[index].trim() || String(index + 1),
+          );
           location =
-            chunk.location.label +
-            ' · 열 ' +
-            tableColumns.map((index) => header[index]).join(', ');
+            chunk.location.label + ' · 열 ' + selectedHeaders.join(', ');
           quote = [...new Set([0, ...tableColumns])]
             .map((index) => header[index] + ' ' + cells[index])
             .join(' ');
+        }
+        const excerpts = draft.excerpts?.filter(
+          (excerpt) =>
+            excerpt.chunk === chunk && excerpt.tableColumns === tableColumns,
+        );
+        const selectedText = excerpts?.length
+          ? excerpts.map(({ line }) => line).join('\n')
+          : quote;
+        // An identical number in another approved fact does not verify this OCR excerpt.
+        if (
+          uncertainOcrNumbers(chunk, selectedText).some((number) =>
+            answerNumbers.has(number),
+          )
+        ) {
+          return {
+            ...abstainForUncertainOcr(),
+            resolvedCitations: [] as RagCitation[],
+          };
+        }
+        if (witnesses) {
+          const texts = tableColumns
+            ? [
+                tableColumns
+                  .map(
+                    (i) =>
+                      chunk.location.header?.[i] +
+                      ': ' +
+                      chunk.location.cells?.[i],
+                  )
+                  .join(' / '),
+              ]
+            : excerpts?.length
+              ? excerpts.map(({ line }) => line)
+              : [quote];
+          for (const text of texts)
+            witnesses.push({
+              sourceId: summary.sourceId,
+              location,
+              chunkId: chunk.chunkId,
+              columns: selectedHeaders,
+              text,
+            });
         }
         quotedNumbers.push(
           ...extractNumbers(
             [
               chunk.title,
               chunk.location.section,
-              chunk.location.label,
-              quote,
+              ...(chunk.extraction
+                ? [selectedText]
+                : [chunk.location.label, quote]),
             ].join(' '),
           ),
         );
@@ -930,31 +1309,6 @@ export function createRagConsultationService(
           revision: summary.revision,
           locations: new Set(location ? [location] : []),
         });
-      }
-    }
-
-    // 스캔(OCR) 청크의 수치: 판독이 불확실한 값(검수 필요 페이지는 모든 수치)을 답에 쓰면 보류한다.
-    // 같은 값이 승인된 정형 사실로 확인되면 허용한다(외부 기능이 사람이 입력한 값).
-    const answerNumbers = new Set(extractNumbers(draft.text));
-    const factNumbers = new Set(
-      allowedNumbersFor({ facts: draft.usedFacts, instants: [] }),
-    );
-    for (const request of draft.citations) {
-      if (request.kind !== 'chunk' || !request.chunk.extraction) continue;
-      const extraction = request.chunk.extraction;
-      const risky = extraction.needsReview
-        ? extractNumbers(request.chunk.text)
-        : extractNumbers(extraction.uncertainTokens.join(' '));
-      if (risky.some((n) => answerNumbers.has(n) && !factNumbers.has(n))) {
-        return {
-          ...abstain(
-            '스캔된 문서에서 읽은 내용의 판독이 확실하지 않아 바로 안내해 드리기 어렵습니다. 담당자가 원본을 확인한 뒤 안내해 드릴 수 있도록 연결해 드리겠습니다.',
-            'INSUFFICIENT_EVIDENCE',
-            ['스캔 문서 판독 확인'],
-            ['OCR_UNCERTAIN'],
-          ),
-          resolvedCitations: [] as RagCitation[],
-        };
       }
     }
 
@@ -1002,6 +1356,7 @@ export function createRagConsultationService(
           : [citation],
       ),
     );
+    if (witnesses) diagnostics?.observeWitnesses?.(witnesses);
     return { ...draft, resolvedCitations };
   }
 
@@ -1042,6 +1397,8 @@ export function createRagConsultationService(
                 input.conversationId,
               )
             : null;
+          if (state?.academyId && state.academyId !== input.access.academyId)
+            state = null;
           if (!catalog) {
             final = {
               ...abstain(
@@ -1251,7 +1608,10 @@ export function createRagConsultationService(
           final.status === 'partial' ||
           final.status === 'clarify')
       ) {
-        const next: ConversationState = { ...(state ?? {}) };
+        const next: ConversationState = {
+          ...(state ?? {}),
+          academyId: input.access.academyId,
+        };
         for (const [key, value] of Object.entries(
           final.conversationUpdate ?? {},
         )) {

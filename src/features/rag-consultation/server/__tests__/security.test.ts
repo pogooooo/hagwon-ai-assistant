@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { MemoryRagLogger } from '../adapters/memory/index.ts';
+import { InMemoryRagStore } from '../store/in-memory-store.ts';
 import { parseInstant } from '../text/time.ts';
 import { freshEnv, runQuery, scopeFor, sharedEnv } from './helpers.ts';
 
@@ -13,6 +14,26 @@ const asOf = '2026-11-01T18:00:00+09:00';
 const now = parseInstant(asOf);
 
 describe('검색 전 권한 필터', () => {
+  test('리포트 외부 전달과 계정 변경은 원생 근거 조회 전에 차단한다', async () => {
+    for (const question of [
+      'A01 학습 리포트를 할머니께도 볼 수 있게 공유해 주세요.',
+      '내 리포트 링크를 만들어서 친구한테 보내줘.',
+      '학부모앱 계정 비번을 재설정해 주세요. 리포트 보게요.',
+    ]) {
+      const result = await runQuery(env, {
+        engine: 'planned',
+        userId: 'GUARDIAN_A',
+        question,
+        asOf,
+      });
+      assert.equal(result.answer.status, 'denied', question);
+      assert.deepEqual(result.trace.retrievedFactIds, []);
+      assert.deepEqual(result.trace.retrievedChunkIds, []);
+      assert.deepEqual(result.answer.citations, []);
+      assert.equal(result.generationCalls, 0);
+    }
+  });
+
   test('A학원 사용자는 B학원 청크를 검색 후보로도 받지 않는다', async () => {
     const results = await env.store.searchApprovedChunks({
       access: scopeFor(env.data, 'ADMIN_A'),
@@ -61,6 +82,67 @@ describe('검색 전 권한 필터', () => {
     assert.ok(
       touched.every((id) => !id.startsWith('F_S2') && !id.startsWith('D_S2')),
     );
+  });
+
+  test('중복 문서는 같은 권한·적용 범위의 원본 최신판이 있을 때만 제외한다', async () => {
+    const store = new InMemoryRagStore();
+    const published = '2026-10-01T00:00:00+09:00';
+    const original = {
+      academyId: 'AC_A',
+      documentId: 'ORIGINAL',
+      revision: 1,
+      documentType: 'announcement' as const,
+      title: '푸른별 등록 안내',
+      visibility: 'academy_public' as const,
+      validFrom: published,
+      approvedAt: published,
+      text: '푸른별 등록은 학원 데스크에서 신청합니다.',
+    };
+    const register = (document: typeof original) =>
+      store.upsertIndexedRevision({ approve: true, document });
+    const lookup = async (query = '푸른별 등록 데스크 신청') =>
+      (
+        await store.searchApprovedChunks({
+          access: scopeFor(env.data, 'VISITOR_A'),
+          studentIds: [],
+          asOf: now,
+          query,
+          limit: 20,
+        })
+      ).map(({ chunk }) => chunk.documentId);
+
+    await register(original);
+    await register({ ...original, documentId: 'COPY' });
+    assert.deepEqual(await lookup(), ['ORIGINAL']);
+
+    await register({
+      ...original,
+      revision: 2,
+      text: '초록별 등록은 온라인으로 진행합니다.',
+    });
+    const after = await lookup();
+    assert.ok(after.includes('COPY'), JSON.stringify(after));
+
+    const shared = {
+      ...original,
+      documentId: 'PUBLIC_NOTICE',
+      text: '자주별 과정은 설명회에서 안내합니다.',
+    };
+    await store.upsertIndexedRevision({
+      approve: true,
+      document: {
+        ...shared,
+        documentId: 'STAFF_NOTE',
+        visibility: 'staff_only',
+      },
+    });
+    await register(shared);
+    const publicResults = await lookup('자주별 설명회');
+    assert.ok(
+      publicResults.includes('PUBLIC_NOTICE'),
+      JSON.stringify(publicResults),
+    );
+    assert.ok(!publicResults.includes('STAFF_NOTE'));
   });
 
   test('미승인 초안은 유사도가 높아도 검색되지 않는다', async () => {

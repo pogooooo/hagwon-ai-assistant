@@ -171,7 +171,11 @@ const GRADE = /(초|중|고)[1-6]/;
  * 반 이름·별칭 매칭. 같은 위치에서 더 긴 표현이 다른 반을 가리키면 짧은 쪽은 버린다
  * (예: "고1 수학 특강" 은 "고1 수학" 반이 아니라 특강).
  */
-function matchClasses(compact: string, catalog: AcademyCatalog) {
+function matchClasses(
+  compact: string,
+  catalog: AcademyCatalog,
+  reservedUnits?: ReadonlySet<string>,
+) {
   const grades = unique(
     [...compact.matchAll(/(초|중|고)[1-6]/g)].map((m) => m[0]),
   );
@@ -207,14 +211,23 @@ function matchClasses(compact: string, catalog: AcademyCatalog) {
         continue;
       let index = compact.indexOf(keyword);
       while (index !== -1) {
-        const after = compact.slice(index + keyword.length).replace(/^반/, '');
-        hits.push({
-          classId: klass.classId,
-          start: index,
-          end: index + keyword.length,
-          negated: /^(이|가|은|는)?(아닌|아니고|말고|제외|빼고)/.test(after),
-        });
-        index = compact.indexOf(keyword, index + keyword.length);
+        const end = index + keyword.length;
+        const trailing = compact.slice(end);
+        if (
+          !reservedUnits?.has(keyword) ||
+          keywordGrade ||
+          /^(반|강좌|과정|코스)/.test(trailing)
+        ) {
+          hits.push({
+            classId: klass.classId,
+            start: index,
+            end,
+            negated: /^(이|가|은|는)?(아닌|아니고|말고|제외|빼고)/.test(
+              trailing.replace(/^반/, ''),
+            ),
+          });
+        }
+        index = compact.indexOf(keyword, end);
       }
     }
   }
@@ -250,6 +263,16 @@ function matchClasses(compact: string, catalog: AcademyCatalog) {
     negated,
     spans: kept.map((hit) => [hit.start, hit.end] as const),
   };
+}
+
+function maskSpans(
+  text: string,
+  spans: readonly (readonly [number, number])[],
+): string {
+  for (const [start, end] of spans) {
+    text = text.slice(0, start) + ' '.repeat(end - start) + text.slice(end);
+  }
+  return text;
 }
 
 const NON_CLASS_PREFIXES = new Set([
@@ -373,12 +396,15 @@ const PROGRAM_TERMS = [
   '패키지',
   '파이널',
   '단기반',
+  '선행반',
+  '선행과정',
+  '선행강좌',
   '윈터스쿨',
   '썸머스쿨',
 ];
 
 const NAME_SUFFIX =
-  '(이|가|는|은|의|도|랑|이랑|한테|에게|이는|이가|이의|이도|이한테|이네|네|씨|학생|군|양)?';
+  '(은요|는요|이|가|는|은|의|도|랑|이랑|한테|에게|이는|이가|이의|이도|이한테|이네|네|씨|학생|군|양)?';
 
 /** 한글 이름 지칭 여부. 2글자 이름은 앞뒤가 다른 한글 단어의 일부가 아닐 때만 인정한다. */
 export function mentionsName(normalized: string, name: string): boolean {
@@ -386,16 +412,28 @@ export function mentionsName(normalized: string, name: string): boolean {
   if (!/[가-힣]/.test(target)) return false;
   if (target.length >= 3)
     return normalized.replace(/\s+/g, '').includes(target);
-  return new RegExp(`(^|[^가-힣])${target}${NAME_SUFFIX}(?![가-힣])`).test(
-    normalized,
-  );
+  const kinship = '(?:오빠|언니|누나|형|동생)?';
+  return new RegExp(
+    `(^|[^가-힣])${target}${kinship}${NAME_SUFFIX}(?![가-힣])`,
+  ).test(normalized);
 }
 
-function selectTopics(compact: string, config: RagConfig): TopicDefinition[] {
+export const STUDENT_GROUP =
+  /두\s*(아이|애|명|자녀)|아이들|애들|형제|남매|자매/;
+
+function selectTopics(
+  compact: string,
+  outsideClassNames: string,
+  config: RagConfig,
+): TopicDefinition[] {
   const matched = config.topics
     .map((topic) => ({
       topic,
-      terms: topic.terms.filter((term) => compact.includes(compactText(term))),
+      terms: topic.terms.filter((term) =>
+        (topic.id === 'enrollment' ? outsideClassNames : compact).includes(
+          compactText(term),
+        ),
+      ),
     }))
     .filter((entry) => entry.terms.length > 0);
   const hasSpecific = (except: TopicDefinition) =>
@@ -459,12 +497,22 @@ export function parseQuery(
   }
 
   // 2) 이름·별칭(서버가 내려준 허용 학생 별칭 → 원생 명부 순으로 판별)
+  let withoutStudentNames = normalized;
   for (const ref of access.studentRefs) {
     const names = [ref.displayLabel, ...ref.aliases].filter(
       (alias) => !RELATION_WORDS.includes(alias),
     );
-    if (names.some((name) => mentionsName(normalized, name)))
-      matchedStudentIds.push(ref.studentId);
+    const matches = names.filter((name) => mentionsName(normalized, name));
+    if (matches.length > 0) matchedStudentIds.push(ref.studentId);
+    for (const name of matches) {
+      const target = compactText(name);
+      if (/^[가-힣]{3,}$/.test(target)) {
+        const mention = new RegExp([...target].join('\\s*'), 'g');
+        withoutStudentNames = withoutStudentNames.replace(mention, (name) =>
+          ' '.repeat(name.length),
+        );
+      }
+    }
   }
   for (const entry of catalog.studentDirectory ?? []) {
     if (access.allowedStudentIds.includes(entry.studentId)) continue;
@@ -513,8 +561,13 @@ export function parseQuery(
         : null;
 
   // 5) 반 → (반 이름을 지운 문장에서) 단원·유형 → 주제
-  const stripped = compact.replace(/[^0-9a-z가-힣]/g, '');
-  const matched = matchClasses(stripped, catalog);
+  const clean = (text: string) =>
+    compactText(text).replace(/[^0-9a-z가-힣]/g, '');
+  const stripped = clean(normalized);
+  const reservedUnits = /정답률|정답\s*문항|리포트|보고서/.test(normalized)
+    ? new Set(catalog.units.map(clean))
+    : undefined;
+  const matched = matchClasses(stripped, catalog, reservedUnits);
   const { negated, spans } = matched;
   // 반 이름 줄임말("과고반"·"영재원반"·"실험반"·"내신반"): 정확히 맞는 반이 없을 때만, 학년이 맞고 글자 순서가 같은 반들
   const referencedStudents = access.studentRefs.filter((ref) =>
@@ -533,12 +586,7 @@ export function parseQuery(
       (id) => !negated.includes(id),
     ),
   ]);
-  let withoutClasses = stripped;
-  for (const [start, end] of spans) {
-    withoutClasses = `${withoutClasses.slice(0, start)}${' '.repeat(end - start)}${withoutClasses.slice(end)}`;
-  }
-  const clean = (text: string) =>
-    compactText(text).replace(/[^0-9a-z가-힣]/g, '');
+  const withoutClasses = maskSpans(stripped, spans);
   const questionTypes = (catalog.questionTypes ?? []).filter((type) =>
     withoutClasses.includes(clean(type)),
   );
@@ -597,13 +645,28 @@ export function parseQuery(
           ? shortUnits
           : [];
   // 과목(국어·수학·영어 등): 카탈로그 반의 과목명이 질문에 있으면 그 과목 자료로 좁힌다.
+  const reportSubjectWords =
+    /리포트|보고서|정답률|취약|약했|몇\s*(?:개|문항).{0,6}맞|만요/.test(
+      normalized,
+    )
+      ? normalized
+          .split(/[^가-힣a-z0-9]+/)
+          .flatMap((word) => [
+            word,
+            word.replace(/(?:만요|만|은|는|이|가|도)$/, ''),
+          ])
+      : [];
   const subjects = [
     ...new Set(
       catalog.classes
         .map((klass) => klass.subject)
         .filter((v): v is string => Boolean(v)),
     ),
-  ].filter((subject) => withoutClasses.includes(clean(subject)));
+  ].filter(
+    (subject) =>
+      withoutClasses.includes(clean(subject)) ||
+      reportSubjectWords.includes(normalizeText(subject)),
+  );
   const percents = [...normalized.matchAll(/(\d+(?:\.\d+)?)\s*%/g)].map((m) =>
     Number(m[1]),
   );
@@ -617,7 +680,24 @@ export function parseQuery(
     clauses.length === 2 &&
     /(?:다는데|려고요|거든요|라서요)[.!]?$/.test(clauses[1]);
   const focus = background ? clauses[0] : normalized;
-  let topics = selectTopics(compactText(focus), config);
+  const compactFocus = compactText(focus);
+  let outsideClassNames = withoutClasses;
+  if (background) {
+    outsideClassNames = clean(focus);
+    outsideClassNames = maskSpans(
+      outsideClassNames,
+      matchClasses(outsideClassNames, catalog).spans,
+    );
+  }
+  let topics = selectTopics(compactFocus, outsideClassNames, config);
+  // A numbered learning week is not a parking request.
+  if (
+    topics.some(({ id }) => id === 'parking') &&
+    !/주\s*차/.test(
+      focus.replace(/(?<!\d)\d{1,2}\s*주\s*차(?!량|장|권|비|료)/g, ' '),
+    )
+  )
+    topics = topics.filter(({ id }) => id !== 'parking');
   if (
     topics.some((topic) => topic.id === 'hours') &&
     /문\s*열|영업\s*시간|운영\s*시간/.test(focus) &&
@@ -689,6 +769,31 @@ export function parseQuery(
     );
   }
 
+  // Only full catalogue class names count here. A short core could be an actual request.
+  const classNames = new Set(catalog.classes.map(({ name }) => clean(name)));
+  const exactClassSpans = spans.filter(([start, end]) =>
+    classNames.has(stripped.slice(start, end)),
+  );
+  const classOffsets = [...normalized.matchAll(/[0-9a-z가-힣]/g)].map(
+    ({ index }) => index,
+  );
+  const outsideEntityNames = maskSpans(
+    withoutStudentNames,
+    exactClassSpans.map(([start, end]) => [
+      classOffsets[start],
+      classOffsets[end - 1] + 1,
+    ]),
+  );
+  // Catalogue unit names can contain the same words as a request to infer behaviour.
+  const withoutNamedUnits = fullUnitMatches.reduce((text, unit) => {
+    const name = normalizeText(unit);
+    if (!/^[가-힣]+(?:\s+[가-힣]+)+$/.test(name)) return text;
+    return text.replace(new RegExp(name.replace(/\s+/g, '\\s*'), 'g'), ' ');
+  }, outsideEntityNames);
+  const guardText = /정답률|정답\s*문항/.test(withoutNamedUnits)
+    ? withoutNamedUnits
+    : outsideEntityNames;
+
   const distinctStudentRefs =
     unique(matchedStudentIds).length + unauthorizedStudentRefs.length;
   const selfReference =
@@ -733,11 +838,20 @@ export function parseQuery(
         /(링크|리포트|자료).{0,12}(보내\s*주|공유|전달).{0,20}(권한|볼\s*수\s*있게)/g,
         normalized,
       ) ||
+      test(
+        /(?:리포트|성적표|학습\s*분석|학습\s*기록).{0,40}(?:한테|에게|께)(?:도|는)?\s*.{0,14}(?:보이게|볼\s*수\s*있게|보내\s*(?:줘|주|달라)|공유\s*해|전달\s*해)/g,
+        normalized,
+      ) ||
       test(/(관리자|admin)\s*(권한|로)/g, normalized),
-    sessionChange: test(
-      /(선택(한|된)|현재|조회)\s*(학생|아이|대상).{0,12}(바꿔|변경|전환)/g,
-      normalized,
-    ),
+    sessionChange:
+      test(
+        /(선택(한|된)|현재|조회)\s*(학생|아이|대상).{0,12}(바꿔|변경|전환)/g,
+        normalized,
+      ) ||
+      test(
+        /(?:계정|로그인).{0,15}(?:비밀번호|비번).{0,10}(?:바꿔|변경|초기화|재설정|리셋)/g,
+        normalized,
+      ),
     citationForgery:
       test(/(source|document|fact|chunk)_?id\s*[=:]/g, normalized) ||
       test(/근거\s*없이/g, normalized),
@@ -753,15 +867,15 @@ export function parseQuery(
     causal:
       test(
         /원인|이유|때문|(^|\s)왜(\s|$)|탓|(해서|라서|어서)\s*그런\s*(건가|거|걸까)/g,
-        normalized,
+        guardText,
       ) &&
       !test(
         /(왜|이유).{0,8}(수정|정정|변경|바뀌|바꿨|고쳐|취소|휴강|휴원|연기|늦)/g,
-        normalized,
+        guardText,
       ),
     attitude: test(
       /집중력|집중(을|이|도)?\s*(안|못)|태도|성실|의지|산만|게으|성격|공부\s*안\s*하|딴짓|노력(을|이)?\s*(안|부족)/g,
-      normalized,
+      guardText,
     ),
     prediction:
       test(
@@ -774,7 +888,7 @@ export function parseQuery(
     ),
     trend: test(
       /좋아졌|나아졌|향상|올랐|늘었|나빠졌|떨어졌|낮아졌|높아졌|달라졌|변했|변화|추이/g,
-      normalized,
+      guardText,
     ),
     cumulative: CUMULATIVE_TERMS.some((term) => compact.includes(term)),
     previousRevision:
@@ -816,10 +930,8 @@ export function parseQuery(
     unauthorizedStudentRefs: unique(unauthorizedStudentRefs),
     unresolvedRelationWords,
     selfReference,
-    groupReference: test(
-      /두\s*(아이|애|명|자녀)|둘\s*다|아이들|애들|형제|남매|자매/g,
-      normalized,
-    ),
+    groupReference:
+      STUDENT_GROUP.test(normalized) || /둘\s*다/.test(normalized),
     anaphora: test(
       /그\s*(아이|애|학생|친구)|걔|그때\s*말한|아까\s*말한/g,
       normalized,

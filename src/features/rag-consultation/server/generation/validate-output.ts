@@ -38,7 +38,8 @@ export function validateGeneratedOutput(
   rawText: string,
   options: {
     allowedSourceIds: readonly string[];
-    allowedNumbers: Set<number>;
+    allowedNumbers:
+      Set<number> | ((sourceIds: readonly string[]) => Set<number>);
     studentCodePattern: RegExp;
     allowedStudentCodes: readonly string[];
   },
@@ -65,9 +66,11 @@ export function validateGeneratedOutput(
   ) {
     return { ok: false, problem: 'CITATION_UNSUPPORTED' };
   }
-  if (
-    findUnsupportedNumbers(output.answer, options.allowedNumbers).length > 0
-  ) {
+  const allowedNumbers =
+    typeof options.allowedNumbers === 'function'
+      ? options.allowedNumbers(output.cited_source_ids)
+      : options.allowedNumbers;
+  if (findUnsupportedNumbers(output.answer, allowedNumbers).length > 0) {
     return { ok: false, problem: 'NUMBER_UNSUPPORTED' };
   }
   if (

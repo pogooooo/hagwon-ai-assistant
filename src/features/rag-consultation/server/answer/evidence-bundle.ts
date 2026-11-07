@@ -5,6 +5,7 @@ import type {
 } from '../answer/context.ts';
 import { abstain, deny, resolveEffectiveTime } from '../answer/context.ts';
 import { satisfiesAnswerTypes } from '../answer/evidence.ts';
+import { supportsExcerpt } from './verify.ts';
 import { canReadRecord } from '../retrieval/access-filter.ts';
 import { isValidAt, toKstDate } from '../text/time.ts';
 import type { PlannedRequest } from '../query/plan.ts';
@@ -85,6 +86,12 @@ export function validateEvidence(
     : ctx.frame.matchedStudentIds.length
       ? ctx.frame.matchedStudentIds
       : ctx.access.allowedStudentIds;
+  const { frame } = ctx;
+  const requestedAt = resolveEffectiveTime(frame, ctx.asOf).at;
+  const explicitTime =
+    frame.explicitDates.length > 0 ||
+    frame.months.length > 0 ||
+    frame.relativePeriod !== null;
   for (const member of members) {
     if (member.kind === 'fact') {
       const { fact } = member;
@@ -104,16 +111,15 @@ export function validateEvidence(
       }
     } else {
       const { chunk, tableColumns } = member;
+      const citeAt = explicitTime
+        ? requestedAt
+        : (member.effectiveAt ?? requestedAt);
       if (!canReadRecord(ctx.access, chunk, students))
         return decision('forbidden', deny('ACCESS_DENIED'));
       if (
         chunk.documentType === 'schedule' &&
         request.intentIds.includes('schedule') &&
-        !isValidAt(
-          chunk.validFrom,
-          chunk.validTo,
-          resolveEffectiveTime(ctx.frame, ctx.asOf).at,
-        )
+        !isValidAt(chunk.validFrom, chunk.validTo, citeAt)
       ) {
         return decision(
           'missing',
@@ -167,13 +173,20 @@ export function validateEvidence(
       );
     }
   }
+  const verifiedPartial =
+    proposal.status === 'partial' &&
+    !!proposal.missingFields?.length &&
+    !!proposal.excerpts?.length &&
+    proposal.excerpts.every(supportsExcerpt);
   if (
     !members.length ||
-    !request.requiredFields.every((field) =>
-      field === 'startTime'
-        ? /\d{1,2}:\d{2}|\d{1,2}\s*시(?:\s|[부터에])/.test(proposal.text)
-        : satisfiesAnswerTypes(proposal.text, [field]),
-    )
+    !request.requiredFields.every((field) => {
+      if (verifiedPartial && proposal.unresolvedFields?.includes(field))
+        return true;
+      return field === 'startTime'
+        ? /\d{1,2}:\d{2}|\d{1,2}\s*시(?:\s|[부터에]|$)/m.test(proposal.text)
+        : satisfiesAnswerTypes(proposal.text, [field]);
+    })
   ) {
     return decision(
       'missing',

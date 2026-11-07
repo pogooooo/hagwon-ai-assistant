@@ -79,7 +79,7 @@ function groupLines(items: PositionedText[], ocr: boolean): Line[] {
         const text = item.text.replace(/\s+/g, ' ').trim();
         const gap = previous ? item.x0 - previous.x1 : 0;
         const current = segments.at(-1);
-        if (!current || gap > segmentGap) {
+        if (!current || item.startsSegment || gap > segmentGap) {
           segments.push({ x0: item.x0, x1: item.x1, text, size: item.size });
         } else {
           const space =
@@ -204,6 +204,93 @@ function readingOrder(lines: Line[], gutter: number | null): Line[][] {
   return regions;
 }
 
+/** Identify independently titled prose columns before aligned text is treated as a table. */
+function titledProseColumns(
+  items: PositionedText[],
+  body: number,
+  pageWidth: number,
+  minColumns: number,
+): Line[][] | undefined {
+  // A text-layer line can contain several font runs. Keep it intact when
+  // distributing text into columns, including wide titles above the columns.
+  const runs: PositionedText[][] = [];
+  for (const item of items) {
+    if (!item.text.trim()) continue;
+    const run = runs.at(-1);
+    const last = run?.at(-1);
+    if (
+      run &&
+      last &&
+      !last.eol &&
+      Math.abs(run[0].top - item.top) <= body * 0.35 &&
+      item.x0 - last.x1 >= -body * 0.3 &&
+      item.x0 - last.x1 <= body * 1.2
+    ) {
+      run.push(item);
+    } else runs.push([item]);
+  }
+
+  const starts = new Map<number, number[]>();
+  for (const [first] of runs) {
+    if (first.size < body * 1.15 || first.size >= body * 1.45) continue;
+    const x =
+      [...starts.keys()].find((x) => Math.abs(x - first.x0) <= body * 0.4) ??
+      first.x0;
+    const tops = starts.get(x);
+    if (tops) tops.push(first.top);
+    else starts.set(x, [first.top]);
+  }
+  const columns = [...starts]
+    .filter(([, tops]) => Math.max(...tops) - Math.min(...tops) > body * 4)
+    .sort(([a], [b]) => a - b);
+  if (
+    columns.length < minColumns ||
+    columns.at(-1)![0] - columns[0][0] < pageWidth * 0.4 ||
+    columns.some(
+      ([x], index) => index > 0 && x - columns[index - 1][0] < body * 7,
+    )
+  )
+    return;
+
+  // Aligned headings across all columns are compatible with a table. Require
+  // at least one independently placed heading before changing reading order.
+  const hasIndependentHeading = columns.some(([, tops], index) =>
+    tops.some((top) =>
+      columns.every(
+        ([, others], other) =>
+          other === index || others.every((y) => Math.abs(top - y) > body * 2),
+      ),
+    ),
+  );
+  if (!hasIndependentHeading) return;
+
+  const leftEdges = columns.map(([x]) => x - body * 0.3);
+  const regions = columns.map(() => [] as PositionedText[]);
+  const spanning: PositionedText[] = [];
+  for (const run of runs) {
+    const first = run[0];
+    const column = Math.max(
+      0,
+      leftEdges.findLastIndex((x) => x <= first.x0),
+    );
+    const right = Math.max(...run.map(({ x1 }) => x1));
+    if (right > (leftEdges[column + 1] ?? Infinity)) {
+      // A wide introductory block is common. A crossing inside a column's
+      // prose makes the split ambiguous, so retain the regular layout path.
+      if (first.top > Math.min(...columns[column][1]) + body) return;
+      spanning.push(...run);
+    } else regions[column].push(...run);
+  }
+  const lines = regions.map((region) => groupLines(region, false));
+  if (
+    lines.some(
+      (region) => region.filter((line) => line.size < body * 1.15).length < 5,
+    )
+  )
+    return;
+  return [groupLines(spanning, false), ...lines];
+}
+
 const PARTICLE_END = /[은는을를에와과고서며의도로면다,.:;)]$/;
 const LIST_START = /^([-•·※▶◆■□○●]|\d{1,2}[.)]|[가-하][.)]|\(\d+\))\s*/;
 
@@ -292,16 +379,24 @@ function buildTable(
 export function analyzePage(
   items: PositionedText[],
   options: { page: number; pageWidth: number; ocr: boolean; bodySize?: number },
-): { blocks: LayoutBlock[]; twoColumn: boolean } {
+): { blocks: LayoutBlock[]; columns: number } {
   const lines = groupLines(items, options.ocr);
-  if (lines.length === 0) return { blocks: [], twoColumn: false };
+  if (lines.length === 0) return { blocks: [], columns: 0 };
   const gutter = detectGutter(lines, options.pageWidth);
   const body =
     options.bodySize ??
     median(lines.flatMap((l) => l.segments.map((s) => s.size)));
+  const prose = !options.ocr
+    ? titledProseColumns(
+        items,
+        body,
+        options.pageWidth,
+        gutter === null ? 2 : 3,
+      )
+    : undefined;
   const blocks: LayoutBlock[] = [];
 
-  for (const region of readingOrder(lines, gutter)) {
+  for (const region of prose ?? readingOrder(lines, gutter)) {
     let i = 0;
     let paragraph: { text: string; last: Line } | null = null;
     const flushParagraph = () => {
@@ -359,11 +454,28 @@ export function analyzePage(
         text.length <= 60;
       if (isHeading) {
         flushParagraph();
+        let heading = text;
+        const next = region[i + 1];
+        if (
+          prose &&
+          next?.segments.length === 1 &&
+          next.size === line.size &&
+          next.top - line.bottom < body &&
+          Math.abs(next.segments[0].x0 - line.segments[0].x0) < body * 0.4
+        ) {
+          heading = joinLines(
+            heading,
+            next.segments[0].text,
+            line.endsWithSpace,
+            false,
+          );
+          i += 1;
+        }
         blocks.push({
           kind: 'heading',
           page: options.page,
           level: line.size >= body * 1.45 ? 1 : 2,
-          text,
+          text: heading,
         });
         i += 1;
         continue;
@@ -377,9 +489,13 @@ export function analyzePage(
           /[가-힣]$/.test(current.text) &&
           /^[가-힣][.)]/.test(text)
         );
+      // Preserve consecutive labeled fields even when the scan has tight line spacing.
+      const startsField =
+        options.ocr && /^[가-힣][가-힣\s]{0,17}[:：]\s*\S/.test(text);
       if (
         current &&
         !startsList &&
+        !startsField &&
         line.top - current.last.bottom <= lineHeight * 0.9 &&
         Math.abs(line.size - current.last.size) <= body * 0.1
       ) {
@@ -398,7 +514,10 @@ export function analyzePage(
     }
     flushParagraph();
   }
-  return { blocks, twoColumn: gutter !== null };
+  return {
+    blocks,
+    columns: prose ? prose.length - 1 : gutter === null ? 1 : 2,
+  };
 }
 
 const normalizeRow = (row: string[]) =>

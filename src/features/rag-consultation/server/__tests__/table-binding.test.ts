@@ -452,7 +452,12 @@ test('PDF에서 추출한 요일 격자를 등록하고 선택한 쪽·행·열�
   assert.equal(answer.status, 'answered');
   assert.match(answer.answer, /18:20~19:50/);
   assert.doesNotMatch(answer.answer, /중2 내신B반|14:40~16:10/);
-  assert.match(answer.citations[0]?.location ?? '', /1쪽.*행 · 열 월(?:$| ·)/);
+  assert.match(
+    answer.citations[0]?.location ?? '',
+    process.env.RAG_TEST_ENGINE === 'planned'
+      ? /1쪽.*행 · 열 교시\(평일 \/ 토요일\), 월(?:$| ·)/
+      : /1쪽.*행 · 열 월(?:$| ·)/,
+  );
 });
 
 test('같은 절의 반별 표와 공통 규정 표를 각각 유지한다', () => {

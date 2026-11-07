@@ -142,6 +142,8 @@ export interface ChunkLocation {
   paragraphIndex?: number;
   /** 문서의 절 제목(## 제목) */
   section?: string;
+  /** 문서 안에서 같은 제목이 반복될 때 절의 출현 순서. */
+  sectionIndex?: number;
   /** 표 행의 셀 값(헤더와 같은 순서) — 질문한 칸만 골라 인용할 때 사용 */
   cells?: string[];
   /** 원본 파일의 쪽 번호(PDF 등). 정규화 Markdown 의 `<!-- page N -->` 에서 온다 */
@@ -304,6 +306,7 @@ export interface AcademyCatalog {
 
 /** 대화 상태는 서버에만 저장한다(클라이언트가 보낸 값으로 복원하지 않음). */
 export interface ConversationState {
+  academyId?: string;
   selectedStudentId?: string;
   candidateStudentIds?: string[];
   selectedPeriod?: string;
@@ -311,6 +314,14 @@ export interface ConversationState {
     domain: 'analysis' | 'info';
     units: string[];
     periods: string[];
+    /** 과목별 답변에 실제로 사용한 과목. */
+    subjects?: string[];
+    /** 직전 승인 근거에서 확인한 행사의 KST 날짜. */
+    eventDay?: number;
+    /** 직전 대여 안내에서 확인한 품목. */
+    loanItem?: string;
+    /** 직전 승인 표에서 확인한 1회 이용료. */
+    sessionPrice?: { label: string; classId: string | null; amount: number };
     /** 학원 정보 질문의 주제·반(후속 질문 "그럼 B반은요?"·"둘째도요?"에 이어 쓰기) */
     topicIds?: string[];
     classIds?: string[];

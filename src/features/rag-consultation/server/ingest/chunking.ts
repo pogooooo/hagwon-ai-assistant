@@ -47,6 +47,7 @@ export function splitIntoBlocks(text: string): RawBlock[] {
   let paragraphIndex = 0;
   let tableIndex = 0;
   let section: string | undefined;
+  let sectionIndex = 0;
   let page: number | undefined;
   const label = (base: string) =>
     [page ? `${page}쪽` : null, section, base].filter(Boolean).join(' · ');
@@ -66,6 +67,7 @@ export function splitIntoBlocks(text: string): RawBlock[] {
           label: label(`문단 ${paragraphIndex}`),
           paragraphIndex,
           section,
+          ...(sectionIndex ? { sectionIndex } : {}),
           ...(page ? { page } : {}),
         },
         text: joined,
@@ -87,6 +89,7 @@ export function splitIntoBlocks(text: string): RawBlock[] {
     const heading = line.match(HEADING);
     if (heading) {
       flushParagraph();
+      sectionIndex += 1;
       section = heading[2].replace(/[*_`]/g, '').trim();
       i += 1;
       continue;

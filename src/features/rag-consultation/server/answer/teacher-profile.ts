@@ -13,6 +13,18 @@ import {
 import { namedTeacher } from './evidence.ts';
 import { explicitClassIds } from './info.ts';
 import { supportsExcerpt } from './verify.ts';
+import {
+  fromPublicExcerpts,
+  isCleanPublicEvidence,
+  readEvidenceRow,
+} from './public-evidence.ts';
+
+const EDUCATION_FIELD = {
+  label: '학력',
+  request: /학력|출신\s*대학|어느\s*대학/,
+  heading: /^(?:학력|출신대학)$/,
+  value: /\S/,
+} as const;
 
 const PROFILE_FIELDS = [
   {
@@ -27,12 +39,7 @@ const PROFILE_FIELDS = [
     heading: /^(?:상담(?:가능)?(?:시간)?|원장상담)$/,
     value: /\d{1,2}:\d{2}|\d{1,2}\s*시/,
   },
-  {
-    label: '학력',
-    request: /학력|출신\s*대학|어느\s*대학/,
-    heading: /^(?:학력|출신대학)$/,
-    value: /\S/,
-  },
+  EDUCATION_FIELD,
 ] as const;
 
 type ProfileField = (typeof PROFILE_FIELDS)[number];
@@ -87,10 +94,106 @@ function profileExcerpts(
   });
 }
 
+async function answerPrincipalEducation(
+  ctx: AnswerContext,
+): Promise<AnswerDraft | undefined> {
+  const q = ctx.frame.normalized;
+  if (
+    !/(?<![가-힣])(?:학원장|원장)(?:님|쌤|선생님)?(?=\s|$|[은이의도는])/.test(
+      q,
+    ) ||
+    !EDUCATION_FIELD.request.test(q) ||
+    /부원장|담임|비교|이전\s*원장|전임\s*원장/.test(q)
+  )
+    return;
+  const { at } = resolveEffectiveTime(ctx.frame, ctx.asOf);
+  const hits = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    query: '원장 소개 원장 프로필 학력 출신 대학',
+    documentTypes: ['teacher', 'academy_info'],
+    limit: 40,
+  });
+  recordChunks(
+    ctx.trace,
+    hits.map(({ chunk }) => chunk),
+  );
+  const rolePrefixes = new Set([
+    '학원',
+    '우리',
+    '저희',
+    '이곳',
+    '해당',
+    '혹시',
+    '현재',
+    ctx.catalog.displayName,
+    ...ctx.catalog.aliases,
+  ]);
+  const requested = [
+    ...new Set(
+      [...q.matchAll(/(?<![가-힣])([가-힣]{2,4})\s+(?:원장|학원장)/g)]
+        .map(([, name]) => name)
+        .filter((name) => !rolePrefixes.has(name)),
+    ),
+  ];
+  if (requested.length > 1)
+    return abstain(
+      '확인할 원장의 이름을 하나로 지정해 주세요.',
+      'AMBIGUOUS_SUBJECT',
+    );
+  const [requestedName] = requested;
+  const hasDegree = (value: string) =>
+    /대학교|대학원|학사|석사|박사|졸업|학위/.test(value) &&
+    !/미기재|미확인|비공개|확인\s*중|확인되지/.test(value);
+  const candidates = hits.flatMap(({ chunk }) => {
+    if (chunk.classId !== null || !isCleanPublicEvidence(chunk, at)) return [];
+    const row = readEvidenceRow(chunk);
+    if (row) {
+      const role = row.column(/^(?:직책|직위|역할)$/);
+      const name = row.column(/^(?:이름|성명)$/);
+      const education = row.column(EDUCATION_FIELD.heading);
+      if (
+        !/^(?:학원장|원장)$/.test(compactText(row.cells[role] ?? '')) ||
+        (requestedName &&
+          profileName(row.cells[name] ?? '') !== requestedName) ||
+        !hasDegree(row.cells[education] ?? '')
+      )
+        return [];
+      const excerpt = row.project(
+        role,
+        ...(name >= 0 ? [name] : []),
+        education,
+      );
+      return excerpt ? [excerpt] : [];
+    }
+    const role = /^([가-힣]{2,4})\s*원장$/.exec(chunk.location.section ?? '');
+    if (!role || (requestedName && role[1] !== requestedName)) return [];
+    return profileExcerpts(chunk, role[1], EDUCATION_FIELD).filter(
+      (excerpt) => hasDegree(excerpt.line) && supportsExcerpt(excerpt),
+    );
+  });
+  if (!candidates.length)
+    return abstain(
+      '원장의 학력을 승인 소개 자료에서 확인할 수 없습니다.',
+      'INSUFFICIENT_EVIDENCE',
+      ['원장 학력'],
+    );
+  if (new Set(candidates.map(({ line }) => compactText(line))).size > 1)
+    return abstain(
+      '승인된 원장 학력 안내가 서로 다릅니다.',
+      'CONFLICTING_EVIDENCE',
+    );
+  ctx.trace.intent = 'principal_education';
+  return fromPublicExcerpts([candidates[0]]);
+}
+
 /** Join an approved class assignment with explicitly labelled profile evidence. */
 export async function answerTeacherProfile(
   ctx: AnswerContext,
 ): Promise<AnswerDraft | undefined> {
+  const principal = await answerPrincipalEducation(ctx);
+  if (principal) return principal;
   const { normalized, topics } = ctx.frame;
   if (
     !/강사|선생|교사|쌤|샘|담임/.test(normalized) ||

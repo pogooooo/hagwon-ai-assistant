@@ -52,6 +52,83 @@ describe('학습 방향 상담(최대 1회 생성)', () => {
     assert.match(result.answer.answer, /20문항 중 13문항 정답/);
   });
 
+  test('없는 월 또는 연도의 학습 기록을 최신 리포트로 대체하지 않는다', async () => {
+    const mock = new MockGenerationProvider('ok');
+    for (const question of [
+      'A01 8월 리포트 기준으로 학습 방향을 조언해줘',
+      'A01 2025년 10월 리포트 기준으로 학습 방향을 조언해줘',
+      'A01 이번 달 리포트 기준으로 학습 방향을 조언해줘',
+    ]) {
+      const result = await runQuery(env, {
+        userId: 'GUARDIAN_A',
+        question,
+        asOf,
+        generation: mock,
+      });
+      assert.equal(result.answer.status, 'abstained', question);
+      assert.deepEqual(result.answer.citations, []);
+    }
+    const previous = await runQuery(env, {
+      userId: 'GUARDIAN_A',
+      question: 'A01 지난달 리포트 기준으로 학습 방향을 조언해줘',
+      asOf,
+      generation: mock,
+    });
+    assert.equal(previous.answer.status, 'answered');
+    assert.equal(mock.calls.length, 1);
+    assert.ok(mock.calls[0].facts.every(({ period }) => period === '2026-10'));
+  });
+
+  test('기록에 표시한 사실은 각각 인용하고 생성 문장의 숫자는 모델이 인용한 출처로 검증한다', async () => {
+    const provider: GenerationPort = {
+      providerId: 'selective-citation-test',
+      isExternal: false,
+      personalDataApproved: false,
+      availability: () => 'available',
+      async generateGroundedAnswer() {
+        return {
+          ok: true,
+          rawText: JSON.stringify({
+            status: 'answered',
+            answer: '일차방정식의 풀이 과정을 다시 확인해 보세요.',
+            cited_source_ids: ['D_S1_OCT:r1:body'],
+          }),
+        };
+      },
+    };
+    const valid = await runQuery(env, {
+      userId: 'GUARDIAN_A',
+      question: adviceQuestion,
+      asOf,
+      generation: provider,
+    });
+    assert.equal(valid.answer.status, 'answered');
+    assert.deepEqual(
+      valid.answer.citations.map(({ sourceId }) => sourceId).sort(),
+      ['D_S1_MATH:r1:body', 'D_S1_OCT:r1:body'],
+    );
+    assert.match(valid.answer.answer, /9문항/);
+
+    provider.generateGroundedAnswer = async () => ({
+      ok: true,
+      rawText: JSON.stringify({
+        status: 'answered',
+        answer: '일차방정식에서 9문항을 맞힌 풀이를 확인해 보세요.',
+        cited_source_ids: ['D_S1_OCT:r1:body'],
+      }),
+    });
+    const wrong = await runQuery(env, {
+      userId: 'GUARDIAN_A',
+      question: adviceQuestion,
+      asOf,
+      generation: provider,
+    });
+    assert.equal(wrong.answer.status, 'handoff');
+    assert.equal(wrong.answer.handoff?.reasonCode, 'GENERATION_REJECTED');
+    assert.equal(wrong.generationCalls, 1);
+    assert.deepEqual(wrong.answer.citations, []);
+  });
+
   for (const behavior of [
     'rate_limited',
     'server_error',

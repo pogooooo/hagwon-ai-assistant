@@ -7,7 +7,11 @@ import type { EvidenceExcerpt } from './context.ts';
 import { mentionsName } from '../query/parse-query.ts';
 import { normalizeText } from '../text/normalize.ts';
 import { toKstDate } from '../text/time.ts';
-import type { ApprovedFact, StudentDirectoryEntry } from '../types.ts';
+import type {
+  ApprovedFact,
+  RagChunk,
+  StudentDirectoryEntry,
+} from '../types.ts';
 import { accuracyPercent } from './format.ts';
 
 const NUMBER_PATTERN = /(?<![A-Za-z가-힣_\d.])\d[\d,]*(?:\.\d+)?/g;
@@ -16,6 +20,16 @@ export function extractNumbers(text: string): number[] {
   return [...text.matchAll(NUMBER_PATTERN)]
     .map((match) => Number(match[0].replace(/,/g, '')))
     .filter((value) => Number.isFinite(value));
+}
+
+/** OCR quality follows the quoted text or cells, not other values in the same chunk. */
+export function uncertainOcrNumbers(chunk: RagChunk, quote: string): number[] {
+  const extraction = chunk.extraction;
+  if (!extraction) return [];
+  if (extraction.needsReview) return extractNumbers(quote);
+  return extraction.uncertainTokens.flatMap((token) =>
+    quote.includes(token) ? extractNumbers(token) : [],
+  );
 }
 
 function addDateParts(target: Set<number>, ms: number | null) {
@@ -144,8 +158,11 @@ export function supportsExcerpt(excerpt: EvidenceExcerpt): boolean {
     )
   )
     return false;
-  const projection = indices
-    .map((index) => header[index] + ': ' + cells[index])
-    .join(' / ');
-  return normalize(projection) === normalize(line);
+  const projection = (columns: readonly number[]) =>
+    columns.map((index) => header[index] + ': ' + cells[index]).join(' / ');
+  // Older renderers include the leading row key implicitly. New projections
+  // can name every displayed cell in the citation and omit unrelated cells.
+  return [tableColumns, indices].some(
+    (columns) => normalize(projection(columns)) === normalize(line),
+  );
 }

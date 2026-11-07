@@ -15,13 +15,14 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 
 import { prepareFileDocument } from '../../ingest/ingest-file.ts';
 import {
   PARSER_VERSION,
   type OcrEngine,
   type ParsedFile,
+  type SourceFormat,
 } from '../../ingest/parsers/index.ts';
 
 import type { AccessScopePort, CatalogPort } from '../../ports.ts';
@@ -78,6 +79,8 @@ export interface StudentJson {
   class_ids: string[];
 }
 
+type AcademySourceFormat = SourceFormat | 'pdf_text' | 'pdf_scan';
+
 export interface AcademyDocument {
   meta: {
     document_id: string;
@@ -94,11 +97,11 @@ export interface AcademyDocument {
   };
   body: string;
   file: string;
-  /** v2: PDF·TXT 원본 파일(엔진은 이 파일을 파싱해 색인). Markdown 문서는 없음 */
+  /** 원본 파일을 등록 파서로 처리한다. 본문이 제공되는 자료는 source 가 없다. */
   source?: {
     path: string;
     fileName: string;
-    format: 'pdf_text' | 'pdf_scan' | 'txt';
+    format: AcademySourceFormat;
   };
   /** v2 메타의 render 정보(시험 자료 생성 조건) */
   render?: {
@@ -209,6 +212,65 @@ export function parseFrontMatter(raw: string): {
   return { meta, body: text.slice(end + 5) };
 }
 
+const rawFormats = new Map<string, SourceFormat>([
+  ['.pdf', 'pdf'],
+  ['.txt', 'txt'],
+  ['.text', 'txt'],
+  ['.csv', 'txt'],
+  ['.docx', 'docx'],
+  ['.hwpx', 'hwpx'],
+  ['.md', 'markdown'],
+  ['.markdown', 'markdown'],
+]);
+
+function readDocumentSource(
+  directory: string,
+  folder: string,
+  manifest: string,
+): AcademyDocument {
+  const meta = readJson<
+    AcademyDocument['meta'] & {
+      file_name?: string;
+      source_file?: string;
+      render?: AcademyDocument['render'];
+    }
+  >(join(directory, manifest));
+  const stem = manifest.slice(0, -'.meta.json'.length);
+  const legacy = meta.render?.format;
+  const legacyExtension =
+    legacy === 'pdf_text' || legacy === 'pdf_scan'
+      ? '.pdf'
+      : legacy === 'txt'
+        ? '.txt'
+        : undefined;
+  const raw =
+    meta.source_file ?? (legacyExtension ? stem + legacyExtension : '');
+  const format =
+    typeof raw === 'string'
+      ? rawFormats.get(extname(raw).toLowerCase())
+      : undefined;
+  if (!format || /[\\/:]/.test(raw))
+    throw new Error('지원되는 원본 파일 이름이 필요합니다 (' + manifest + ')');
+  const sourcePath = join(directory, raw);
+  if (!existsSync(sourcePath) || !statSync(sourcePath).isFile())
+    throw new Error('원본 파일 없음: ' + folder + '/documents/' + raw);
+  const recordedFormat =
+    format === 'pdf' && (legacy === 'pdf_scan' || legacy === 'pdf_text')
+      ? legacy
+      : format;
+  return {
+    meta,
+    body: '',
+    file: folder + '/documents/' + raw,
+    source: {
+      path: sourcePath,
+      fileName: meta.file_name ?? raw,
+      format: recordedFormat,
+    },
+    render: meta.render,
+  };
+}
+
 export function readAcademiesDataset(
   dir: string = ACADEMIES_DIR,
   options: { folders?: readonly string[] } = {},
@@ -241,11 +303,17 @@ export function readAcademiesDataset(
     dataset.students.push(
       ...readJson<StudentJson[]>(join(base, 'students.json')),
     );
-    for (const file of readdirSync(join(base, 'documents'))
-      .filter((name) => name.endsWith('.md'))
-      .sort()) {
+    const directory = join(base, 'documents');
+    const files = readdirSync(directory).sort();
+    const raw = files
+      .filter((name) => name.endsWith('.meta.json'))
+      .map((name) => readDocumentSource(directory, folder, name));
+    const sourceFiles = new Set(raw.map(({ source }) => source?.path));
+    for (const file of files.filter(
+      (name) => name.endsWith('.md') && !sourceFiles.has(join(directory, name)),
+    )) {
       const { meta, body } = parseFrontMatter(
-        readFileSync(join(base, 'documents', file), 'utf-8'),
+        readFileSync(join(directory, file), 'utf-8'),
       );
       dataset.documents.push({
         meta: meta as AcademyDocument['meta'],
@@ -253,33 +321,7 @@ export function readAcademiesDataset(
         file: `${folder}/documents/${file}`,
       });
     }
-    // v2: <stem>.meta.json + 원본(<stem>.pdf 또는 <stem>.txt). HTML 원본은 엔진에 주지 않는다.
-    for (const file of readdirSync(join(base, 'documents'))
-      .filter((name) => name.endsWith('.meta.json'))
-      .sort()) {
-      const stem = file.slice(0, -'.meta.json'.length);
-      const meta = readJson<
-        AcademyDocument['meta'] & {
-          file_name: string;
-          render: NonNullable<AcademyDocument['render']>;
-        }
-      >(join(base, 'documents', file));
-      const format = meta.render.format as 'pdf_text' | 'pdf_scan' | 'txt';
-      const sourcePath = join(
-        base,
-        'documents',
-        `${stem}.${format === 'txt' ? 'txt' : 'pdf'}`,
-      );
-      if (!existsSync(sourcePath))
-        throw new Error(`원본 파일 없음(렌더링 필요): ${sourcePath}`);
-      dataset.documents.push({
-        meta,
-        body: '',
-        file: `${folder}/documents/${stem}.${format === 'txt' ? 'txt' : 'pdf'}`,
-        source: { path: sourcePath, fileName: meta.file_name, format },
-        render: meta.render,
-      });
-    }
+    dataset.documents.push(...raw);
     dataset.facts.push(
       ...readJsonl<AcademyFactJson>(join(base, 'facts.jsonl')),
     );

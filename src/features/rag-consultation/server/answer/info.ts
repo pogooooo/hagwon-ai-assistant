@@ -31,13 +31,16 @@ import {
   type AnswerDraft,
   type CitationRequest,
   type EffectiveTime,
+  type EvidenceExcerpt,
 } from './context.ts';
 import { formatKrw, josa } from './format.ts';
+import { uncertainOcrNumbers } from './verify.ts';
 
 interface Part {
   outcome: 'ok' | 'partial' | 'missing' | 'conflict';
   lines: string[];
   citations: CitationRequest[];
+  excerpts?: EvidenceExcerpt[];
   usedFacts: ApprovedFact[];
   missing: string[];
   derived: number[];
@@ -372,7 +375,7 @@ function weekdayAvailability(
   return included.has(day) ? true : undefined;
 }
 
-function dayWordCovers(word: string, day: string): boolean {
+export function dayWordCovers(word: string, day: string): boolean {
   return weekdayAvailability(word, day) === true;
 }
 
@@ -481,6 +484,7 @@ export async function classTableRows(
   documentTypes: readonly string[],
   effective?: EffectiveTime,
   seen: { offDay: boolean } = { offDay: false },
+  additionalHeader?: RegExp,
 ): Promise<EvidenceLine[]> {
   effective ??= resolveEffectiveTime(ctx.frame, ctx.asOf);
   const weekday = askedWeekday(ctx, effective);
@@ -539,7 +543,14 @@ export async function classTableRows(
         : matchesClassCell(classCell, names))
     )
       continue;
-    if (!header.some((h) => /시간|요일|교시/.test(h) || WEEKDAY_AXIS.test(h)))
+    if (
+      !header.some(
+        (h) =>
+          /시간|요일|교시/.test(h) ||
+          WEEKDAY_AXIS.test(h) ||
+          additionalHeader?.test(compactText(h)),
+      )
+    )
       continue;
     if (
       !rowCoversDay(
@@ -788,6 +799,20 @@ function dayOf(isoDate: string): number {
   return kstStartOfDay({ year, month, day });
 }
 
+export function scheduleClosureCause(ctx: AnswerContext): string | undefined {
+  const { flags, normalized, topics } = ctx.frame;
+  return ctx.engine === 'planned' &&
+    !flags.makeupSchedule &&
+    flags.cancelSchedule &&
+    !/말고|제외|비교/.test(normalized) &&
+    topics.some(({ id }) => id === 'schedule_change') &&
+    topics.every(({ id }) =>
+      ['schedule_change', 'schedule', 'hours'].includes(id),
+    )
+    ? /공사|정전|시설\s*점검|강사\s*연수/.exec(normalized)?.[0]
+    : undefined;
+}
+
 async function answerScheduleChange(
   ctx: AnswerContext,
   effective: EffectiveTime,
@@ -796,7 +821,13 @@ async function answerScheduleChange(
   const facts = (await loadFacts(ctx, ['schedule_change'], ctx.asOf)).filter(
     (fact) => fact.value.kind === 'schedule_change',
   );
-  const { flags } = ctx.frame;
+  const { flags, normalized } = ctx.frame;
+  const closureCause = scheduleClosureCause(ctx);
+  const facility =
+    closureCause &&
+    /(?:제\s*\d+\s*)?(?:실험실|강의실|교실|자습실|건물)(?=\s*(?:공사|정전|시설\s*점검))/.exec(
+      normalized,
+    )?.[0];
   const types: Array<'cancel' | 'makeup'> =
     flags.makeupSchedule && !flags.cancelSchedule
       ? ['makeup']
@@ -809,6 +840,14 @@ async function answerScheduleChange(
   let candidates = facts.filter((fact) => {
     if (fact.value.kind !== 'schedule_change') return false;
     if (!types.includes(fact.value.changeType)) return false;
+    if (
+      closureCause &&
+      (fact.value.changeType !== 'cancel' ||
+        !compactText(fact.value.text).includes(compactText(closureCause)) ||
+        (facility &&
+          !compactText(fact.value.text).includes(compactText(facility))))
+    )
+      return false;
     if (
       classIds.length > 0 &&
       fact.subjectType === 'class' &&
@@ -961,6 +1000,8 @@ async function answerScheduleChange(
   }
 
   if (candidates.length === 0) {
+    if (closureCause)
+      return emptyPart('missing', [closureCause + ' 관련 휴강 일정']);
     const what =
       types.length === 1
         ? types[0] === 'cancel'
@@ -1025,6 +1066,7 @@ async function answerMakeupPolicy(
     if (evidence) {
       part.lines.push(`관련 규정: "${evidence.sentence}"`);
       part.citations.push({ kind: 'chunk', chunk: evidence.chunk });
+      part.excerpts = [{ chunk: evidence.chunk, line: evidence.sentence }];
     } else {
       part.outcome = 'partial';
       part.missing.push('보강 횟수 기준');
@@ -1071,7 +1113,8 @@ async function findSentence(
     for (const sentence of splitSentences(chunk.text)) {
       if (
         !isDataAbsenceStatement(sentence) &&
-        predicate(sentence, chunk, heading)
+        predicate(sentence, chunk, heading) &&
+        !uncertainOcrNumbers(chunk, sentence).length
       )
         return { chunk, sentence };
     }
@@ -1090,12 +1133,25 @@ async function answerAttribute(
     topic.id === 'study_room' &&
     /몇\s*시|운영\s*시간|열어|닫아/.test(ctx.frame.normalized);
   const clock = /\d{1,2}:\d{2}|\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?/;
+  const studyDays = (text: string) =>
+    weekdayTokens(text.replace(/(평일|주말|[월화수목금토일]요일)엔/g, '$1'));
+  const requestedDays = asksStudyHours
+    ? studyDays(ctx.frame.normalized)
+    : new Set<string>();
+  const supportsStudyHours = (text: string) => {
+    if (!clock.test(text)) return false;
+    const described = studyDays(text);
+    return (
+      described.size === 0 ||
+      [...requestedDays].every((day) => described.has(day))
+    );
+  };
   const facts = await loadFacts(ctx, [...topic.factTypes], effective.at);
   const matchingFact = facts.find((fact) => {
     const text = textOf(fact);
     return (
       containsAny(text, evidenceTerms) &&
-      (!asksStudyHours || clock.test(text)) &&
+      (!asksStudyHours || supportsStudyHours(text)) &&
       !isDataAbsenceStatement(text)
     );
   });
@@ -1119,7 +1175,7 @@ async function answerAttribute(
     ],
     (sentence, chunk, previousHeading) =>
       asksStudyHours
-        ? clock.test(sentence) &&
+        ? supportsStudyHours(sentence) &&
           !chunk.suspicious &&
           !isAssistantDirective(chunk.text) &&
           containsAny(
@@ -1131,6 +1187,7 @@ async function answerAttribute(
   if (!evidence) return emptyPart('missing', [topic.label]);
   part.lines.push(`등록된 안내 자료에 따르면: "${evidence.sentence}"`);
   part.citations.push({ kind: 'chunk', chunk: evidence.chunk });
+  part.excerpts = [{ chunk: evidence.chunk, line: evidence.sentence }];
   part.usedFacts.push(
     ...facts.filter((fact) => fact.sourceId === evidence.chunk.sourceId),
   );
@@ -1723,6 +1780,7 @@ async function answerGeneric(ctx: AnswerContext): Promise<AnswerDraft> {
     status: 'answered',
     text: `등록된 자료에 따르면: "${evidence.sentence}"`,
     citations: [{ kind: 'chunk', chunk: evidence.chunk }],
+    excerpts: [{ chunk: evidence.chunk, line: evidence.sentence }],
     usedFacts: [],
   };
 }
@@ -1926,6 +1984,7 @@ export async function answerInfo(ctx: AnswerContext): Promise<AnswerDraft> {
     status: isPartial ? 'partial' : 'answered',
     text: lines.join('\n'),
     citations: answered.flatMap((part) => part.citations),
+    excerpts: answered.flatMap((part) => part.excerpts ?? []),
     usedFacts: answered.flatMap((part) => part.usedFacts),
     missingFields: isPartial ? missing : undefined,
     reasonCode: isPartial ? 'PARTIAL_EVIDENCE' : undefined,

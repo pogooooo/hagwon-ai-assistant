@@ -60,6 +60,17 @@ export interface EvidenceExcerpt {
   tableColumns?: readonly number[];
 }
 
+/** Local evaluation diagnostics, collected after citation and answer checks pass. */
+export interface CitationWitness {
+  sourceId: string;
+  location?: string;
+  chunkId?: string;
+  factId?: string;
+  /** Selected table headers without parsing the display label. */
+  columns?: readonly string[];
+  text: string;
+}
+
 export interface AnswerDraft {
   excerpts?: EvidenceExcerpt[];
   status: RagAnswerStatus;
@@ -67,6 +78,8 @@ export interface AnswerDraft {
   citations: CitationRequest[];
   usedFacts: ApprovedFact[];
   missingFields?: string[];
+  /** Planned fields explicitly left unanswered by an extractive partial draft. */
+  unresolvedFields?: PlannedRequest['requiredFields'];
   reasonCode?: RagPublicReasonCode;
   clarifyOptionStudentIds?: string[];
   /** 코드에서 계산한 파생 수치(차이 등) — 사후 숫자 검사 허용 목록 */
@@ -94,6 +107,15 @@ export function abstain(
     missingFields,
     internalErrors,
   };
+}
+
+export function abstainForUncertainOcr(): AnswerDraft {
+  return abstain(
+    '스캔된 문서에서 읽은 내용의 판독이 확실하지 않아 바로 안내해 드리기 어렵습니다. 담당자가 원본을 확인한 뒤 안내해 드릴 수 있도록 연결해 드리겠습니다.',
+    'INSUFFICIENT_EVIDENCE',
+    ['스캔 문서 판독 확인'],
+    ['OCR_UNCERTAIN'],
+  );
 }
 
 export function deny(internalError: RagInternalErrorType): AnswerDraft {

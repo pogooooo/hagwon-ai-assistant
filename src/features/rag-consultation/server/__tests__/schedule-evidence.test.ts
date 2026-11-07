@@ -93,7 +93,7 @@ async function createFixture(
         text,
       },
     });
-  const ask = (question: string) =>
+  const ask = (question: string, engine: 'legacy' | 'planned' = 'planned') =>
     runQuery(
       {
         store,
@@ -118,10 +118,88 @@ async function createFixture(
         },
         resolveScope: () => access,
       },
-      { engine: 'planned', userId: scope.actorId, asOf, question },
+      { engine, userId: scope.actorId, asOf, question },
     );
   return { register, ask };
 }
+
+test('클리닉은 같은 학교급과 요일의 교시 시간만 인용한다', async () => {
+  const { register, ask } = await createFixture(false, scope, true);
+  await register(
+    'CLINICS',
+    [
+      '## 초등부 시간표',
+      '',
+      '| 화 | 교시(평일 / 토요일) | 토 |',
+      '|---|---|---|',
+      '| 초등 과제 클리닉 · 209호 | 2교시 (평일 17:00~18:20 / 토 11:10~12:30) | 특별 수업 |',
+      '',
+      '## 중등부 시간표',
+      '',
+      '| 화 | 교시(평일 / 토요일) | 토 |',
+      '|---|---|---|',
+      '| 중등 과제 클리닉 · 304호 | 2교시 (평일 19:00~20:20 / 토 13:10~14:30) | 중등 과제 클리닉 |',
+    ].join('\n'),
+  );
+  const result = await ask(
+    '초5 조형 1반 화요일 수업 끝나고 과제 클리닉 몇 시예요?',
+  );
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /초등 과제 클리닉 화요일 17:00~18:20/);
+  assert.doesNotMatch(result.answer.answer, /19:00|11:10|13:10/);
+  assert.match(
+    result.answer.citations[0].location ?? '',
+    /초등부.*열 교시\(평일 \/ 토요일\), 화/,
+  );
+  assert.equal(result.generationCalls, 0);
+});
+
+test('학생의 등록 반에서 정규 수업 구간과 교실을 별개 열로 인용한다', async () => {
+  const { register, ask } = await createFixture(false, {
+    ...scope,
+    role: 'student',
+    allowedStudentIds: ['LEARNER'],
+    studentRefs: [
+      {
+        studentId: 'LEARNER',
+        displayLabel: '학생',
+        aliases: [],
+        classIds: ['WOOD'],
+      },
+    ],
+  });
+  const grid = [
+    '| 강의실 | 반 | 정규 수업 | 실습 |',
+    '|---|---|---|---|',
+    '| 201호 | 금속 조형반 | 월·수 17:10~18:20 | 목 15:10~16:30 |',
+    '| 403호 | 목재 조형반 | 화·금 18:10~19:40 | 토 12:00~13:30 |',
+  ].join('\n');
+  await register('OWN_CLASS', grid);
+  await register(
+    'PENDING',
+    grid.replace('403호', '999호').replace('18:10', '21:10'),
+    { approve: false },
+  );
+  const times = await ask('우리반 수업 몇 시부터 몇 시까지예요?');
+  assert.equal(times.answer.status, 'answered', times.answer.answer);
+  assert.match(times.answer.answer, /목재 조형반.*18:10~19:40/);
+  assert.doesNotMatch(times.answer.answer, /17:10|21:10|12:00|403호/);
+  assert.match(
+    times.answer.citations[0]?.location ?? '',
+    /2행 · 열 반, 정규 수업/,
+  );
+
+  const room = await ask('우리반 교실 몇 호였지?');
+  assert.equal(room.answer.status, 'answered', room.answer.answer);
+  assert.match(room.answer.answer, /목재 조형반.*403호/);
+  assert.doesNotMatch(room.answer.answer, /201호|999호|18:10/);
+  assert.deepEqual(
+    room.answer.citations.map(({ documentId }) => documentId),
+    ['OWN_CLASS'],
+  );
+  assert.match(room.answer.citations[0]?.location ?? '', /2행 · 열 강의실, 반/);
+  assert.equal(room.generationCalls, 0);
+});
 
 test('요일을 묻는 시간표는 그 요일의 실제 반·시각 셀만 인용한다', async () => {
   const { register, ask } = await createFixture();
@@ -146,6 +224,89 @@ test('요일을 묻는 시간표는 그 요일의 실제 반·시각 셀만 인�
   );
   assert.match(answer.citations[0]?.location ?? '', /1행 · 열 화요일/);
   assert.equal(generationCalls, 0);
+});
+
+test('특정 날짜의 승인 변경 행이 정규 시간표보다 우선한다', async () => {
+  const { register, ask } = await createFixture();
+  await register(
+    'REGULAR_DATE',
+    '| 반 | 수업 시간 | 강의실 |\n|---|---|---|\n| 금속 조형반 | 토 17:00~18:00 | 201호 |',
+  );
+  const rows = [
+    '| 적용 날짜 | 반 | 강의실 | 수업 시간 |',
+    '|---|---|---|---|',
+    '| 11월 7일(토) | 목재 조형반 | 202호 | 19:00~20:00 |',
+    '| 11월 14일(토) | 금속 조형반 | 303호 | 13:00~15:00 |',
+    '| 11월 7일(토) | 금속 조형반 | 304호 | 14:00~16:00 |',
+  ].join('\n');
+  await register('DATED', rows);
+  await register(
+    'UNAPPROVED_DATED',
+    rows.replace('14:00~16:00', '20:00~21:00'),
+    { approve: false },
+  );
+  const { answer, trace, generationCalls } = await ask(
+    '금속 조형반 11월 7일 토요일 수업 몇 시에 시작하고 강의실은 어디예요?',
+  );
+  assert.equal(trace.intent, 'dated_schedule_row', answer.answer);
+  assert.equal(answer.status, 'answered', answer.answer);
+  assert.match(answer.answer, /14:00~16:00.*304호/);
+  assert.doesNotMatch(answer.answer, /201호|202호|303호|20:00|목재/);
+  assert.deepEqual(
+    answer.citations.map(({ documentId }) => documentId),
+    ['DATED'],
+  );
+  assert.match(
+    answer.citations[0]?.location ?? '',
+    /3행 · 열 반, 적용 날짜, 수업 시간, 강의실/,
+  );
+  assert.equal(generationCalls, 0);
+});
+
+test('같은 반과 날짜의 승인 변경 행이 충돌하면 정규표로 대체하지 않는다', async () => {
+  const { register, ask } = await createFixture();
+  const row =
+    '| 반 | 적용 날짜 | 수업 시간 |\n|---|---|---|\n| 금속 조형반 | 11월 7일(토) | 14:00~16:00 |';
+  await register('DATED_A', row);
+  await register('DATED_B', row.replace('14:00~16:00', '16:00~18:00'));
+  const { answer } = await ask('금속 조형반 11월 7일 수업 몇 시에 시작해요?');
+  assert.equal(answer.status, 'abstained', answer.answer);
+  assert.deepEqual(answer.citations, []);
+});
+
+test('차량·운행 방향·회차·정류장이 같은 행의 도착 시각만 선택한다', async () => {
+  const { register, ask } = await createFixture();
+  await register(
+    'BUS_TABLE',
+    [
+      '| 차량 | 구분 | 정류장 | 시각 |',
+      '|---|---|---|---|',
+      '| 2호차 | 등원 1회차 | 해솔초 정문 | 13:20 |',
+      '| 2호차 | 하원 1회차 | 해솔초 후문 | 17:10 |',
+      '| 2호차 | 하원 1회차 | 해솔초 정문 | 17:30 |',
+      '| 2호차 | 하원 2회차 | 해솔초 정문 | 18:40 |',
+      '| 3호차 | 하원 3회차 | 해솔초 정문 | 19:30 |',
+    ].join('\n'),
+  );
+  const first = await ask('2호차 하원 1회차 해솔초 정문에 몇 시 도착해요?');
+  assert.equal(first.trace.intent, 'transit_schedule_row', first.answer.answer);
+  assert.equal(first.answer.status, 'answered');
+  assert.match(first.answer.answer, /17:30/);
+  assert.doesNotMatch(first.answer.answer, /13:20|17:10|18:40|후문/);
+  assert.match(
+    first.answer.citations[0]?.location ?? '',
+    /3행 · 열 차량, 구분, 정류장, 시각/,
+  );
+  const legacy = await ask(
+    '2호차 하원 1회차 해솔초 정문에 몇 시 도착해요?',
+    'legacy',
+  );
+  assert.equal(legacy.answer.answer, first.answer.answer);
+  const last = await ask('2호차 마지막 하원차 해솔초 정문 도착 몇 시예요?');
+  assert.equal(last.answer.status, 'answered', last.answer.answer);
+  assert.match(last.answer.answer, /18:40/);
+  assert.doesNotMatch(last.answer.answer, /17:30|19:30/);
+  assert.equal(last.generationCalls, 0);
 });
 
 test('같은 강좌 이름을 사용하는 두 반은 별도 대상 열로 구분한다', async () => {

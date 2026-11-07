@@ -42,6 +42,7 @@ function pdfjsDataPaths() {
 
 const MIN_TEXT_CHARS = 20;
 const OCR_TARGET_WIDTH = 1500;
+const OCR_MAX_DIMENSION = 2400;
 const OCR_ACCEPT_CONFIDENCE = 70;
 const UNCERTAIN_NUMBER_CONFIDENCE = 75;
 const REVIEW_CONFIDENCE = 65;
@@ -100,24 +101,30 @@ async function rotated(
   return canvas.toBuffer('image/png');
 }
 
+async function renderForOcr(
+  page: import('pdfjs-dist/legacy/build/pdf.mjs').PDFPageProxy,
+  scale: number,
+): Promise<Canvas> {
+  const canvas = await renderPage(page, scale);
+  const context = canvas.getContext('2d');
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  denoiseRgba(image.data, canvas.width, canvas.height);
+  context.putImageData(image, 0, 0);
+  return canvas;
+}
+
 async function ocrPage(
   page: import('pdfjs-dist/legacy/build/pdf.mjs').PDFPageProxy,
   pageNumber: number,
   engine: OcrEngine,
 ): Promise<PageData> {
   const base = page.getViewport({ scale: 1 });
-  const canvas = await renderPage(
-    page,
-    Math.min(3, OCR_TARGET_WIDTH / base.width),
+  const maxScale = Math.min(
+    3,
+    OCR_MAX_DIMENSION / Math.max(base.width, base.height),
   );
-  const context = canvas.getContext('2d');
-  const image = context.getImageData(0, 0, canvas.width, canvas.height);
-  denoiseRgba(
-    image.data as unknown as Uint8ClampedArray,
-    canvas.width,
-    canvas.height,
-  );
-  context.putImageData(image, 0, 0);
+  const initialScale = Math.min(maxScale, OCR_TARGET_WIDTH / base.width);
+  let canvas = await renderForOcr(page, initialScale);
 
   let rotation = 0;
   let result = await engine.recognize(canvas.toBuffer('image/png'));
@@ -131,6 +138,12 @@ async function ocrPage(
     }
     if (best.degrees !== 0 && best.confidence > result.confidence + 5) {
       rotation = best.degrees;
+      if (rotation === 90 || rotation === 270) {
+        // Match the target width after the page is turned upright.
+        const uprightScale = Math.min(maxScale, OCR_TARGET_WIDTH / base.height);
+        if (uprightScale > initialScale * 1.1)
+          canvas = await renderForOcr(page, uprightScale);
+      }
       result = await engine.recognize(await rotated(canvas, rotation));
     }
   }
@@ -151,6 +164,7 @@ async function ocrPage(
       x1: word.x1,
       top: word.y0,
       size: Math.max(1, word.y1 - word.y0),
+      startsSegment: word.startsSegment,
       confidence: word.confidence,
     })),
     extraction: {
@@ -330,8 +344,14 @@ export async function parsePdf(
         ocr: data.extraction.method === 'ocr',
         bodySize: data.extraction.method === 'text' ? bodySize : undefined,
       });
-      if (result.twoColumn)
+      if (result.columns === 2)
         warnings.push({ code: 'two_column_layout', page: data.page });
+      if (result.columns > 2)
+        warnings.push({
+          code: 'multi_column_layout',
+          page: data.page,
+          detail: String(result.columns),
+        });
       blocks.push(...result.blocks);
     }
     const merged = mergeAcrossPages(blocks);

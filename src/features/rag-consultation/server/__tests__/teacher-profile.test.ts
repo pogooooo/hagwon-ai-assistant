@@ -64,6 +64,44 @@ async function teacherEnv(text: string): Promise<QueryEnv> {
   };
 }
 
+test('원장의 학력은 원장 직책과 같은 행의 학력에서만 확인한다', async () => {
+  const ask = (env: QueryEnv) =>
+    runQuery(env, {
+      engine: 'planned',
+      userId: 'v',
+      question: '원장쌤 어느 대학 나오셨어요?',
+      asOf,
+    });
+  const table = [
+    '| 이름 | 학력 | 직책 |',
+    '|---|---|---|',
+    '| 박예린 | 이웃대학교 졸업 | 담당 강사 |',
+    '| 김예서 | 확인 중 | 원장 |',
+  ].join('\n');
+  const missing = await ask(await teacherEnv(table));
+  assert.equal(missing.answer.status, 'abstained', missing.answer.answer);
+  assert.deepEqual(missing.answer.citations, []);
+  const env = await teacherEnv(table.replace('확인 중', '연솔대학교 졸업'));
+  const result = await ask(env);
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /원장.*김예서.*연솔대학교 졸업/);
+  assert.doesNotMatch(result.answer.answer, /이웃대학교|박예린/);
+  assert.match(
+    result.answer.citations[0]?.location ?? '',
+    /2행 · 열 직책, 이름, 학력/,
+  );
+  assert.equal(result.generationCalls, 0);
+
+  const wrongName = await runQuery(env, {
+    engine: 'planned',
+    userId: 'v',
+    question: '박예린 원장님 어느 대학 나오셨어요?',
+    asOf,
+  });
+  assert.equal(wrongName.answer.status, 'abstained', wrongName.answer.answer);
+  assert.deepEqual(wrongName.answer.citations, []);
+});
+
 test('담당 강사와 일치하는 표 행과 경력 열만 인용한다', async () => {
   const env = await teacherEnv(
     [

@@ -1,7 +1,7 @@
 import { expectedAnswerTypes, keywordsOf } from '../answer/evidence.ts';
 import type { RagConfig } from '../config.ts';
 import type { AcademyCatalog, RagAccessScope } from '../types.ts';
-import { parseQuery, type QueryFrame } from './parse-query.ts';
+import { parseQuery, STUDENT_GROUP, type QueryFrame } from './parse-query.ts';
 
 /** 질문을 물음표·마침표 경계로 나눈다(내용어가 있는 부분이 둘 이상일 때만). */
 export function splitQuestion(question: string): string[] {
@@ -35,7 +35,8 @@ function inheritAnchors(part: QueryFrame, full: QueryFrame): QueryFrame {
     part.unresolvedRelationWords.length > 0 ||
     part.classIds.length > 0 ||
     part.selfReference ||
-    part.groupReference;
+    (part.groupReference &&
+      (full.classIds.length === 0 || STUDENT_GROUP.test(part.normalized)));
   if (!ownTarget) {
     out.matchedStudentIds = full.matchedStudentIds;
     out.unresolvedRelationWords = full.unresolvedRelationWords;
@@ -109,6 +110,46 @@ export function isRosterRequest({ normalized }: QueryFrame): boolean {
     /(?:명단|목록|리스트).{0,12}(?:학생|원생|아이|애들)/.test(normalized)
   );
 }
+/** The billed service month can differ from the date money is paid. */
+export function prepaidTuitionMonth(
+  text: string,
+): { month: number; year?: number } | undefined {
+  if (
+    !/미리\s*(?:내|납부|결제)|선납|선결제/.test(text) ||
+    !/수강료|학원비|교습비|가격|금액/.test(text) ||
+    /환불|할부|연체|특강|차량비|교재비|재료비/.test(text)
+  )
+    return;
+  const periods = [
+    ...text.matchAll(
+      /(?<!\d)(?:(20\d{2})년\s*)?(1[0-2]|[1-9])\s*월\s*(?:분|수강(?:료|분)|학원비|교습비)/g,
+    ),
+  ];
+  const months = new Set(periods.map(([, , month]) => Number(month)));
+  const years = new Set(
+    periods.flatMap(([, year]) => (year ? [Number(year)] : [])),
+  );
+  if (months.size !== 1 || years.size > 1) return;
+  return { month: [...months][0], year: [...years][0] };
+}
+
+/** A charge's eligibility depends on the discount named in the preceding clause. */
+export function asksSiblingTextbookDiscount(frame: QueryFrame): boolean {
+  const q = frame.normalized;
+  return (
+    /(?:형제|자매|남매|가족)\s*할인/.test(q) &&
+    /할인율|몇\s*(?:%|퍼센트|프로)/.test(q) &&
+    /교재비(?:도|는|에)?\s*(?:형제\s*)?할인/.test(q) &&
+    !/얼마|비교|합산|중복|환불|특강/.test(q) &&
+    frame.topics.every(({ id }) =>
+      ['fee', 'discount', 'material'].includes(id),
+    ) &&
+    !frame.classIds.length &&
+    frame.explicitDates.length <= 1 &&
+    frame.months.length <= 1
+  );
+}
+
 export function planQuery(
   question: string,
   frame: QueryFrame,
@@ -121,7 +162,11 @@ export function planQuery(
   const clauses =
     sentences.length === 0
       ? question
-          .split(/(?:이랑|랑|하고)\s+|\s+(?:및|그리고)\s+/)
+          .split(
+            planned && !frame.hasAnalysisTerms
+              ? /(?:이랑|랑|하고|와|과)\s+|\s+(?:및|그리고)\s+/
+              : /(?:이랑|랑|하고)\s+|\s+(?:및|그리고)\s+/,
+          )
           .map((clause) => clause.trim())
       : [];
   const parsePart = (part: string) =>
@@ -213,6 +258,11 @@ export function planQuery(
   // ("셔틀 몇 시에 와요? 이용료도 알려주세요"의 뒤 문장처럼 앞 문장에 기대는 경우는 통째로 처리).
   const selfContained = (part: QueryFrame) =>
     part.hasAnalysisTerms ||
+    (planned &&
+      part.classIds.length > 0 &&
+      /수업|수강|개강/.test(part.normalized) &&
+      /몇\s*시(?!간)|수업\s*시간|시간표/.test(part.normalized) &&
+      part.topics.some(({ id }) => id === 'schedule')) ||
     part.topics.some((topic) => {
       const matched = topic.terms.filter((term) =>
         part.compact.includes(term.replace(/\s/g, '')),
@@ -223,6 +273,33 @@ export function planQuery(
   const separate =
     parts.length >= 2 &&
     !blocked &&
+    !(planned && prepaidTuitionMonth(frame.normalized)) &&
+    !(planned && asksSiblingTextbookDiscount(frame)) &&
+    !(
+      planned &&
+      parts.length === 2 &&
+      /입학\s*상담/.test(parts[0]) &&
+      /^[?？\s]*(?:그럼\s*)?몇\s*시(?:쯤)?(?:까지|에).{0,16}[?？]?$/.test(
+        parts[1],
+      )
+    ) &&
+    !(
+      planned &&
+      parts.length === 2 &&
+      /휴강|휴원|쉬|성탄절|크리스마스|수능날/.test(parts[0]) &&
+      /보강/.test(parts[1]) &&
+      !/\d{1,2}월\s*\d{1,2}일|언제부터|환불/.test(parts[1])
+    ) &&
+    // A parking fee follow-up inherits the purpose of the visit in the first clause.
+    !(
+      planned &&
+      frame.topics.some(({ id }) => id === 'parking') &&
+      parsedParts.every(
+        (part) =>
+          !part.hasAnalysisTerms &&
+          part.topics.every(({ id }) => id === 'parking'),
+      )
+    ) &&
     distinctInlineTopics &&
     partFrames.every(selfContained);
   const request = (

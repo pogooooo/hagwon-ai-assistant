@@ -34,6 +34,7 @@ export interface ParseWarning {
     | 'pii_masked'
     | 'table_merged_across_pages'
     | 'two_column_layout'
+    | 'multi_column_layout'
     | 'rotated_page'
     | 'decoded_as_euc_kr'
     | 'truncated';
@@ -100,12 +101,16 @@ export interface PositionedText {
   eol?: boolean;
   /** 이 항목 앞에 공백이 있었음(PDF 의 공백 항목) */
   spaceBefore?: boolean;
+  /** OCR provider detected a separate text region at this position. */
+  startsSegment?: boolean;
   confidence?: number;
 }
 
 export interface OcrWord {
   text: string;
   confidence: number;
+  /** Set only for OCR providers that supply detected region boundaries. */
+  startsSegment?: boolean;
   x0: number;
   y0: number;
   x1: number;

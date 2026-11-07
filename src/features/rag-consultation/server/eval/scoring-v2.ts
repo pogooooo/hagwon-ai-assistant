@@ -3,6 +3,7 @@ import type {
   RagAnswerStatus,
   RagCitation,
 } from '../../contract.ts';
+import type { CitationWitness } from '../answer/context.ts';
 import { compactText } from '../text/normalize.ts';
 
 /** One evidence set is conjunctive. Sets within a slot are alternatives. */
@@ -33,13 +34,14 @@ export interface GoldV2 {
 export interface ObservationV2 {
   answer: RagAnswer;
   citationLocations?: readonly RagCitation[];
+  citationWitnesses?: readonly CitationWitness[];
   retrievedChunkIds: readonly string[];
   retrievedSourceIds: readonly string[];
   generationCalls: number;
   violations: readonly string[];
 }
 
-function hasTerms(text: string, terms: readonly string[]): boolean {
+export function hasTerms(text: string, terms: readonly string[]): boolean {
   const haystack = compactText(text);
   return terms.every((term) => {
     const needle = compactText(term);
@@ -63,7 +65,10 @@ function hasTerms(text: string, terms: readonly string[]): boolean {
   });
 }
 
-function matchesCitation(citation: RagCitation, ref: EvidenceRef): boolean {
+export function matchesCitation(
+  citation: Pick<RagCitation, 'sourceId' | 'location'>,
+  ref: EvidenceRef,
+): boolean {
   if (citation.sourceId !== ref.sourceId) return false;
   if (!ref.location && !ref.columns?.length) return true;
   return (citation.location ?? '').split(' / ').some((part) => {

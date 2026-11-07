@@ -21,6 +21,7 @@ import {
   createAcademyCatalogPort,
   readAcademiesDataset,
   toAcademyAccessScope,
+  toAcademyDocumentInput,
   type AcademiesDataset,
   type AcademyCase,
   type BuildStoreOptions,
@@ -35,10 +36,11 @@ import {
   GuardedGenerationProvider,
   MockGenerationProvider,
 } from '../generation/providers.ts';
-import type { CatalogPort } from '../ports.ts';
+import type { CatalogPort, GenerationPort } from '../ports.ts';
 import type { ObservationV2 } from './scoring-v2.ts';
 import { mentionsName } from '../query/parse-query.ts';
 import type { ChunkRanker } from '../retrieval/rankers.ts';
+import { canReadRecord } from '../retrieval/access-filter.ts';
 import {
   createRagConsultationService,
   type RagConsultationDeps,
@@ -123,6 +125,17 @@ interface ParaphraseItem {
     must_include: string[];
     must_not_include?: string[];
   };
+}
+
+export function loadHoldoutSuite(root: string): Suite {
+  const name = 'holdout';
+  const dataset = readAcademiesDataset(root);
+  const cases = dataset.cases.map((entry) => fromAcademyCase(name, entry));
+  if (!cases.length || cases.some((entry) => entry.split !== 'holdout'))
+    throw new Error('Holdout requires nonempty case files with split=holdout');
+  if (new Set(cases.map(({ id }) => id)).size !== cases.length)
+    throw new Error('Holdout case IDs must be unique across academies');
+  return { name, dataset, cases };
 }
 
 export function loadSuite(name: string): Suite {
@@ -240,6 +253,9 @@ export interface CaseResult {
   intent: string;
   internalErrors: string[];
   generationCalls: number;
+  liveRequests?: number;
+  generationPolicyBlocked?: boolean;
+  generationMode?: 'gemini' | 'gemini-synthetic' | 'simulated_failure';
   latencyMs: number;
   answer: string;
 }
@@ -253,7 +269,7 @@ function generationFor(apiState: EvalCase['apiState'], now: number) {
   if (apiState === '5xx') guarded.block('unavailable', now + 60_000);
   if (apiState === 'quota_exhausted')
     guarded.block('quota_exhausted', now + 86_400_000);
-  return { mock, provider: guarded };
+  return guarded;
 }
 
 export interface PreparedSuite {
@@ -287,8 +303,9 @@ export async function runCase(
     refineFrame?: NonNullable<
       Parameters<typeof createRagConsultationService>[1]
     >['refineFrame'];
-    observe: (observation: ObservationV2) => void;
-    generation?: import('../ports.ts').GenerationPort;
+    observe?: (observation: ObservationV2) => void;
+    captureWitnesses?: boolean;
+    generation?: GenerationPort;
   },
 ): Promise<CaseResult> {
   const { dataset } = prepared.suite;
@@ -302,14 +319,16 @@ export async function runCase(
   let touched: string[];
   let intent = variant.kind;
   let internalErrors: string[] = [];
-  let generationCalls = 0;
-  let generationInputs: string[] = [];
+  let generationPolicyBlocked: boolean | undefined;
+  const generationInputs: string[] = [];
+  const generationSources = new Set<string>();
   let latencyMs: number;
   let observed:
     | Pick<
         ObservationV2,
         | 'answer'
         | 'citationLocations'
+        | 'citationWitnesses'
         | 'retrievedChunkIds'
         | 'retrievedSourceIds'
       >
@@ -333,19 +352,33 @@ export async function runCase(
     cited = abstain ? [] : [results[0].chunk.sourceId];
     touched = results.map((r) => r.chunk.sourceId);
   } else {
-    const { mock, provider } = generationFor(c.apiState, now);
+    const provider =
+      (c.apiState === 'ok' ? diagnostics?.generation : undefined) ??
+      generationFor(c.apiState, now);
     const conversations = new InMemoryConversationStore();
     if (Object.keys(c.session).length > 0) {
       const state = toConversationState(c.session, toKstDate(now).year);
       if (state) await conversations.save(access.actorId, c.id, state);
     }
     let citationLocations: ObservationV2['citationLocations'];
+    let citationWitnesses: ObservationV2['citationWitnesses'];
     const service = createRagConsultationService(
       {
         facts: prepared.store,
         documents: prepared.store,
         catalog: prepared.catalog,
-        generation: diagnostics?.generation ?? provider,
+        generation: {
+          providerId: provider.providerId,
+          isExternal: provider.isExternal,
+          personalDataApproved: provider.personalDataApproved,
+          availability: (at) => provider.availability(at),
+          generateGroundedAnswer(input, options) {
+            generationInputs.push(JSON.stringify(input));
+            for (const { sourceId } of [...input.facts, ...input.sources])
+              generationSources.add(sourceId);
+            return provider.generateGroundedAnswer(input, options);
+          },
+        },
         handoff: new InMemoryHandoffStore(),
         conversations,
         clock: new FixedClock(now),
@@ -357,12 +390,18 @@ export async function runCase(
         observeLocations: (citations) => {
           citationLocations = citations;
         },
+        observeWitnesses: diagnostics.captureWitnesses
+          ? (witnesses) => {
+              citationWitnesses = witnesses;
+            }
+          : undefined,
       },
     );
     for (const turn of c.history) {
       await service.query({ access, question: turn, conversationId: c.id });
     }
     citationLocations = undefined;
+    citationWitnesses = undefined;
     const started = performance.now();
     const output = await service.query({
       access,
@@ -383,11 +422,13 @@ export async function runCase(
       ...output.trace.retrievedChunkIds.map(sourceOfChunk),
       ...output.trace.retrievedFactIds.map(factSource),
       ...output.trace.generationInputSourceIds,
+      ...generationSources,
       ...cited,
     ];
     observed = {
       answer: output.answer,
       citationLocations,
+      citationWitnesses,
       retrievedChunkIds: output.trace.retrievedChunkIds,
       retrievedSourceIds: [
         ...output.trace.retrievedChunkIds.map(sourceOfChunk),
@@ -396,11 +437,12 @@ export async function runCase(
     };
     intent = output.trace.intent as typeof intent;
     internalErrors = output.trace.internalErrors;
-    generationCalls = diagnostics?.generation
-      ? output.trace.generationCalls
-      : mock.calls.length;
-    generationInputs = mock.calls.map((call) => JSON.stringify(call));
+    if (diagnostics?.generation && c.apiState === 'ok')
+      generationPolicyBlocked =
+        output.answer.handoff?.reasonCode ===
+        'PERSONAL_DATA_TRANSFER_NOT_APPROVED';
   }
+  const generationCalls = generationInputs.length;
 
   // 안전 게이트
   const violations: string[] = [];
@@ -416,15 +458,30 @@ export async function runCase(
       violations.push(`unknown_source:${sourceId}`);
       continue;
     }
-    if (!document.file.startsWith(`${access.academyId}/`))
+    const { academyId, visibility, studentId, classId } =
+      toAcademyDocumentInput(document);
+    if (academyId !== access.academyId)
       violations.push(`cross_academy:${sourceId}`);
     if (document.meta.status !== 'approved_active')
       violations.push(`draft:${sourceId}`);
     if (
-      document.meta.student_id &&
-      !access.allowedStudentIds.includes(document.meta.student_id)
-    )
-      violations.push(`unauthorized_student_doc:${sourceId}`);
+      academyId === access.academyId &&
+      !canReadRecord(
+        access,
+        {
+          academyId,
+          visibility,
+          studentId: studentId ?? null,
+          classId: classId ?? null,
+        },
+        access.allowedStudentIds,
+      )
+    ) {
+      const violation = studentId
+        ? 'unauthorized_student_doc'
+        : 'unauthorized_document';
+      violations.push(violation + ':' + sourceId);
+    }
   }
   const normalized = normalizeText(answer);
   for (const student of dataset.students) {
@@ -443,7 +500,7 @@ export async function runCase(
   }
 
   if (observed)
-    diagnostics?.observe({ ...observed, generationCalls, violations });
+    diagnostics?.observe?.({ ...observed, generationCalls, violations });
 
   // 채점
   const e = c.expected;
@@ -539,6 +596,9 @@ export async function runCase(
     intent,
     internalErrors,
     generationCalls,
+    ...(generationPolicyBlocked !== undefined
+      ? { generationPolicyBlocked }
+      : {}),
     latencyMs,
     answer,
   };
@@ -632,6 +692,9 @@ export function summarize(results: CaseResult[]) {
 }
 
 export function toCsv(results: CaseResult[]): string {
+  const live = results.some(
+    ({ generationMode }) => generationMode !== undefined,
+  );
   const header = [
     'suite',
     'id',
@@ -648,6 +711,9 @@ export function toCsv(results: CaseResult[]): string {
     'generation_ok',
     'violations',
     'generation_calls',
+    ...(live
+      ? ['generation_mode', 'live_requests', 'generation_policy_blocked']
+      : []),
     'latency_ms',
     'cited',
     'answer',
@@ -676,6 +742,9 @@ export function toCsv(results: CaseResult[]): string {
           r.checks.generation,
           r.violations.join(' '),
           r.generationCalls,
+          ...(live
+            ? [r.generationMode, r.liveRequests, r.generationPolicyBlocked]
+            : []),
           Math.round(r.latencyMs * 10) / 10,
           r.cited.join(' '),
           r.answer.replace(/\s+/g, ' ').slice(0, 300),

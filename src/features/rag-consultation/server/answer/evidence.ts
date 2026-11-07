@@ -1,4 +1,4 @@
-import { supportsExcerpt } from './verify.ts';
+import { supportsExcerpt, uncertainOcrNumbers } from './verify.ts';
 /**
  * 검색 기반 질문 해석과 근거 답변(계층적 라우팅의 2단계).
  *
@@ -18,6 +18,7 @@ import { compactText, normalizeText } from '../text/normalize.ts';
 import type { FactType, RagChunk } from '../types.ts';
 import {
   abstain,
+  abstainForUncertainOcr,
   recordChunks,
   type AnswerContext,
   type AnswerDraft,
@@ -508,7 +509,7 @@ export async function answerFromDocuments(
     const paragraphs = chunks.filter(
       (chunk) => chunk.location.kind !== 'table_row',
     );
-    const lines = [
+    const candidates = [
       ...renderParagraphs(paragraphs, words, [], keepText),
       ...selectTableRows(
         tables,
@@ -525,11 +526,24 @@ export async function answerFromDocuments(
           (ctx.engine !== 'planned' || supportsExcerpt(excerpt)),
       )
       .slice(0, 8);
-    if (lines.length === 0) continue;
+    const lines = candidates.filter(
+      ({ chunk, line }) => !uncertainOcrNumbers(chunk, line).length,
+    );
     const text = lines
       .map(({ line }) => line.replace(/\*\*|__/g, ''))
       .join('\n');
-    if (!satisfiesAnswerTypes(text, types)) continue;
+    if (!lines.length || !satisfiesAnswerTypes(text, types)) {
+      // Lower-ranked groups can describe a different event or policy.
+      if (
+        lines.length < candidates.length &&
+        satisfiesAnswerTypes(
+          candidates.map(({ line }) => line).join('\n'),
+          types,
+        )
+      )
+        return abstainForUncertainOcr();
+      continue;
+    }
     const best = lines[0].chunk;
     return {
       status: 'answered',

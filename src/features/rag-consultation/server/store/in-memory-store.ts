@@ -36,7 +36,7 @@ import {
   restrictToAllowedStudents,
 } from '../retrieval/access-filter.ts';
 import { Bm25Ranker, type ChunkRanker } from '../retrieval/rankers.ts';
-import { normalizeText } from '../text/normalize.ts';
+import { compactText } from '../text/normalize.ts';
 import { isValidAt, parseInstant, parseOptionalInstant } from '../text/time.ts';
 import type {
   ApprovedFact,
@@ -50,6 +50,19 @@ import type {
 
 const keyOf = (documentId: string, revision: number) =>
   `${documentId}#${revision}`;
+
+function sameSearchScope(a: StoredDocumentRevision, b: StoredDocumentRevision) {
+  return (
+    a.academyId === b.academyId &&
+    a.documentType === b.documentType &&
+    a.visibility === b.visibility &&
+    a.studentId === b.studentId &&
+    a.classId === b.classId &&
+    a.validFrom === b.validFrom &&
+    a.validTo === b.validTo &&
+    JSON.stringify(a.extraction?.pages) === JSON.stringify(b.extraction?.pages)
+  );
+}
 
 export interface InMemoryRagStoreOptions {
   logger?: RagLogger;
@@ -211,15 +224,15 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       ...(document.extraction ? { extraction: document.extraction } : {}),
     };
     this.revisions.set(key, stored);
-    // 같은 학원에 본문이 같은 다른 문서가 이미 있으면 중복 업로드로 표시한다(원본이 살아 있는 동안 검색 제외).
+    // Preserve paragraph and table boundaries when comparing the contents of two sources.
     const textHash = createHash('sha256')
-      .update(normalizeText(document.text).replace(/\s+/g, ''))
+      .update(document.text.replace(/\r\n?/g, '\n').trim())
       .digest('hex');
     this.textHashes.set(key, textHash);
     const original = [...this.revisions.values()].find(
       (other) =>
         other !== stored &&
-        other.academyId === stored.academyId &&
+        sameSearchScope(other, stored) &&
         other.documentId !== stored.documentId &&
         (other.status === 'approved_active' ||
           other.status === 'indexed_verified') &&
@@ -267,28 +280,41 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
 
     this.factsByRevision.set(
       key,
-      facts.map((fact) => ({
-        factId: fact.factId,
-        sourceId: fact.sourceId,
-        documentId: fact.documentId,
-        revision: fact.revision,
-        academyId: fact.academyId,
-        subjectType: fact.subjectType,
-        subjectId: fact.subjectId,
-        factType: fact.factType,
-        value: fact.value,
-        period: fact.period,
-        validFrom: parseInstant(fact.validFrom),
-        validTo: parseOptionalInstant(fact.validTo),
-        approvalStatus: fact.approvalStatus,
-        assignmentIds:
-          fact.assignmentIds ??
-          fact.assignments?.map((a) => a.assignmentId) ??
-          [],
-        assignments: fact.assignments ?? [],
-        evidence: fact.evidence ?? null,
-        classId: stored.classId,
-      })),
+      facts.flatMap((fact) => {
+        const validFrom = Math.max(
+          stored.validFrom,
+          parseInstant(fact.validFrom),
+        );
+        const validTo = Math.min(
+          stored.validTo ?? Infinity,
+          parseOptionalInstant(fact.validTo) ?? Infinity,
+        );
+        if (validTo <= validFrom) return [];
+        return [
+          {
+            factId: fact.factId,
+            sourceId: fact.sourceId,
+            documentId: fact.documentId,
+            revision: fact.revision,
+            academyId: fact.academyId,
+            subjectType: fact.subjectType,
+            subjectId: fact.subjectId,
+            factType: fact.factType,
+            value: fact.value,
+            period: fact.period,
+            validFrom,
+            validTo: Number.isFinite(validTo) ? validTo : null,
+            approvalStatus: fact.approvalStatus,
+            assignmentIds:
+              fact.assignmentIds ??
+              fact.assignments?.map((a) => a.assignmentId) ??
+              [],
+            assignments: fact.assignments ?? [],
+            evidence: fact.evidence ?? null,
+            classId: stored.classId,
+          },
+        ];
+      }),
     );
     stored.status = 'indexed_verified';
 
@@ -461,23 +487,32 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   async searchApprovedChunks(query: ChunkSearchQuery): Promise<ScoredChunk[]> {
     const targets = restrictToAllowedStudents(query.access, query.studentIds);
     const candidates: RagChunk[] = [];
-    const active = this.activeRevisions(query.asOf);
-    const activeDocuments = new Set(active.map((stored) => stored.documentId));
-    for (const stored of active) {
-      if (!canReadRecord(query.access, stored, targets)) continue;
+    const eligible = this.activeRevisions(query.asOf).filter((stored) => {
+      if (!canReadRecord(query.access, stored, targets)) return false;
       const upcoming =
         query.upcomingUntil !== undefined &&
         stored.visibility === 'academy_public' &&
         stored.studentId === null &&
         stored.validFrom > query.asOf &&
         stored.validFrom <= query.upcomingUntil;
-      if (!upcoming && !isValidAt(stored.validFrom, stored.validTo, query.asOf))
-        continue;
-      if (stored.duplicateOf && activeDocuments.has(stored.duplicateOf))
-        continue;
+      return (
+        (upcoming || isValidAt(stored.validFrom, stored.validTo, query.asOf)) &&
+        (!query.documentTypes ||
+          query.documentTypes.includes(stored.documentType))
+      );
+    });
+    const eligibleById = new Map(
+      eligible.map((stored) => [stored.documentId, stored]),
+    );
+    for (const stored of eligible) {
+      const original = stored.duplicateOf
+        ? eligibleById.get(stored.duplicateOf)
+        : undefined;
       if (
-        query.documentTypes &&
-        !query.documentTypes.includes(stored.documentType)
+        original &&
+        sameSearchScope(original, stored) &&
+        this.textHashes.get(keyOf(original.documentId, original.revision)) ===
+          this.textHashes.get(keyOf(stored.documentId, stored.revision))
       )
         continue;
       for (const chunkId of stored.chunkIds) {
@@ -531,6 +566,17 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         const columns = moneyColumns(located, input.locate.value.amount);
         if (columns.length === 1)
           location += ' · 열 ' + located.location.header?.[columns[0]];
+      }
+      if (
+        located &&
+        input.locate?.value.kind === 'enrollment' &&
+        input.locateClassNames?.length
+      ) {
+        const columns = enrollmentColumns(located);
+        if (columns)
+          location +=
+            ' · 열 ' +
+            columns.map((index) => located.location.header?.[index]).join(', ');
       }
       return {
         sourceId: stored.sourceId,
@@ -617,6 +663,36 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       // Same amount in more than one row does not locate the class or period.
       return rows.length === 1 ? rows[0] : null;
     }
+    if (citation?.classNames.length && fact.value.kind === 'enrollment') {
+      const names = citation.classNames.map(compactText);
+      const text = compactText(fact.value.text);
+      const rows = chunks.filter((chunk) => {
+        const columns = enrollmentColumns(chunk);
+        if (!columns || !text) return false;
+        const [key, status] = columns;
+        const cells = chunk.location.cells ?? [];
+        return (
+          names.includes(compactText(cells[key] ?? '')) &&
+          compactText(cells[status] ?? '') === text
+        );
+      });
+      return rows.length === 1 ? rows[0] : null;
+    }
+    if (citation && fact.value.kind === 'weak_area') {
+      const diagnosis = compactText(fact.value.text);
+      const unit = compactText(fact.value.unit);
+      const locations =
+        unit && diagnosis
+          ? chunks.filter(
+              (chunk) =>
+                !chunk.suspicious &&
+                !chunk.extraction?.needsReview &&
+                !chunk.extraction?.uncertainTokens.length &&
+                matchesWeakArea(chunk, unit, diagnosis),
+            )
+          : [];
+      return locations.length === 1 ? locations[0] : null;
+    }
     const needles = factNeedles(fact);
     if (fact.factType === 'teacher' && citation?.classNames.length) {
       const names = citation.classNames.map((name) =>
@@ -655,6 +731,79 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       revision: document.revision,
     });
   }
+}
+
+const WEAK_UNIT_LABEL = /^(?:(?:판정|진단|취약)?(?:단원|영역)|단원명|영역명)$/;
+const WEAK_NOTE_LABEL =
+  /^(?:판정내용|분석내용|진단내용|진단|관찰내용|관찰|오답내용|취약점|내용)$/;
+
+/** Keep the diagnosed unit and the observation in the same source row or entry. */
+function matchesWeakArea(
+  chunk: RagChunk,
+  unit: string,
+  diagnosis: string,
+): boolean {
+  const { header, cells } = chunk.location;
+  if (chunk.location.kind === 'table_row' && header && cells) {
+    const labels = header.map(compactText);
+    const unitColumn = labels.findIndex((label) => WEAK_UNIT_LABEL.test(label));
+    const noteColumn = labels.findIndex((label) => WEAK_NOTE_LABEL.test(label));
+    return (
+      unitColumn >= 0 &&
+      noteColumn >= 0 &&
+      compactText(cells[unitColumn] ?? '') === unit &&
+      compactText(cells[noteColumn] ?? '').startsWith(diagnosis)
+    );
+  }
+
+  let labeledUnit = '';
+  for (const line of chunk.text.split('\n')) {
+    const text = compactText(line.replace(/^\s*[-*•]\s+|\*\*|__/g, ''));
+    const key = /^([^:：]+)[:：](.*)$/.exec(text);
+    if (!key) continue;
+    const [, label, value] = key;
+    if (label === unit && value.startsWith(diagnosis)) return true;
+    if (WEAK_UNIT_LABEL.test(label)) {
+      if (
+        [':', '：', '—', '–', '-'].some((separator) =>
+          value.startsWith(unit + separator + diagnosis),
+        )
+      )
+        return true;
+      const embedded =
+        /^(.+?)(판정내용|분석내용|진단내용|관찰내용)[:：](.+)$/.exec(value);
+      if (embedded && embedded[1] === unit && embedded[3].startsWith(diagnosis))
+        return true;
+      labeledUnit = value;
+    } else if (
+      WEAK_NOTE_LABEL.test(label) &&
+      labeledUnit === unit &&
+      value.startsWith(diagnosis)
+    ) {
+      return true;
+    } else {
+      labeledUnit = '';
+    }
+  }
+  return false;
+}
+
+function enrollmentColumns(chunk: RagChunk): [number, number] | undefined {
+  if (
+    chunk.location.kind !== 'table_row' ||
+    chunk.suspicious ||
+    chunk.extraction?.needsReview ||
+    chunk.extraction?.uncertainTokens.length
+  )
+    return;
+  const header = (chunk.location.header ?? []).map(compactText);
+  const key = header.findIndex((label) =>
+    /^(?:반|반명|반이름|강좌|강좌명|과정|과정명)$/.test(label),
+  );
+  const status = header.findIndex((label) =>
+    /^(?:모집상태|모집현황|등록상태|등록현황|상태)$/.test(label),
+  );
+  return key >= 0 && status >= 0 ? [key, status] : undefined;
 }
 
 function moneyColumns(chunk: RagChunk, amount: number): number[] {

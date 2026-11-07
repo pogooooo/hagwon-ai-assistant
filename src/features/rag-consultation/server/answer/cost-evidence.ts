@@ -1,3 +1,4 @@
+import { isAssistantDirective } from '../ingest/validation.ts';
 import { canReadRecord } from '../retrieval/access-filter.ts';
 import { compactText, splitSentences } from '../text/normalize.ts';
 import {
@@ -20,13 +21,22 @@ import {
 import { formatKrw } from './format.ts';
 import { explicitClassIds } from './info.ts';
 import { supportsExcerpt } from './verify.ts';
+import { answerSessionPrice } from './session-price.ts';
+import { answerTuitionPolicy } from './tuition-policy.ts';
+import { isCleanPublicEvidence, readEvidenceRow } from './public-evidence.ts';
+import { resolveQualifiedClasses } from './class-targets.ts';
 
-import { requiredCostSlots, type CostSlot } from '../query/plan.ts';
+import {
+  prepaidTuitionMonth,
+  requiredCostSlots,
+  type CostSlot,
+} from '../query/plan.ts';
 const COST_KEYS = {
   fee: /^(?:(?:월|매월|1개월|\d+주)\s*)?(?:수강료|교습비|학원비)(?:\s*\((?:월|\d+주|\d+개월)\))?$/,
   material: /^(?:(?:실험|실습)\s*)?(?:교재비|재료비)(?:\s*\((?:월|학기)\))?$/,
   textbook: /^교재비(?:\s*\((?:월|학기)\))?$/,
   supplies: /^(?:(?:실험|실습)\s*)?재료비(?:\s*\((?:월|학기)\))?$/,
+  kit: /^(?:(?:교구|실습|실험|재료)\s*)?키트\s*(?:비용|비|구입비|구매비|가격)$/,
 };
 const AMOUNT =
   /^(?:(?:월|매월|학기당|\d+\s*(?:주|개월)(?:당|\s*기준)?)\s*)?(\d{1,3}(?:,\d{3})+|\d+)\s*원(?:\s*\((?:월|\d+\s*(?:주|개월))(?:당|\s*기준)?\))?$/;
@@ -37,22 +47,26 @@ function billingPeriods(text: string): string[] {
     (match) => (match[1] ? `${Number(match[1])}${match[2]}` : '1개월'),
   );
 }
-interface CostEvidence extends EvidenceExcerpt {
+type MaterialField = CostSlot | 'kit';
+
+interface CostEvidence<
+  Field extends MaterialField = CostSlot,
+> extends EvidenceExcerpt {
   classId: string;
-  field: CostSlot;
+  field: Field;
   amount: number;
   value: string;
   label: string;
   tableColumns: number[];
 }
 
-function selectCosts(
+function selectCosts<Field extends MaterialField>(
   ctx: AnswerContext,
   chunk: RagChunk,
   classIds: readonly string[],
-  fields: readonly CostSlot[],
+  fields: readonly Field[],
   at: number,
-): CostEvidence[] {
+): CostEvidence<Field>[] {
   const { cells, header, kind } = chunk.location;
   if (
     kind !== 'table_row' ||
@@ -313,6 +327,148 @@ async function answerPassPrice(
     usedFacts: [],
   };
 }
+/** An enrolled learner's equipment charge needs a row with an explicit class condition. */
+export async function answerClassRentalPrice(
+  ctx: AnswerContext,
+): Promise<AnswerDraft | undefined> {
+  const { frame } = ctx;
+  const equipment = /(노트북|태블릿|기기)\s*대여료/.exec(frame.normalized)?.[1];
+  if (
+    !equipment ||
+    frame.matchedStudentIds.length !== 1 ||
+    ctx.studentClassIds.length !== 1 ||
+    frame.unknownPrograms.length ||
+    frame.unboundProgram ||
+    !/내야|얼마|무료|있어요|있나요|받나요|내나요/.test(frame.normalized) ||
+    /환불|신청|반납|분실|파손|포함|할인|개정|예전|내년|수강료|교재비|재료비|차량비|방학|수업\s*시간|시간표|시간(?:이랑|과)|\d\s*기/.test(
+      frame.normalized,
+    ) ||
+    frame.explicitDates.length ||
+    frame.months.length ||
+    frame.relativePeriod
+  )
+    return;
+  const [classId] = ctx.studentClassIds;
+  if (
+    frame.negatedClassIds.includes(classId) ||
+    (frame.classIds.length > 0 && !frame.classIds.includes(classId))
+  )
+    return;
+  const klass = ctx.catalog.classes.find((entry) => entry.classId === classId);
+  if (!klass) return;
+  const level = /^([a-z]+\d+)(?!\d)/i.exec(klass.name)?.[1]?.toLowerCase();
+  const uniqueLevel =
+    level &&
+    ctx.catalog.classes.filter(
+      ({ name }) =>
+        /^([a-z]+\d+)(?!\d)/i.exec(name)?.[1]?.toLowerCase() === level,
+    ).length === 1
+      ? level
+      : undefined;
+  const found = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    documentTypes: ['fee'],
+    query: [klass.name, equipment, '대여료 금액 대상 안내 없음'].join(' '),
+    limit: 32,
+  });
+  recordChunks(
+    ctx.trace,
+    found.map(({ chunk }) => chunk),
+  );
+  const hits = found.flatMap(({ chunk }) => {
+    const { kind, header, cells } = chunk.location;
+    if (
+      kind !== 'table_row' ||
+      !header ||
+      !cells ||
+      header.length !== cells.length ||
+      !canReadRecord(ctx.access, chunk, []) ||
+      chunk.suspicious ||
+      isAssistantDirective(chunk.text) ||
+      chunk.extraction?.needsReview ||
+      chunk.extraction?.uncertainTokens.length ||
+      (chunk.classId && chunk.classId !== classId)
+    )
+      return [];
+    const fields = header.map(compactText);
+    const key = fields.findIndex((label) =>
+      /^(?:항목|서비스|구분)$/.test(label),
+    );
+    const price = fields.findIndex((label) =>
+      /^(?:금액|대여료|요금|비용)$/.test(label),
+    );
+    const note = fields.findIndex((label) =>
+      /^(?:안내|대상|대상·비고|조건|비고)$/.test(label),
+    );
+    if (
+      key < 0 ||
+      price < 0 ||
+      note < 0 ||
+      ![cells[key], cells[note]].some((cell) =>
+        compactText(cell).includes(equipment + '대여료'),
+      )
+    )
+      return [];
+    const condition = cells[note].split(/[.!?]/)[0];
+    const scope = condition.split(/(?:반|과정)(?:은|는|이|가)\s+/)[0];
+    const levels = [
+      ...scope.matchAll(/(?<![a-z0-9])([a-z]+\d+)(?![a-z0-9])/gi),
+    ].map(([, value]) => value.toLowerCase());
+    const matches =
+      chunk.classId === classId ||
+      compactText(condition).includes(compactText(klass.name)) ||
+      (uniqueLevel &&
+        levels.includes(uniqueLevel) &&
+        /반(?:은|는|이|가)|과정(?:은|는|이|가)/.test(condition) &&
+        !/이상|이하|미만|초과|만\s*제외|일부|별도/.test(scope));
+    if (
+      !matches ||
+      /제외|아닌|해당하지\s*않|미정|해당\s*없음|개별\s*문의/.test(condition)
+    )
+      return [];
+    const value = cells[price].trim();
+    if (
+      !/^(?:없음|무료|(?:(?:\d+\s*(?:주|개월)|월)\s*)?\d[\d,]*\s*원)$/.test(
+        value,
+      )
+    )
+      return [];
+    const tableColumns = [key, price, note];
+    const line = tableColumns
+      .map((i) => header[i] + ': ' + cells[i])
+      .join(' / ');
+    const excerpt = { chunk, line, tableColumns };
+    return supportsExcerpt(excerpt) ? [{ excerpt, value }] : [];
+  });
+  if (!hits.length)
+    return abstain(
+      '등록 반에 적용되는 기기 대여료를 승인 자료에서 확인할 수 없습니다.',
+      'INSUFFICIENT_EVIDENCE',
+    );
+  if (new Set(hits.map(({ excerpt }) => compactText(excerpt.line))).size > 1)
+    return abstain(
+      '같은 반의 승인 대여료 기준이 서로 다릅니다.',
+      'CONFLICTING_EVIDENCE',
+    );
+  const { excerpt } = hits[0];
+  ctx.trace.intent = 'class_rental_price';
+  return {
+    status: 'answered',
+    text: excerpt.line,
+    excerpts: [excerpt],
+    usedFacts: [],
+    citations: [
+      {
+        kind: 'chunk',
+        chunk: excerpt.chunk,
+        tableColumns: excerpt.tableColumns,
+      },
+    ],
+  };
+}
+
 /** Bind ancillary charges to the named service and, for transport, the trip type. */
 async function answerAncillaryPrice(
   ctx: AnswerContext,
@@ -439,6 +595,17 @@ async function answerAncillaryPrice(
     })),
     excerpts: selected,
     usedFacts: [],
+    conversationUpdate:
+      !transport && rental
+        ? {
+            previousFrame: {
+              domain: 'info',
+              units: [],
+              periods: [],
+              loanItem: rental,
+            },
+          }
+        : undefined,
   };
 }
 /** Payment instruments, installment availability, and deadlines are independent claims. */
@@ -448,9 +615,14 @@ async function answerPaymentTerms(
   const { normalized, explicitDates, months, relativePeriod } = ctx.frame;
   const installment =
     /할부/.test(normalized) && /수강료|교습비|카드|납부|결제/.test(normalized);
+  const paymentQuestion =
+    /납부|결제/.test(normalized) ||
+    (/수강료|교습비|학원비/.test(normalized) &&
+      /내야|내면|내는|낼|내나요/.test(normalized));
   const deadline =
-    /납부|결제/.test(normalized) &&
-    /언제\s*까지|기한|마감|며칠\s*까지/.test(normalized);
+    paymentQuestion &&
+    /언제\s*까지|기한|마감|며칠\s*까지|몇\s*일\s*까지/.test(normalized) &&
+    !/신규|첫\s*수업|교재비|재료비|차량비|특강비/.test(normalized);
   if (
     (!installment && !deadline) ||
     /\d+\s*기(?!간|준)|할인|환불|연체|내년|작년/.test(normalized) ||
@@ -500,26 +672,58 @@ async function answerPaymentTerms(
     else missing.push('할부 가능 여부');
   }
   if (deadline) {
-    const supported = hits.flatMap(({ chunk }) => {
+    const monthly = /^매월\s*(0?[1-9]|[12]\d|3[01])\s*일\s*까지/;
+    const supported = hits.flatMap<
+      EvidenceExcerpt & { day: number; condition?: string }
+    >(({ chunk }) => {
       if (
         chunk.classId !== null ||
-        chunk.location.kind !== 'paragraph' ||
-        chunk.suspicious ||
-        chunk.extraction?.needsReview ||
+        !isCleanPublicEvidence(chunk, ctx.asOf) ||
         !canReadRecord(ctx.access, chunk, [])
       )
         return [];
-      const line = /납부\s*기한\s*[:：]?\s*매월\s*\d{1,2}\s*일까지/.exec(
-        chunk.text,
-      )?.[0];
-      return line && supportsExcerpt({ chunk, line }) ? [{ chunk, line }] : [];
+      const row = readEvidenceRow(chunk);
+      if (row) {
+        const key = row.column(/^(?:항목|항목명|구분)$/);
+        const value = row.column(/^(?:내용|세부내용|안내|기준)$/);
+        if (compactText(row.cells[key] ?? '') !== '납부기한') return [];
+        const text = row.cells[value] ?? '';
+        const when = monthly.exec(text);
+        const excerpt = when && row.project(key, value);
+        return when && excerpt
+          ? [
+              {
+                ...excerpt,
+                day: Number(when[1]),
+                condition: compactText(text.slice(when[0].length)),
+              },
+            ]
+          : [];
+      }
+      if (chunk.location.kind !== 'paragraph') return [];
+      const label = /납부\s*기한\s*[:：]?\s*/.exec(chunk.text);
+      if (!label) return [];
+      const when = monthly.exec(
+        chunk.text.slice(label.index + label[0].length),
+      );
+      if (!when) return [];
+      const line = label[0] + when[0];
+      return supportsExcerpt({ chunk, line })
+        ? [{ chunk, line, day: Number(when[1]) }]
+        : [];
     });
-    if (new Set(supported.map(({ line }) => /\d+/.exec(line)?.[0])).size > 1)
+    if (
+      new Set(supported.map(({ day }) => day)).size > 1 ||
+      new Set(supported.map(({ condition }) => condition).filter(Boolean))
+        .size > 1
+    )
       return abstain(
         '승인 자료의 납부 기한이 서로 다릅니다.',
         'CONFLICTING_EVIDENCE',
       );
-    if (supported[0]) excerpts.push(supported[0]);
+    const preferred =
+      supported.find(({ condition }) => condition) ?? supported[0];
+    if (preferred) excerpts.push(preferred);
     else missing.push('납부 기한');
   }
   if (!excerpts.length)
@@ -539,7 +743,11 @@ async function answerPaymentTerms(
       ...excerpts.map(({ line }) => line),
       ...(missing.length ? ['확인되지 않은 항목: ' + missing.join(', ')] : []),
     ].join('\n'),
-    citations: excerpts.map(({ chunk }) => ({ kind: 'chunk', chunk })),
+    citations: excerpts.map(({ chunk, tableColumns }) => ({
+      kind: 'chunk',
+      chunk,
+      tableColumns,
+    })),
     excerpts,
     usedFacts: [],
   };
@@ -937,9 +1145,621 @@ async function answerCombinedTuitionExample(
   };
 }
 /** Returns undefined for requests whose semantics still use the legacy adapter. */
+export async function answerNumberedFeeFollowUp(
+  ctx: AnswerContext,
+): Promise<AnswerDraft | undefined> {
+  const { frame } = ctx;
+  const previous = ctx.state?.previousFrame;
+  const target = /^(?:그럼|그러면)\s*([1-9]\d*)\s*반/.exec(frame.normalized);
+  if (
+    !target ||
+    previous?.domain !== 'info' ||
+    previous.classIds?.length !== 1 ||
+    previous.topicIds?.length !== 1 ||
+    previous.topicIds[0] !== 'fee' ||
+    !/더\s*싸|비싸|수강료|얼마|가격|차이/.test(frame.normalized) ||
+    frame.classIds.length ||
+    frame.matchedStudentIds.length ||
+    frame.unresolvedRelationWords.length ||
+    frame.explicitDates.length ||
+    frame.months.length ||
+    frame.relativeWeek ||
+    frame.relativePeriod ||
+    frame.relativeDay !== null ||
+    /교재비|할인|내년|작년|합계|환불/.test(frame.normalized)
+  )
+    return;
+  const previousClass = ctx.catalog.classes.find(
+    ({ classId }) => classId === previous.classIds?.[0],
+  );
+  const label = /^(.+?)(\d+)\s*반$/.exec(previousClass?.name ?? '');
+  if (
+    !previousClass ||
+    !label ||
+    !previousClass.grade ||
+    label[2] === target[1]
+  )
+    return;
+  const alternatives = ctx.catalog.classes.filter(
+    ({ name, grade }) =>
+      grade === previousClass.grade &&
+      compactText(name) === compactText(label[1] + target[1] + '반'),
+  );
+  if (alternatives.length !== 1) return;
+  const requested = alternatives[0];
+  const classIds = [requested.classId, previousClass.classId];
+  const hits = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    query: requested.name + ' ' + previousClass.name + ' 월 수강료',
+    documentTypes: ['fee'],
+    limit: 45,
+  });
+  recordChunks(
+    ctx.trace,
+    hits.map(({ chunk }) => chunk),
+  );
+  const options = hits.flatMap(({ chunk }) =>
+    isAssistantDirective(chunk.text)
+      ? []
+      : selectCosts(ctx, chunk, classIds, ['fee'], ctx.asOf).filter(
+          supportsExcerpt,
+        ),
+  );
+  const amounts = classIds.map((classId) =>
+    options.filter(
+      (option) =>
+        option.classId === classId &&
+        billingPeriods(option.label + ' ' + option.value).includes('1개월'),
+    ),
+  );
+  if (
+    amounts.some(
+      (values) =>
+        !values.length ||
+        new Set(values.map(({ amount }) => amount)).size !== 1,
+    )
+  )
+    return abstain(
+      '같은 청구 기준의 두 반 수강료를 승인 자료에서 확인할 수 없습니다.',
+      'INSUFFICIENT_EVIDENCE',
+    );
+  const [current, prior] = amounts.map(([choice]) => choice);
+  const comparison =
+    current.amount < prior.amount
+      ? '이전 반보다 낮습니다.'
+      : current.amount > prior.amount
+        ? '이전 반보다 높습니다.'
+        : '이전 반과 같습니다.';
+  ctx.frame = { ...frame, classIds };
+  ctx.trace.intent = 'numbered_fee_followup';
+  return {
+    status: 'answered',
+    text: [
+      requested.name + ' ' + current.label + ' ' + current.value,
+      previousClass.name + ' ' + prior.label + ' ' + prior.value,
+      '월 수강료를 비교하면 ' + comparison,
+    ].join('\n'),
+    citations: [current, prior].map(({ chunk, tableColumns }) => ({
+      kind: 'chunk',
+      chunk,
+      tableColumns,
+    })),
+    excerpts: [current, prior],
+    usedFacts: [],
+    conversationUpdate: {
+      previousFrame: {
+        domain: 'info',
+        classIds: [requested.classId],
+        topicIds: ['fee'],
+        units: [],
+        periods: [],
+      },
+    },
+  };
+}
+
+/** Equipment purchases and a future cohort's textbook price have separate cost slots. */
+async function answerScopedMaterialCost(
+  ctx: AnswerContext,
+): Promise<AnswerDraft | undefined> {
+  const { frame } = ctx;
+  if (
+    !/얼마|몇\s*원|금액|비용|가격/.test(frame.normalized) ||
+    /환불|할인|비교|합계|수강료|말고|제외/.test(frame.normalized)
+  )
+    return;
+  const kit =
+    /키트/.test(frame.normalized) &&
+    /별도|따로|구매|구입|사야|키트\s*(?:비용|비|가격)/.test(frame.normalized);
+  const promotion =
+    /교재비/.test(frame.normalized) &&
+    /올라가|진급|승급/.test(frame.normalized) &&
+    frame.months.length === 1 &&
+    !frame.explicitDates.length &&
+    !frame.relativePeriod;
+  if (!kit && !promotion) return;
+  const missing = kit
+    ? '해당 과정의 키트 구매 비용'
+    : '진급 시점에 적용되는 교재비';
+  const unavailable = () =>
+    abstain(
+      missing + '을 승인 자료에서 확인할 수 없습니다.',
+      'INSUFFICIENT_EVIDENCE',
+    );
+  const classIds = explicitClassIds(ctx);
+  if (
+    classIds.length !== 1 ||
+    frame.flags.compare ||
+    frame.negatedClassIds.length ||
+    (kit &&
+      (frame.explicitDates.length > 1 ||
+        frame.relativeWeek ||
+        frame.relativeDay !== null))
+  )
+    return unavailable();
+  if (promotion && frame.months[0] === toKstDate(ctx.asOf).month)
+    return unavailable();
+  const { at } = resolveEffectiveTime(
+    promotion ? { ...frame, futureCue: true } : frame,
+    ctx.asOf,
+  );
+  const effectiveFacts = promotion
+    ? await ctx.facts.queryApprovedFacts({
+        access: ctx.access,
+        studentIds: [],
+        asOf: ctx.asOf,
+        effectiveAt: at,
+        factTypes: ['material_fee'],
+      })
+    : [];
+  recordFacts(ctx.trace, effectiveFacts);
+  const scopedFacts = effectiveFacts.filter(
+    (fact) =>
+      fact.subjectType === 'class' &&
+      fact.subjectId === classIds[0] &&
+      fact.value.kind === 'money',
+  );
+  if (promotion && !scopedFacts.length) return unavailable();
+  const hits = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    upcomingUntil: at > ctx.asOf ? at : undefined,
+    query:
+      ctx.question +
+      ' ' +
+      className(ctx.catalog, classIds[0]) +
+      ' ' +
+      (kit ? '키트 구매비' : '교재비'),
+    documentTypes: kit
+      ? ['fee', 'curriculum', 'announcement', 'academy_info']
+      : ['fee'],
+    limit: 45,
+  });
+  recordChunks(
+    ctx.trace,
+    hits.map(({ chunk }) => chunk),
+  );
+  const asksPurchase =
+    kit && /따로|별도|사야|구매해야|구입해야/.test(frame.normalized);
+  const options = hits.flatMap(({ chunk }) =>
+    isAssistantDirective(chunk.text)
+      ? []
+      : selectCosts(
+          ctx,
+          chunk,
+          classIds,
+          [kit ? 'kit' : 'textbook'],
+          at,
+        ).filter(
+          (option) =>
+            supportsExcerpt(option) &&
+            (!promotion ||
+              scopedFacts.some(
+                (fact) =>
+                  fact.sourceId === chunk.sourceId &&
+                  fact.value.kind === 'money' &&
+                  fact.value.amount === option.amount,
+              )),
+        ),
+  );
+  if (!options.length) return unavailable();
+  if (
+    new Set(
+      options.map(
+        ({ amount, label, value }) =>
+          amount + '|' + billingPeriods(label + ' ' + value).join(','),
+      ),
+    ).size !== 1
+  )
+    return abstain(
+      '해당 과정과 시점의 승인 비용이 서로 다릅니다.',
+      'CONFLICTING_EVIDENCE',
+    );
+  const [selected] = options;
+  ctx.trace.intent = 'scoped_material_cost';
+  return {
+    status: asksPurchase ? 'partial' : 'answered',
+    reasonCode: asksPurchase ? 'PARTIAL_EVIDENCE' : undefined,
+    missingFields: asksPurchase ? ['별도 구매 필요 여부'] : undefined,
+    text: [
+      className(ctx.catalog, classIds[0]) +
+        ' ' +
+        selected.label +
+        ' ' +
+        selected.value,
+      ...(asksPurchase ? ['별도 구매 필요 여부는 확인되지 않습니다.'] : []),
+    ].join('\n'),
+    citations: [
+      {
+        kind: 'chunk',
+        chunk: selected.chunk,
+        tableColumns: selected.tableColumns,
+        effectiveAt: at,
+      },
+    ],
+    excerpts: [selected],
+    usedFacts: [],
+  };
+}
+
+/** Match an unconditional policy statement to the requested class and rate. */
+function publishedDiscountDecision(
+  chunk: RagChunk,
+  classId: string,
+  rate: number,
+  at: number,
+  owners: ReadonlyMap<string, ReadonlySet<string>>,
+) {
+  if (
+    chunk.location.kind !== 'paragraph' ||
+    (chunk.classId && chunk.classId !== classId) ||
+    !isCleanPublicEvidence(chunk, at) ||
+    /게시판|게시글|질문답변|문의모음|댓글|커뮤니티/.test(
+      compactText(chunk.title + ' ' + (chunk.location.section ?? '')),
+    )
+  )
+    return [];
+  return splitSentences(chunk.text).flatMap((line) => {
+    const text = compactText(line).replace(/^[-•]/, '');
+    const named = [...owners.keys()]
+      .filter((name) => text.startsWith(name))
+      .sort((a, b) => b.length - a.length)[0];
+    if (
+      named &&
+      (owners.get(named)?.size !== 1 || !owners.get(named)?.has(classId))
+    )
+      return [];
+    const scope =
+      named ?? /^(?:전과정|모든(?:반|과정)|학원전체)/.exec(text)?.[0];
+    if (!scope && chunk.classId !== classId) return [];
+    const clause = scope
+      ? text.slice(scope.length).replace(/^(?:에서는|에서|에|은|는|의)/, '')
+      : text;
+    const rule =
+      /^(?:정규)?(월)?(?:수강료|교습비|학원비)(?:의|에서|에|는|은|를)?(\d{1,3}(?:\.\d{1,2})?)%할인(?:은|을|이)?((?:별도)?조건없이)?(적용하지않습니다|시행하지않습니다|하지않습니다|미적용입니다|적용합니다|시행합니다|적용됩니다)[.!。]?$/.exec(
+        clause,
+      );
+    if (!rule || Number(rule[2]) !== rate) return [];
+    const applies = /^(?:적용합니다|시행합니다|적용됩니다)$/.test(rule[4]);
+    const definitive = applies ? Boolean(rule[3]) : !rule[3];
+    return [
+      {
+        chunk,
+        line,
+        monthly: Boolean(rule[1]),
+        applies: definitive ? applies : null,
+      },
+    ];
+  });
+}
+
+/** Verify a reported discount separately from the published base charge. */
+async function answerPublishedTuitionOnDiscountClaim(
+  ctx: AnswerContext,
+): Promise<AnswerDraft | undefined> {
+  const { frame } = ctx;
+  const text = frame.normalized;
+  const claims = [
+    ...text.matchAll(/(?<![\d.])(\d{1,3}(?:\.\d{1,2})?)\s*%\s*할인/g),
+  ];
+  const rates = new Set(claims.map((claim) => Number(claim[1])));
+  const [rate] = rates;
+  if (
+    rates.size !== 1 ||
+    rate <= 0 ||
+    rate > 100 ||
+    !/게시판|게시글|글.{0,6}(?:봤|봐서|있)|안내한다고/.test(text) ||
+    !/얼마|금액|가격|할인가/.test(text) ||
+    /중복|합산|형제|환불|작년|내년|특강|차량비|교재비/.test(text) ||
+    frame.explicitDates.length > 1 ||
+    frame.months.length > 1 ||
+    frame.relativePeriod ||
+    frame.relativeWeek ||
+    frame.relativeDay !== null
+  )
+    return;
+  const ids = explicitClassIds(ctx);
+  if (ids.length !== 1) return;
+  const [classId] = ids;
+  const month = frame.months[0];
+  const requestedYear = /(?<!\d)(20\d{2})\s*년\s*(?=\d{1,2}\s*월)/.exec(
+    text,
+  )?.[1];
+  const currentMonth = toKstDate(ctx.asOf).month;
+  if (
+    month &&
+    month < currentMonth &&
+    !frame.explicitDates.length &&
+    !requestedYear
+  )
+    return;
+  const at =
+    requestedYear && month && !frame.explicitDates.length
+      ? kstStartOfDay({ year: Number(requestedYear), month, day: 1 })
+      : resolveEffectiveTime(
+          month && month > currentMonth ? { ...frame, futureCue: true } : frame,
+          ctx.asOf,
+        ).at;
+  const found = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    upcomingUntil: at > ctx.asOf ? at : undefined,
+    documentTypes: ['fee', 'policy', 'announcement'],
+    query: [
+      ctx.question,
+      className(ctx.catalog, classId),
+      '정규 수강료 공식 할인 기간',
+    ].join(' '),
+    limit: 55,
+  });
+  recordChunks(
+    ctx.trace,
+    found.map(({ chunk }) => chunk),
+  );
+  const options = found.flatMap(({ chunk }) =>
+    chunk.documentType === 'fee' && isCleanPublicEvidence(chunk, at)
+      ? selectCosts(ctx, chunk, ids, ['fee'], at).filter(supportsExcerpt)
+      : [],
+  );
+  if (!options.length) return;
+  const comparable = options.filter(
+    ({ label, value }) => billingPeriods(label + ' ' + value).length,
+  );
+  const prices = comparable.length ? comparable : options;
+  if (
+    new Set(
+      prices.map(
+        ({ amount, label, value }) =>
+          amount + '|' + billingPeriods(label + ' ' + value).join(','),
+      ),
+    ).size !== 1
+  )
+    return abstain(
+      '동일 반의 승인 수강료가 서로 다릅니다.',
+      'CONFLICTING_EVIDENCE',
+    );
+  const [selected] = prices;
+  const owners = new Map<string, Set<string>>();
+  for (const klass of ctx.catalog.classes) {
+    for (const name of [klass.name, ...klass.aliases]
+      .map(compactText)
+      .filter(Boolean)) {
+      const ids = owners.get(name) ?? new Set();
+      ids.add(klass.classId);
+      owners.set(name, ids);
+    }
+  }
+  const billing = billingPeriods(selected.label + ' ' + selected.value);
+  const rules = found
+    .flatMap(({ chunk }) =>
+      publishedDiscountDecision(chunk, classId, rate, at, owners),
+    )
+    .filter(({ monthly }) => !monthly || billing.includes('1개월'));
+  const conflict = new Set(rules.map(({ applies }) => applies)).size > 1;
+  const rule = conflict
+    ? undefined
+    : rules.find(({ applies }) => applies !== null);
+  const numerator = selected.amount * (10_000 - Math.round(rate * 100));
+  const discounted = Number.isSafeInteger(numerator) ? numerator / 10_000 : NaN;
+  const canCalculate =
+    rule?.applies && billing.length > 0 && Number.isSafeInteger(discounted);
+  const complete = Boolean(rule && (!rule.applies || canCalculate));
+  ctx.trace.intent = rule
+    ? 'published_tuition_verified_discount'
+    : 'published_tuition_unverified_discount';
+  return {
+    status: complete ? 'answered' : 'partial',
+    reasonCode: complete ? undefined : 'PARTIAL_EVIDENCE',
+    missingFields: complete
+      ? undefined
+      : [rule ? '할인 후 수강료' : '게시글 할인율 적용 여부'],
+    text: [
+      formatKstDate(at) +
+        ' 적용 ' +
+        className(ctx.catalog, classId) +
+        ' ' +
+        selected.label +
+        ' ' +
+        selected.value,
+      rule?.line ??
+        (conflict
+          ? '해당 할인율의 승인 자료가 서로 달라 적용 여부를 확인할 수 없습니다.'
+          : '게시글에서 언급한 할인율의 승인 근거는 확인되지 않습니다.'),
+      ...(canCalculate
+        ? ['할인 후 ' + selected.label + ' ' + formatKrw(discounted)]
+        : []),
+    ].join('\n'),
+    citations: [
+      {
+        kind: 'chunk',
+        chunk: selected.chunk,
+        tableColumns: selected.tableColumns,
+        effectiveAt: at,
+      },
+      ...(rule
+        ? [{ kind: 'chunk' as const, chunk: rule.chunk, effectiveAt: at }]
+        : []),
+    ],
+    excerpts: rule ? [selected, rule] : [selected],
+    usedFacts: [],
+    instants: [at],
+    derivedNumbers: canCalculate ? [discounted] : undefined,
+  };
+}
+
+/** Quote the approved charge for the service month and verify any prepayment rule separately. */
+export async function answerPrepaidTuition(
+  ctx: AnswerContext,
+): Promise<AnswerDraft | undefined> {
+  const { frame } = ctx;
+  const target = prepaidTuitionMonth(frame.normalized);
+  if (!target || frame.unknownPrograms.length || frame.unboundProgram) return;
+  const { month } = target;
+  const now = toKstDate(ctx.asOf);
+  const year = target.year ?? now.year + Number(month < now.month);
+  const at =
+    month === now.month && year === now.year
+      ? ctx.asOf
+      : kstStartOfDay({ year, month, day: 1 });
+  const ids = resolveQualifiedClasses(ctx);
+  const matching =
+    frame.matchedStudentIds.length && ctx.studentClassIds.length
+      ? ids.filter((id) => ctx.studentClassIds.includes(id))
+      : ids;
+  const missing = () =>
+    abstain(
+      '해당 반의 수강월 기준 승인 수강료를 확인할 수 없습니다.',
+      'INSUFFICIENT_EVIDENCE',
+      ['수강월 적용 수강료'],
+    );
+  if (matching.length !== 1 || at < ctx.asOf) return missing();
+  const [classId] = matching;
+  const facts = await ctx.facts.queryApprovedFacts({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    effectiveAt: at,
+    factTypes: ['monthly_fee'],
+  });
+  recordFacts(ctx.trace, facts);
+  const prices = facts.flatMap((fact) =>
+    fact.subjectType === 'class' &&
+    fact.subjectId === classId &&
+    fact.value.kind === 'money' &&
+    fact.value.currency === 'KRW' &&
+    isValidAt(fact.validFrom, fact.validTo, at)
+      ? [{ fact, amount: fact.value.amount }]
+      : [],
+  );
+  if (!prices.length) return missing();
+  if (new Set(prices.map(({ amount }) => amount)).size > 1)
+    return abstain(
+      '같은 반의 수강월별 승인 수강료가 서로 다릅니다.',
+      'CONFLICTING_EVIDENCE',
+    );
+
+  const hits = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    upcomingUntil: at > ctx.asOf ? at : undefined,
+    documentTypes: ['fee'],
+    query: [
+      className(ctx.catalog, classId),
+      month + '월 수강분',
+      '납부일 관계없이 미리 선납 개정 금액 적용',
+    ].join(' '),
+    limit: 55,
+  });
+  recordChunks(
+    ctx.trace,
+    hits.map(({ chunk }) => chunk),
+  );
+  const sources = new Set(prices.map(({ fact }) => fact.sourceId));
+  const policy = hits.flatMap(({ chunk }) => {
+    if (
+      !sources.has(chunk.sourceId) ||
+      (chunk.classId && chunk.classId !== classId) ||
+      chunk.location.kind !== 'paragraph' ||
+      !isCleanPublicEvidence(chunk, at)
+    )
+      return [];
+    return splitSentences(chunk.text).flatMap((line) => {
+      const text = compactText(line);
+      if (
+        !/(?:납부|결제)(?:한)?(?:날짜|일자|시점|일)(?:과|와|에)?(?:관계없이|무관하게)/.test(
+          text,
+        ) ||
+        !/수강분|수강월|수강하는달/.test(text) ||
+        !/금액|수강료|교습비/.test(text) ||
+        !/적용(?:됩니다|합니다|해요)/.test(text) ||
+        /제외|다만|예외|경우에만/.test(text)
+      )
+        return [];
+      const periods = [
+        ...text.matchAll(/(?<!\d)(?:(20\d{2})년)?(1[0-2]|[1-9])월수강분부터/g),
+      ];
+      if (
+        periods.length &&
+        !periods.every(([, startYear, startMonth]) =>
+          startYear
+            ? Number(startYear) * 12 + Number(startMonth) <= year * 12 + month
+            : Number(startMonth) === month,
+        )
+      )
+        return [];
+      const excerpt = { chunk, line };
+      return supportsExcerpt(excerpt) ? [excerpt] : [];
+    });
+  });
+  if (new Set(policy.map(({ line }) => compactText(line))).size > 1)
+    return abstain(
+      '수강료의 납부일 적용 규정이 서로 다릅니다.',
+      'CONFLICTING_EVIDENCE',
+    );
+  const rule = policy[0];
+  const { fact, amount } =
+    prices.find((price) => price.fact.sourceId === rule?.chunk.sourceId) ??
+    prices[0];
+  ctx.trace.intent = 'tuition_service_month';
+  return {
+    status: rule ? 'answered' : 'partial',
+    reasonCode: rule ? undefined : 'PARTIAL_EVIDENCE',
+    missingFields: rule ? undefined : ['선납 시 적용 기준'],
+    text: [
+      year +
+        '년 ' +
+        month +
+        '월 수강분 ' +
+        className(ctx.catalog, classId) +
+        ' 월 수강료 ' +
+        formatKrw(amount),
+      rule?.line ??
+        '선납할 때 적용하는 기준은 승인 자료에서 확인되지 않습니다.',
+    ].join('\n'),
+    citations: [
+      { kind: 'fact', fact, effectiveAt: at },
+      ...(rule
+        ? [{ kind: 'chunk' as const, chunk: rule.chunk, effectiveAt: at }]
+        : []),
+    ],
+    excerpts: rule ? [rule] : [],
+    usedFacts: [fact],
+    instants: [at],
+  };
+}
+
 export async function answerFromCostEvidence(
   ctx: AnswerContext,
 ): Promise<AnswerDraft | undefined> {
+  const scopedMaterial = await answerScopedMaterialCost(ctx);
+  if (scopedMaterial) return scopedMaterial;
+  const sessionPrice = await answerSessionPrice(ctx);
+  if (sessionPrice) return sessionPrice;
   const passPrice = await answerPassPrice(ctx);
   if (passPrice) return passPrice;
   const ancillaryPrice = await answerAncillaryPrice(ctx);
@@ -952,14 +1772,40 @@ export async function answerFromCostEvidence(
   if (tuitionAndSnacks) return tuitionAndSnacks;
   const combinedTuition = await answerCombinedTuitionExample(ctx);
   if (combinedTuition) return combinedTuition;
+  const tuitionPolicy = await answerTuitionPolicy(ctx);
+  if (tuitionPolicy) return tuitionPolicy;
+  const publishedTuition = await answerPublishedTuitionOnDiscountClaim(ctx);
+  if (publishedTuition) return publishedTuition;
   const { frame } = ctx;
   const asksEquality =
     frame.flags.compare &&
-    /같나요|같은가|같은지|다른가|다른지|똑같/.test(frame.normalized);
+    /같아요|같나요|같은가|같은지|다른가|다른지|똑같/.test(frame.normalized);
+  const gradePair =
+    /(?<![가-힣])([초중고][1-6])\s*(?:이랑|랑|하고|와|과|및|[·,])\s*([초중고][1-6])(?!\d|[가-힣])/.exec(
+      frame.normalized,
+    );
+  const exactGrades =
+    gradePair &&
+    asksEquality &&
+    frame.classIds.length === 0 &&
+    frame.matchedStudentIds.length === 0 &&
+    ctx.studentClassIds.length === 0 &&
+    /수강료|교습비|교재비|재료비/.test(frame.normalized) &&
+    !frame.unknownPrograms.length &&
+    !frame.unboundProgram
+      ? gradePair
+          .slice(1)
+          .map((grade) =>
+            ctx.catalog.classes.filter((klass) => klass.grade === grade),
+          )
+      : [];
   const ids =
     asksEquality && frame.matchedStudentIds.length === 1
       ? [...new Set([...explicitClassIds(ctx), ...ctx.studentClassIds])]
-      : explicitClassIds(ctx);
+      : exactGrades.length === 2 &&
+          exactGrades.every((matches) => matches.length === 1)
+        ? [...new Set(exactGrades.map(([klass]) => klass.classId))]
+        : resolveQualifiedClasses(ctx);
   const exact = ctx.catalog.classes.filter(
     ({ classId, name }) =>
       ids.includes(classId) && frame.compact.includes(compactText(name)),
@@ -995,8 +1841,7 @@ export async function answerFromCostEvidence(
     !classIds.length ||
     !fields.length ||
     !frame.topics.every(({ id }) => id === 'fee' || id === 'material') ||
-    (frame.flags.compare &&
-      !(asksEquality && classIds.length === 2 && fields.length === 1)) ||
+    (frame.flags.compare && !(asksEquality && classIds.length === 2)) ||
     frame.flags.previousRevision ||
     (frame.relativePeriod !== null &&
       !(frame.relativePeriod === 'this_month' && distinctMaterials)) ||
@@ -1130,21 +1975,30 @@ export async function answerFromCostEvidence(
     }
   }
   if (!selected.length) return undefined;
-  const comparablePeriods = selected.map(
-    ({ label, value }) => billingPeriods(label + ' ' + value)[0],
-  );
-  const comparison =
-    asksEquality &&
-    selected.length === 2 &&
-    missing.length === 0 &&
-    comparablePeriods[0] &&
-    comparablePeriods[0] === comparablePeriods[1]
-      ? selected[0].amount === selected[1].amount
-        ? '두 항목의 금액은 같습니다.'
-        : '두 항목의 금액은 서로 다릅니다.'
-      : undefined;
-  if (asksEquality && !comparison && missing.length === 0)
-    missing.push('같은 청구 기준의 비용 비교');
+  const comparisons: string[] = [];
+  if (asksEquality) {
+    for (const field of fields) {
+      const values = selected.filter((entry) => entry.field === field);
+      if (values.length !== 2) continue;
+      const periods = values.map(
+        ({ label, value }) => billingPeriods(label + ' ' + value)[0],
+      );
+      if (!periods[0] || periods[0] !== periods[1]) {
+        missing.push(values[0].label + ' 청구 기준 비교');
+        continue;
+      }
+      const same = values[0].amount === values[1].amount;
+      comparisons.push(
+        fields.length === 1
+          ? same
+            ? '두 항목의 금액은 같습니다.'
+            : '두 항목의 금액은 서로 다릅니다.'
+          : values[0].label +
+              (same ? ' 금액은 같습니다.' : ' 금액은 서로 다릅니다.'),
+      );
+    }
+  }
+  ctx.frame = { ...frame, classIds };
   ctx.trace.intent = 'cost_evidence';
   return {
     status: missing.length ? 'partial' : 'answered',
@@ -1155,7 +2009,7 @@ export async function answerFromCostEvidence(
         ({ classId, label, value }) =>
           className(ctx.catalog, classId) + ' ' + label + ': ' + value,
       ),
-      ...(comparison ? [comparison] : []),
+      ...comparisons,
       ...(missing.length ? ['확인되지 않은 항목: ' + missing.join(', ')] : []),
     ].join('\n'),
     conversationUpdate: {

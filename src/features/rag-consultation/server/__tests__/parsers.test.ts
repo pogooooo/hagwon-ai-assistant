@@ -23,6 +23,7 @@ import {
 import { InMemoryRagStore } from '../store/in-memory-store.ts';
 import { parseInstant } from '../text/time.ts';
 import type { RagAccessScope, StoredDocumentRevision } from '../types.ts';
+import { runQuery } from './helpers.ts';
 
 const DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -88,6 +89,78 @@ describe('텍스트 PDF', () => {
     ])
       assert.ok(compact.includes(sentence), sentence);
     assert.equal(tableRows(parsed.text).length, 0, '본문을 표로 오인하지 않음');
+  });
+
+  test('줄 기준선이 같은 두 단의 소식지에서도 날짜와 본문을 섞지 않는다', async () => {
+    const fileName = 'SD_NEWSLETTER_2026_11__r1.pdf';
+    const bytes = new Uint8Array(
+      readFileSync(
+        join(
+          DIR,
+          '..',
+          '..',
+          'academies-v2',
+          'AC_SEODAM',
+          'documents',
+          fileName,
+        ),
+      ),
+    );
+    const parsed = await parseSourceFile({ bytes, fileName, ocr: null });
+    assert.equal(parsed.status, 'ok');
+    assert.ok(parsed.warnings.some(({ code }) => code === 'two_column_layout'));
+    assert.equal(tableRows(parsed.text).length, 0);
+    const blocks = splitIntoBlocks(parsed.text);
+    const deadline = blocks.find(({ location }) =>
+      /골든벨/.test(location.section ?? ''),
+    );
+    const weekly = blocks.find(
+      ({ location }) => location.section === '고등부 소식',
+    );
+    assert.equal(deadline?.location.page, 1);
+    assert.match(deadline?.text ?? '', /신청은 12월 12일/);
+    assert.doesNotMatch(deadline?.text ?? '', /수요일/);
+    assert.equal(weekly?.location.page, 1);
+    assert.match(weekly?.text ?? '', /12월부터 매주 수요일.*지문 테스트/);
+  });
+
+  test('기준선이 겹치는 네 단 소식지는 제목과 본문을 단별로 묶는다', async () => {
+    const fileName = 'OS_NEWS_2026_11__r1.pdf';
+    const bytes = new Uint8Array(
+      readFileSync(
+        join(
+          DIR,
+          '..',
+          '..',
+          'academies-v2',
+          'AC_ONSAEM',
+          'documents',
+          fileName,
+        ),
+      ),
+    );
+    const parsed = await parseSourceFile({ bytes, fileName, ocr: null });
+    assert.equal(parsed.status, 'ok');
+    assert.ok(
+      parsed.warnings.some(
+        ({ code, detail }) => code === 'multi_column_layout' && detail === '4',
+      ),
+    );
+    assert.equal(tableRows(parsed.text).length, 0);
+    const blocks = splitIntoBlocks(parsed.text);
+    const consultation = blocks.find(
+      ({ location }) => location.section === '학부모 상담 주간',
+    );
+    assert.equal(consultation?.location.page, 1);
+    assert.match(consultation?.text ?? '', /12월 7일.*11월 30일/);
+    assert.doesNotMatch(consultation?.text ?? '', /공개수업|독감|특강/);
+    assert.ok(
+      blocks.some(
+        ({ location, text }) =>
+          location.section === '푸른숲초 수요일 픽업 변경' &&
+          text.includes('13:08'),
+      ),
+    );
   });
 
   test('여러 페이지 표: 하나로 합치고 반복 헤더를 지우며 행마다 쪽 번호를 단다', async () => {
@@ -389,6 +462,167 @@ describe('청크 출처·중복', () => {
     assert.ok(results.length > 0);
     assert.ok(results.every((r) => r.chunk.documentId === 'PX_FEE_A'));
   });
+});
+
+test('가로로 누운 스캔은 방향을 찾은 후 세운 폭에 맞춰 판독한다', async () => {
+  const pdf = await PDFDocument.create();
+  pdf.addPage([840, 590]);
+  const dimensions: Array<[number, number]> = [];
+  const ocr: OcrEngine = {
+    id: 'dimension-test',
+    async recognize(png) {
+      const header = Buffer.from(png.buffer, png.byteOffset, png.byteLength);
+      dimensions.push([header.readUInt32BE(16), header.readUInt32BE(20)]);
+      const call = dimensions.length;
+      return {
+        confidence: call === 3 || call === 5 ? 90 : 15,
+        words: [
+          { text: '시간표', confidence: 90, x0: 20, y0: 20, x1: 65, y1: 45 },
+        ],
+      };
+    },
+    async terminate() {},
+  };
+  const parsed = await parseSourceFile({
+    bytes: await pdf.save(),
+    fileName: 'rotated.pdf',
+    ocr,
+  });
+
+  assert.equal(parsed.pages[0].rotation, 90);
+  assert.equal(dimensions.length, 5);
+  assert.equal(dimensions[4][0], 1500);
+  assert.ok(dimensions[4][1] <= 2400);
+  assert.match(parsed.text, /시간표/);
+});
+
+test('가까운 OCR 줄의 일시와 장소를 각각 원본 문단으로 유지한다', async () => {
+  const pdf = await PDFDocument.create();
+  pdf.addPage([590, 840]);
+  const lines = ['일시: 11월 21일 15:30', '장소: 나래관 2층'];
+  const ocr: OcrEngine = {
+    id: 'field-boundary-test',
+    async recognize() {
+      return {
+        confidence: 90,
+        words: lines.map((text, index) => ({
+          text,
+          confidence: 90,
+          x0: 100,
+          x1: 420,
+          y0: 100 + index * 32,
+          y1: 125 + index * 32,
+        })),
+      };
+    },
+    async terminate() {},
+  };
+  const parsed = await parseSourceFile({
+    bytes: await pdf.save(),
+    fileName: 'notice.pdf',
+    ocr,
+  });
+  const chunks = splitIntoBlocks(parsed.text);
+  assert.deepEqual(
+    chunks.map(({ text }) => text),
+    lines,
+  );
+  assert.deepEqual(
+    chunks.map(({ location }) => location.label),
+    ['1쪽 · 문단 1', '1쪽 · 문단 2'],
+  );
+});
+
+test('OCR가 제공한 가까운 텍스트 영역을 같은 표의 서로 다른 열로 유지한다', async () => {
+  const pdf = await PDFDocument.create();
+  pdf.addPage([590, 840]);
+  const rows = [
+    ['정류장', '하원 1회차', '하원 2회차'],
+    ['푸른숲초 정문', '15:00', '16:00'],
+    ['푸른숲초 후문', '15:10', '16:10'],
+  ];
+  const ocr: OcrEngine = {
+    id: 'explicit-regions-test',
+    async recognize() {
+      return {
+        confidence: 90,
+        words: rows.flatMap((row, r) =>
+          row.map((text, c) => ({
+            text,
+            confidence: 90,
+            x0: 100 + 55 * c,
+            y0: 100 + 37 * r,
+            x1: 150 + 55 * c,
+            y1: 122 + 37 * r,
+            startsSegment: true,
+          })),
+        ),
+      };
+    },
+    async terminate() {},
+  };
+  const prepared = await prepareFileDocument(
+    {
+      academyId: 'AC_P',
+      documentId: 'SHUTTLE_REGIONS',
+      revision: 1,
+      documentType: 'schedule',
+      title: '셔틀 정류장 운행표',
+      visibility: 'academy_public',
+      validFrom: '2026-11-01T00:00:00+09:00',
+      approvedAt: '2026-11-01T00:00:00+09:00',
+    },
+    { bytes: await pdf.save(), fileName: 'regions.pdf' },
+    { ocr },
+  );
+  const { parsed } = prepared;
+  assert.equal(parsed.stats.tables, 1, parsed.text);
+  assert.match(parsed.text, /\| 정류장 \| 하원 1회차 \| 하원 2회차 \|/);
+  assert.match(parsed.text, /\| 푸른숲초 후문 \| 15:10 \| 16:10 \|/);
+  assert.ok(prepared.document);
+  const store = new InMemoryRagStore();
+  await store.upsertIndexedRevision({
+    document: prepared.document,
+    approve: true,
+  });
+  const result = await runQuery(
+    {
+      store,
+      catalog: {
+        getAcademyCatalog: async () => ({
+          academyId: 'AC_P',
+          displayName: '파싱 학원',
+          classes: [],
+          aliases: [],
+          units: [],
+        }),
+      },
+      resolveScope: () => ({
+        actorId: 'v',
+        academyId: 'AC_P',
+        role: 'visitor',
+        allowedStudentIds: [],
+        allowedClassIds: [],
+        studentRefs: [],
+        canViewPublicHistory: false,
+      }),
+    },
+    {
+      userId: 'v',
+      question: '푸른숲초 후문 하원 2회차 셔틀 몇 시에 와요?',
+      asOf: '2026-11-10T12:00:00+09:00',
+      engine: 'planned',
+    },
+  );
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /16:10/);
+  assert.doesNotMatch(result.answer.answer, /15:10|16:00|정문/);
+  assert.equal(result.answer.citations[0].documentId, 'SHUTTLE_REGIONS');
+  assert.match(
+    result.answer.citations[0].location ?? '',
+    /1쪽.*표 1 · 2행 · 열 정류장, 하원 2회차/,
+  );
+  assert.equal(result.generationCalls, 0);
 });
 
 describe('스캔 PDF OCR', () => {

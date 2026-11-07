@@ -96,6 +96,127 @@ describe('이름 지칭', () => {
   });
 });
 
+test('허용 학생 이름 안의 이유는 별도의 원인 질문으로 해석하지 않는다', () => {
+  const access = {
+    ...guardian,
+    studentRefs: [{ ...guardian.studentRefs[0], displayLabel: '이유찬' }],
+  };
+  const frame = (question: string) =>
+    parseQuery(question, { access, catalog, config: DEFAULT_RAG_CONFIG });
+  const report = frame('이유찬 학생 10월 정답률 알려주세요.');
+  assert.deepEqual(report.matchedStudentIds, ['T_STU_001']);
+  assert.equal(report.flags.causal, false);
+  assert.equal(
+    frame('이유찬 학생 정답률이 낮은 이유가 뭔가요?').flags.causal,
+    true,
+  );
+});
+
+test('반 이름 속 자리와 별도로 물은 빈자리를 구분한다', () => {
+  const withClass = {
+    ...catalog,
+    classes: [
+      ...catalog.classes,
+      { classId: 'STAR', name: '초3 별자리반', aliases: [] },
+    ],
+  };
+  const frame = (question: string) =>
+    parseQuery(question, {
+      access: guardian,
+      catalog: withClass,
+      config: DEFAULT_RAG_CONFIG,
+    });
+  assert.deepEqual(
+    frame('초3 별자리반 수강료가 얼마예요?').topics.map(({ id }) => id),
+    ['fee'],
+  );
+  assert.deepEqual(
+    frame('초3 별자리반 빈자리 있나요?').topics.map(({ id }) => id),
+    ['enrollment'],
+  );
+});
+
+test('문학 단원명에 있는 태도는 학습자의 태도 추정과 구분한다', () => {
+  const literary = { ...catalog, units: ['화자의 태도'] };
+  const frame = (question: string) =>
+    parseQuery(question, {
+      access: guardian,
+      catalog: literary,
+      config: DEFAULT_RAG_CONFIG,
+    });
+  assert.equal(
+    frame('화자의 태도 단원 정답률은 얼마예요?').flags.attitude,
+    false,
+  );
+  assert.equal(
+    frame('화자의 태도 단원 정답률로 아이의 태도도 알려줘요.').flags.attitude,
+    true,
+  );
+});
+
+test('정확한 반 이름 안의 이유는 질문의 별도 원인 표현으로 보지 않는다', () => {
+  const withClass = {
+    ...catalog,
+    classes: [
+      ...catalog.classes,
+      { classId: 'REASON', name: '중1 이유글반', aliases: [] },
+    ],
+  };
+  const frame = (question: string) =>
+    parseQuery(question, {
+      access: guardian,
+      catalog: withClass,
+      config: DEFAULT_RAG_CONFIG,
+    });
+  assert.equal(
+    frame('중1 이유글반 수강료랑 강사 알려 주세요.').flags.causal,
+    false,
+  );
+  assert.equal(
+    frame('중1 이유글반 수강료가 높은 이유가 뭔가요?').flags.causal,
+    true,
+  );
+});
+
+test('단원명 속 변화와 기간별 정답률 변화 요청을 구분한다', () => {
+  const literary = { ...catalog, units: ['관점의 변화'] };
+  const frame = (question: string) =>
+    parseQuery(question, {
+      access: guardian,
+      catalog: literary,
+      config: DEFAULT_RAG_CONFIG,
+    });
+  assert.equal(
+    frame('10월 관점의 변화 단원 정답률을 알려주세요.').flags.trend,
+    false,
+  );
+  assert.equal(
+    frame('9월부터 10월까지 관점의 변화 정답률 변화가 있나요?').flags.trend,
+    true,
+  );
+});
+
+test('반 이름과 겹치는 단원을 리포트 질문의 조회 조건으로 유지한다', () => {
+  const withUnit = {
+    ...catalog,
+    units: ['도면 치수'],
+    classes: [
+      ...catalog.classes,
+      { classId: 'DESIGN', name: '초5 도면치수반', aliases: [] },
+    ],
+  };
+  const frame = (question: string) =>
+    parseQuery(question, {
+      access: guardian,
+      catalog: withUnit,
+      config: DEFAULT_RAG_CONFIG,
+    });
+  const lookup = frame('8월 도면 치수 정답률을 볼 수 있나요?');
+  assert.deepEqual(lookup.units, ['도면 치수']);
+  assert.deepEqual(lookup.classIds, []);
+  assert.deepEqual(frame('도면치수반 8월 리포트').classIds, ['DESIGN']);
+});
+
 describe('반 이름', () => {
   test('더 긴 표현이 가리키는 반을 우선한다(고1 수학 특강 ≠ 고1 수학 내신반)', () => {
     assert.deepEqual(parse('고1 수학 특강 수강료 얼마예요?').classIds, [
