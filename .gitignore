@@ -30,3 +30,6 @@ xcuserdata/
 *.jks
 *.p12
 *.mobileprovision
+
+# Generated RAG evaluation output
+/src/features/rag-consultation/server/__fixtures__/eval-results/

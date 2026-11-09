@@ -1,6 +1,6 @@
 # TEST_REPORT — RAG 상담 평가·테스트 결과
 
-현재 목표와 평가 계약은 [시험 문항과 95% 목표](#2026-11-04--시험-문항과-95-목표)에 있습니다. 1~13장은 당시 평가 결과를 보존한 기록입니다. 당시 미공개였던 393문항은 이후 공개 회귀 자료로 사용했습니다.
+현행 문항 선정, 슬롯 채점과 95% 판정은 [평가 기준](EVALUATION_CRITERIA.md)에 정리했습니다. 앞선 기준의 기록은 [시험 문항과 95% 목표](#2026-11-04--시험-문항과-95-목표)에 있습니다. 1~13장은 당시 평가 결과를 보존한 기록입니다. 당시 미공개였던 393문항은 이후 공개 회귀 자료로 사용했습니다.
 
 - 실행일: 2026-11-02 · 브랜치 `feat/rag-consultation` · 평가 대상 엔진 커밋 `550318a`(미공개 평가 실행 전 고정), 개선 전 엔진 커밋 `e1b56bc`
 - 모든 자료는 가상 데이터입니다. 실제 생성 API 는 **사용하지 않았습니다**(4번 측정 항목 미검증, 7장).
@@ -86,11 +86,7 @@
 
 유형별 정확도가 낮은 범주: 스캔 PDF(scan 0/6, scan_pdf 2/6, pdf_scan 3/7), PDF 표(pdf_table 2/16), 충돌·자료 부족(conflict_insufficient 0/8), 복합 조건(multi_condition 5/19), 반 정보(course 3/15). 높은 범주: 채점 수정(grading_revision 7/7, revision 3/3), 정답률(accuracy 21/24), 대상 혼동(confusion 9/10), 개인정보(privacy 18/23).
 
-원인 해석은 [REPORT.md](REPORT.md) 4장에 있습니다. 문항별 기대·실제 결과(상태·답변·인용·검사 항목·오류 단계·지연)는 CSV/JSON 에 있습니다:
-
-- `server/__fixtures__/eval-results/final-test/v2-test__{rag-bm25,engine}.{csv,json}`
-- `server/__fixtures__/eval-results/final-test-models/v2-test__{engine-dense,engine-dense-rerank}.{csv,json}`
-- `server/__fixtures__/eval-results/final-test-baseline/v2-test__{rag-bm25,engine}.{csv,json}`(개선 전 엔진)
+원인 해석은 [REPORT.md](REPORT.md) 4장에 있습니다. 문항별 기대 상태, 실제 답변, 인용, 검사 항목, 오류 단계와 지연은 당시 출력에 보존되어 있습니다. [최종 평가](https://github.com/pogooooo/hagwon-ai-assistant/tree/705610f6132ef16960e9b7c5c349b56c0c7fedc4/src/features/rag-consultation/server/__fixtures__/eval-results/final-test) · [검색 모델 비교](https://github.com/pogooooo/hagwon-ai-assistant/tree/705610f6132ef16960e9b7c5c349b56c0c7fedc4/src/features/rag-consultation/server/__fixtures__/eval-results/final-test-models) · [개선 전 기준선](https://github.com/pogooooo/hagwon-ai-assistant/tree/705610f6132ef16960e9b7c5c349b56c0c7fedc4/src/features/rag-consultation/server/__fixtures__/eval-results/final-test-baseline)
 
 ## 5. 검색 기술별 비교 실험
 
@@ -192,14 +188,16 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 
 개선 전 엔진은 `git worktree add <dir> e1b56bc` 에 현재 평가 실행기(`eval/harness.ts`)·로더(`adapters/fixture/load-academies.ts`)·`academies-v2` 자료만 복사해 같은 명령으로 실행했습니다(엔진 코드는 `e1b56bc` 그대로, 채점 코드는 동일).
 
-| 결과 폴더(`server/__fixtures__/eval-results/`) | 내용                                                  |
-| ---------------------------------------------- | ----------------------------------------------------- |
-| `final-test/`                                  | 미공개 393: 기본 BM25 RAG, 새 엔진                    |
-| `final-test-models/`                           | 미공개·개발·기존: e5 하이브리드, + bge 재정렬         |
-| `final-test-baseline/`                         | 미공개 393·개발 153: 개선 전 엔진, 기본 BM25 RAG      |
-| `s4-r16/`                                      | 개발·기존 자료: 새 엔진(최종 개발 실행)               |
-| `stage3-baseline/`, `stage3-baseline-hk/`      | 3단계 기준 재측정(개선 전)                            |
-| `s4-r7`, `s4-r10`, `s4-r12` ~ `s4-r16-models`  | 4단계 개발 반복 기록(개발 자료만, 커밋한 실행만 보존) |
+과거 출력의 폴더명은 아래와 같습니다. JSON과 CSV는 고정 커밋의 파일 트리에서 확인할 수 있습니다. [과거 평가 출력](https://github.com/pogooooo/hagwon-ai-assistant/tree/705610f6132ef16960e9b7c5c349b56c0c7fedc4/src/features/rag-consultation/server/__fixtures__/eval-results)
+
+| 과거 결과 폴더                                | 내용                                                  |
+| --------------------------------------------- | ----------------------------------------------------- |
+| `final-test/`                                 | 미공개 393: 기본 BM25 RAG, 새 엔진                    |
+| `final-test-models/`                          | 미공개·개발·기존: e5 하이브리드, + bge 재정렬         |
+| `final-test-baseline/`                        | 미공개 393·개발 153: 개선 전 엔진, 기본 BM25 RAG      |
+| `s4-r16/`                                     | 개발·기존 자료: 새 엔진(최종 개발 실행)               |
+| `stage3-baseline/`, `stage3-baseline-hk/`     | 3단계 기준 재측정(개선 전)                            |
+| `s4-r7`, `s4-r10`, `s4-r12` ~ `s4-r16-models` | 4단계 개발 반복 기록(개발 자료만, 커밋한 실행만 보존) |
 
 각 폴더: `<suite>__<variant>.json`(요약 + 문항별), `.csv`(문항별), `summary.json`(전체 요약, CPU·RAM 포함).
 
@@ -271,7 +269,7 @@ Windows x64, Node `v24.19.0`, npm `11.17.0`, BM25·Mock 생성으로 확인했�
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/run-eval.ts --suite v2-dev,v1-90,v1-paraphrase-100 --variant engine --label after --out .git/rag-validation
 ```
 
-평가 근거는 `server/__fixtures__/eval-results/table-binding-20261103/`의 `before-summary.json`, `after-summary.json`, `changed-cases.json`에 있습니다. 전체 문항별 JSON/CSV와 검증 로그는 로컬 `.git/rag-validation/`에 보존했습니다. 동결된 평가 문서·정답은 수정하지 않았습니다.
+당시의 `before-summary.json`, `after-summary.json`, `changed-cases.json`은 고정 커밋에 있습니다. 전체 문항별 JSON·CSV와 검증 로그는 로컬 `.git/rag-validation/`에 보존했습니다. [표 선택 전후 비교](https://github.com/pogooooo/hagwon-ai-assistant/tree/705610f6132ef16960e9b7c5c349b56c0c7fedc4/src/features/rag-consultation/server/__fixtures__/eval-results/table-binding-20261103)
 
 ## 15. 요일 판별·격자 셀 선택 회귀 검증
 

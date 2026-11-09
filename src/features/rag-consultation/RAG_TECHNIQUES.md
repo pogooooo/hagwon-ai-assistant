@@ -38,19 +38,20 @@
 
 다음은 배포 앱의 요청 처리에 직접 필요하지 않은 파일입니다. 개발 서버, 테스트, CI에 필요한 범위는 따로 표시합니다.
 
-| 경로                                                                                       | 용도와 유지 이유                                                                 |
-| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| 루트 `README.md`, `CONTRIBUTING.md`, `.github/pull_request_template.md`                    | 설명·협업 문서                                                                   |
-| RAG의 `README.md`, `DEMO.md`, `REPORT.md`, `TEST_REPORT.md`, `RAG_TECHNIQUES.md`           | 실행·설계·평가 설명                                                              |
-| `server/__fixtures__/eval-results/`                                                        | 과거 평가 출력 116개. 회귀 비교 기록                                             |
-| `server/__fixtures__/academies-v1/`, `academies-v2/`, `axr-synthetic-v1/`, `documents-v1/` | 가상 문항·문서·시험 자료 421개. 테스트·평가에 사용하며 일부는 개발 서버에서 읽음 |
-| `server/__tests__/`, `server/eval/`, `server/generation/smoke-provider.ts`                 | 회귀 테스트, 평가 CLI, 공급자 연결 진단                                          |
-| `server/dev/`                                                                              | RAG 개발 서버와 화면. `npm run rag:dev` 실행에 필요                              |
-| `.github/workflows/ci.yml`, `.husky/`, `.vscode/`, `.editorconfig`, ESLint·Prettier 설정   | CI, 커밋 검사, 편집기·정적 검사 설정                                             |
-| `.env.example`, `.node-version`, `.nvmrc`, `.npmrc`                                        | 환경 변수 예시와 Node/npm 재현 환경. CI는 `.nvmrc` 사용                          |
-| `public/.gitkeep`, `src/{components,hooks,stores,styles,types}/.gitkeep`                   | 빈 디렉터리 보존용                                                               |
+| 경로                                                                                                       | 용도와 유지 이유                                                                 |
+| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 루트 `README.md`, `CONTRIBUTING.md`, `.github/pull_request_template.md`                                    | 설명·협업 문서                                                                   |
+| RAG의 `README.md`, `DEMO.md`, `REPORT.md`, `TEST_REPORT.md`, `RAG_TECHNIQUES.md`, `EVALUATION_CRITERIA.md` | 실행·설계·평가 설명                                                              |
+| `server/__fixtures__/academies-v1/`, `academies-v2/`, `axr-synthetic-v1/`, `documents-v1/`                 | 가상 문항·문서·시험 자료 421개. 테스트·평가에 사용하며 일부는 개발 서버에서 읽음 |
+| `server/__tests__/`, `server/eval/`, `server/generation/smoke-provider.ts`                                 | 회귀 테스트, 평가 CLI, 공급자 연결 진단                                          |
+| `server/dev/`                                                                                              | RAG 개발 서버와 화면. `npm run rag:dev` 실행에 필요                              |
+| `.github/workflows/ci.yml`, `.husky/`, `.vscode/`, `.editorconfig`, ESLint·Prettier 설정                   | CI, 커밋 검사, 편집기·정적 검사 설정                                             |
+| `.env.example`, `.node-version`, `.nvmrc`, `.npmrc`                                                        | 환경 변수 예시와 Node/npm 재현 환경. CI는 `.nvmrc` 사용                          |
+| `public/.gitkeep`, `src/{components,hooks,stores,styles,types}/.gitkeep`                                   | 빈 디렉터리 보존용                                                               |
 
-`git ls-files -- '*.md'` 기준 Markdown은 위 설명·협업 문서 8개와 시험 자료 234개입니다. 시험 자료에는 스키마 설명과 엔진이 읽는 가상 학원 원본 문서가 모두 들어 있습니다. `package.json`, 잠금 파일, Next.js·TypeScript·Capacitor 설정은 설치·빌드·패키징에 영향을 줍니다.
+`git ls-files -- '*.md'` 기준 Markdown은 위 설명·협업 문서 9개와 시험 자료 234개입니다. 시험 자료에는 스키마 설명과 엔진이 읽는 가상 학원 원본 문서가 모두 들어 있습니다. `package.json`, 잠금 파일, Next.js·TypeScript·Capacitor 설정은 설치·빌드·패키징에 영향을 줍니다.
+
+과거 평가 출력 JSON·CSV 116개는 고정 커밋에 보존되어 있습니다. 새 평가 출력은 Git에서 제외하는 로컬 경로에 저장합니다. [과거 평가 출력](https://github.com/pogooooo/hagwon-ai-assistant/tree/705610f6132ef16960e9b7c5c349b56c0c7fedc4/src/features/rag-consultation/server/__fixtures__/eval-results)
 
 ## 후속 채택 · 지도 기록과 대상 학년
 

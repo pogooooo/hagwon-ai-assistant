@@ -6,12 +6,13 @@
 > ⚠️ 모든 테스트 데이터는 완전한 가상 데이터입니다. 합성 데이터에서 테스트가 통과했다고 실제 원생 개인정보를 다루는 운영 환경이 안전하다는 뜻은 아닙니다.
 > CLOVA Studio와 Gemini의 생성 공급자를 서버 설정으로 선택할 수 있습니다. 실계정 API 호출은 키를 설정한 환경에서 별도로 확인해야 합니다. 두 공급자로 원생 자료를 전송하지 않습니다.
 
-| 문서                             | 내용                                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------------------- |
-| 이 README                        | 구조·실행법·API·통합 계약·남은 위험                                                   |
-| [REPORT.md](REPORT.md)           | 범위 재정비 분류표, 기술별 적용 여부·파일·라이브러리, 제거·유지 항목, 남은 문제       |
-| [TEST_REPORT.md](TEST_REPORT.md) | 미공개 평가(393문항) 포함 모든 평가 결과, 단계별 오류, 지연·CPU·RAM, 보안·권한 테스트 |
-| [DEMO.md](DEMO.md)               | 실제 실행 결과로 만든 질문·답변 예시 18개와 API 호출 예                               |
+| 문서                                             | 내용                                                                            |
+| ------------------------------------------------ | ------------------------------------------------------------------------------- |
+| 이 README                                        | 구조·실행법·API·통합 계약·남은 위험                                             |
+| [REPORT.md](REPORT.md)                           | 범위 재정비 분류표, 기술별 적용 여부·파일·라이브러리, 제거·유지 항목, 남은 문제 |
+| [TEST_REPORT.md](TEST_REPORT.md)                 | 공개 회귀와 새 합성 평가 결과, 단계별 오류, 지연·CPU·RAM, 권한 검증             |
+| [EVALUATION_CRITERIA.md](EVALUATION_CRITERIA.md) | 현재 채점·문항 선정 기준, 95% 판정과 추적 파일 구조                             |
+| [DEMO.md](DEMO.md)                               | 실제 실행 결과로 만든 질문·답변 예시 18개와 API 호출 예                         |
 
 ---
 
@@ -55,7 +56,7 @@ src/features/rag-consultation/
     eval/                # 공통 평가 실행기(run-eval·harness·variants), 문항 디버깅, 파싱 도구, DEMO 생성
     dev/                 # 개발 서버 + 개발 전용 테스트 화면(dev-ui.html), 진단 도구
     __fixtures__/        # axr-synthetic-v1(제공 원본), academies-v1(가상 3곳), academies-v2(개발 1곳 + 미공개 평가 3곳, 동결),
-                         # documents-v1(파서 시험 파일), eval-results(평가 결과 JSON/CSV)
+                         # documents-v1(파서 시험 파일)
     __tests__/           # 회귀·보안·파서·PDF 통합·HTTP·변경 반영·생성 장애·단위 테스트
 ```
 
@@ -109,7 +110,7 @@ mock 생성까지 확인하려면:
 RAG_GENERATION_PROVIDER=mock npm run rag:dev
 ```
 
-평가 실행(결과: `server/__fixtures__/eval-results/<label>/`):
+평가 결과는 기본적으로 로컬 `server/__fixtures__/eval-results/<label>/`에 저장됩니다. 이 출력 경로는 Git 추적 대상에서 제외합니다.
 
 ```bash
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/run-eval.ts --suite v1-paraphrase-100,v1-90,v2-dev --variant rag-bm25,engine --label my-run
@@ -196,7 +197,7 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 
 ## 6. 검증 요약
 
-자세한 수치·방법은 [TEST_REPORT.md](TEST_REPORT.md) 에 있습니다. 미공개 평가 393문항은 엔진을 고정한 뒤 **한 번만** 실행했습니다.
+기존 393문항은 최초 평가 당시 미공개였고 현재는 공개 회귀에 사용합니다. 새 가상 학원 3곳의 300문항 첫 실행에서 계획 엔진은 슬롯 v4.1 기준 288개를 통과했습니다. [평가 기준과 측정 범위](EVALUATION_CRITERIA.md) · [실험별 결과](TEST_REPORT.md)
 
 ---
 
@@ -252,4 +253,4 @@ npm.cmd run rag:dev
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/generation/smoke-provider.ts
 ```
 
-현재 정확도 목표는 새 학원 독립 평가에서 95%입니다. 평가 문항과 판정 기준은 [TEST_REPORT.md](TEST_REPORT.md), 기술 채택·제외 근거와 추적 파일 분류는 [RAG_TECHNIQUES.md](RAG_TECHNIQUES.md)를 참조합니다.
+95% 판정은 합성 자동 평가와 사람 검수 독립 평가를 별도로 기록합니다. [평가 기준](EVALUATION_CRITERIA.md) · [테스트 결과](TEST_REPORT.md) · [기술 채택·제외 근거](RAG_TECHNIQUES.md)
