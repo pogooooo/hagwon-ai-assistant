@@ -1,0 +1,49 @@
+[
+  {
+    "user_id": "TA_VISITOR",
+    "role": "visitor",
+    "academy_id": "AC_TEST_A",
+    "allowed_student_ids": [],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "TA_GUARDIAN_E_MATH",
+    "role": "guardian",
+    "academy_id": "AC_TEST_A",
+    "allowed_student_ids": ["TA_STU_001"],
+    "allowed_class_ids": ["TA_E_MATH"]
+  },
+  {
+    "user_id": "TA_GUARDIAN_M2",
+    "role": "guardian",
+    "academy_id": "AC_TEST_A",
+    "allowed_student_ids": ["TA_STU_002"],
+    "allowed_class_ids": ["TA_M2_EXAM"]
+  },
+  {
+    "user_id": "TA_GUARDIAN_M3",
+    "role": "guardian",
+    "academy_id": "AC_TEST_A",
+    "allowed_student_ids": ["TA_STU_003"],
+    "allowed_class_ids": ["TA_M3"]
+  },
+  {
+    "user_id": "TA_GUARDIAN_H1",
+    "role": "guardian",
+    "academy_id": "AC_TEST_A",
+    "allowed_student_ids": ["TA_STU_004"],
+    "allowed_class_ids": ["TA_H1"]
+  },
+  {
+    "user_id": "TA_DIRECTOR",
+    "role": "admin",
+    "academy_id": "AC_TEST_A",
+    "allowed_student_ids": [
+      "TA_STU_001",
+      "TA_STU_002",
+      "TA_STU_003",
+      "TA_STU_004"
+    ],
+    "allowed_class_ids": ["TA_E_MATH", "TA_M2_EXAM", "TA_M3", "TA_H1"]
+  }
+]

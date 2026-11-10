@@ -1,0 +1,30 @@
+[
+  {
+    "student_id": "TA_STU_001",
+    "academy_id": "AC_TEST_A",
+    "name": "가상학생A",
+    "aliases": ["학생A"],
+    "class_ids": ["TA_E_MATH"]
+  },
+  {
+    "student_id": "TA_STU_002",
+    "academy_id": "AC_TEST_A",
+    "name": "가상학생B",
+    "aliases": ["학생B"],
+    "class_ids": ["TA_M2_EXAM"]
+  },
+  {
+    "student_id": "TA_STU_003",
+    "academy_id": "AC_TEST_A",
+    "name": "가상학생C",
+    "aliases": ["학생C"],
+    "class_ids": ["TA_M3"]
+  },
+  {
+    "student_id": "TA_STU_004",
+    "academy_id": "AC_TEST_A",
+    "name": "가상학생D",
+    "aliases": ["학생D"],
+    "class_ids": ["TA_H1"]
+  }
+]
