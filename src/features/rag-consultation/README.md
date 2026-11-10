@@ -11,7 +11,7 @@
 | 이 README                                        | 구조·실행법·API·통합 계약·남은 위험                                             |
 | [REPORT.md](REPORT.md)                           | 범위 재정비 분류표, 기술별 적용 여부·파일·라이브러리, 제거·유지 항목, 남은 문제 |
 | [TEST_REPORT.md](TEST_REPORT.md)                 | 공개 회귀와 새 합성 평가 결과, 단계별 오류, 지연·CPU·RAM, 권한 검증             |
-| [EVALUATION_CRITERIA.md](EVALUATION_CRITERIA.md) | 현재 채점·문항 선정 기준, 95% 판정과 추적 파일 구조                             |
+| [EVALUATION_CRITERIA.md](EVALUATION_CRITERIA.md) | 상담 300문항의 선정 기준, 채점 방법, 평가 결과                                  |
 | [DEMO.md](DEMO.md)                               | 실제 실행 결과로 만든 질문·답변 예시 18개와 API 호출 예                         |
 
 ---
@@ -253,4 +253,4 @@ npm.cmd run rag:dev
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/generation/smoke-provider.ts
 ```
 
-95% 판정은 합성 자동 평가와 사람 검수 독립 평가를 별도로 기록합니다. [평가 기준](EVALUATION_CRITERIA.md) · [테스트 결과](TEST_REPORT.md) · [기술 채택·제외 근거](RAG_TECHNIQUES.md)
+[상담 300문항 평가 기준과 결과](EVALUATION_CRITERIA.md) · [실험별 결과](TEST_REPORT.md) · [기술 채택·제외 근거](RAG_TECHNIQUES.md)
