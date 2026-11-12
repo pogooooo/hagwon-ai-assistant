@@ -124,6 +124,32 @@ export async function buildInstructions(subject) {
   ].join('\n');
 }
 
+// 문항 ID의 숫자가 태그 번호로 새어 들어가지 않도록, 모델에는 숫자 없는 임시 ID를 보낸다.
+const aliasLetters = 'kqwzmhvbtnxrjpfgdscly';
+export function aliasItemIds(assignment) {
+  const n = aliasLetters.length;
+  const alias = (i) =>
+    'item-' +
+    aliasLetters[i % n] +
+    (i >= n ? aliasLetters[(Math.floor(i / n) - 1) % n] : '');
+  if (assignment.items.length > n + n * n)
+    throw Error('한 번에 분류할 수 있는 문항 수를 넘었습니다.');
+  const original = new Map(
+    assignment.items.map(({ itemId }, i) => [alias(i), itemId]),
+  );
+  return {
+    aliased: {
+      ...assignment,
+      items: assignment.items.map((item, i) => ({ ...item, itemId: alias(i) })),
+    },
+    restore: (run) =>
+      run.map((result) => ({
+        ...result,
+        itemId: original.get(result.itemId),
+      })),
+  };
+}
+
 const sameQuoteMarks = (s) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
 
 export function verifyResponse(assignment, raw) {

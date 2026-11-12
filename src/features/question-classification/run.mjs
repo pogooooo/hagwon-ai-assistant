@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
+  aliasItemIds,
   assignmentInputSchema,
   buildInstructions,
   clovaOutputSchema,
@@ -87,6 +88,7 @@ async function run() {
         },
     );
   }
+  const { aliased, restore } = aliasItemIds(readable);
   if (!readable.items.length) runs.push(inAssignmentOrder([]));
   for (let i = 0; readable.items.length && i < Number(repeats); i++) {
     const response = await fetch(
@@ -116,7 +118,7 @@ async function run() {
             {
               role: 'user',
               content: JSON.stringify(
-                readable.items.map(({ itemId, text }) => ({ itemId, text })),
+                aliased.items.map(({ itemId, text }) => ({ itemId, text })),
               ),
             },
           ],
@@ -139,7 +141,9 @@ async function run() {
     const json = content
       .trim()
       .replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1');
-    runs.push(inAssignmentOrder(verifyResponse(readable, JSON.parse(json))));
+    runs.push(
+      inAssignmentOrder(restore(verifyResponse(aliased, JSON.parse(json)))),
+    );
   }
   const classifiedAt = new Date().toISOString();
   const record = makeHandoff(assignment, runs, classifiedAt);

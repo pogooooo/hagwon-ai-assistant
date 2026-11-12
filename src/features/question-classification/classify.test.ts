@@ -16,6 +16,7 @@ test('수학 전사의 표기 차이는 허용하고 지수·밑·부호 차이�
   assert.ok(compareMathReadings('[불명]', '[불명]'));
 });
 import {
+  aliasItemIds,
   assignmentSchema,
   clovaOutputSchema,
   verifyResponse,
@@ -117,6 +118,30 @@ test('인용의 따옴표 종류 차이만 허용하고 원문 구절로 되돌�
   const altered = check("'x² > x이다'의 참·거짓");
   assert.equal(altered.quoteVerified, false);
   assert.equal(altered.status, 'held');
+});
+test('모델에 보내는 임시 문항 ID는 숫자가 없고 고유하며 원래 ID로 되돌아간다', () => {
+  const many = {
+    ...assignment,
+    items: Array.from({ length: 60 }, (_, i) => ({
+      ...assignment.items[0],
+      itemId: 'q' + (i + 1),
+      displayNumber: String(i + 1),
+    })),
+  };
+  const { aliased, restore } = aliasItemIds(many);
+  const ids: string[] = aliased.items.map(
+    (item: { itemId: string }) => item.itemId,
+  );
+  assert.equal(new Set(ids).size, 60);
+  assert.ok(ids.every((id) => !/\d/.test(id)));
+  assert.equal(aliased.items[7].text, many.items[7].text);
+  const run = verifyResponse(aliased, {
+    items: ids.map((itemId) => ({ ...response([valid]).items[0], itemId })),
+  });
+  assert.deepEqual(
+    restore(run).map((result: { itemId: string }) => result.itemId),
+    many.items.map((item) => item.itemId),
+  );
 });
 test('식별자 충돌 및 다른 과목 태그는 거절한다', () => {
   assert.throws(() =>
