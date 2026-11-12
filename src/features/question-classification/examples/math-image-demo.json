@@ -1,0 +1,12 @@
+{
+  "assignmentId": "math-image-demo",
+  "subject": "M",
+  "items": [
+    {
+      "itemId": "math-demo-1",
+      "page": 1,
+      "displayNumber": "1",
+      "image": "math-1.png"
+    }
+  ]
+}
