@@ -39,10 +39,23 @@ const port = Number(process.env.AXR_OPERATIONS_PORT ?? '8791');
 if (!Number.isInteger(port) || port < 0 || port > 65535) {
   throw new Error('AXR_OPERATIONS_PORT must be a valid port number.');
 }
+const publicOrigin = process.env.AXR_OPERATIONS_PUBLIC_ORIGIN
+  ? new URL(process.env.AXR_OPERATIONS_PUBLIC_ORIGIN)
+  : undefined;
+if (
+  publicOrigin &&
+  (publicOrigin.protocol !== 'https:' ||
+    publicOrigin.href !== publicOrigin.origin + '/')
+) {
+  throw new Error('AXR_OPERATIONS_PUBLIC_ORIGIN must be an HTTPS origin.');
+}
 const filename = resolve(
   process.env.AXR_OPERATIONS_DB ?? '.local/academy-operations.sqlite',
 );
 const demoPassword = process.env.AXR_OPERATIONS_DEMO_PASSWORD ?? 'axr-demo';
+if (publicOrigin && demoPassword === 'axr-demo') {
+  throw new Error('Set a separate demo password for the public HTTPS origin.');
+}
 const db = openDatabase(filename);
 const stylesheet = readFileSync(new URL('./operations.css', import.meta.url));
 const serviceUi = readFileSync(new URL('./service-ui.js', import.meta.url));
@@ -70,14 +83,13 @@ for (const operation of modules) operation.setup(db);
 const sessionSeconds = 8 * 60 * 60;
 const sessionCookie = 'axr_operations';
 const academyDescriptions: Record<string, string> = {
-  '/directory': '반과 원생, 보호자 연결, 강사 배정을 관리합니다.',
-  '/learning': '숙제별 확인 결과와 영역·유형별 학습 기록을 확인합니다.',
-  '/makeup': '휴강·결석·보강 일정을 등록하고 확정합니다.',
-  '/homework': '숙제 배정, 답안 제출, 채점 검수와 오답을 확인합니다.',
-  '/documents': '학원 자료를 열람하고 검수·승인합니다.',
-  '/consultation': '승인된 학원 자료에 질문하고 담당자 상담을 요청합니다.',
-  '/schedule': '달력에서 정규 수업·휴보강·공지·상담 예약을 함께 확인합니다.',
-  '/settings': '상담 도우미와 AI 연결 상태를 확인합니다.',
+  '/directory': '반 편성, 원생 정보, 담당 강사',
+  '/learning': '숙제 결과와 영역별 학습 기록',
+  '/homework': '숙제 제출과 채점 결과',
+  '/documents': '수업 안내, 공지, 등록 자료',
+  '/consultation': '질문하기, 지난 상담 보기',
+  '/schedule': '수업, 휴·보강, 상담 예약',
+  '/settings': '상담 캐릭터 선택',
 };
 
 function openDatabase(path: string) {
@@ -139,10 +151,14 @@ function createSession(actor: Actor) {
   return token;
 }
 
-function setSessionCookie(response: ServerResponse, token = '') {
+function setSessionCookie(
+  response: ServerResponse,
+  secure: boolean,
+  token = '',
+) {
   response.setHeader(
     'Set-Cookie',
-    `${sessionCookie}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${token ? sessionSeconds : 0}`,
+    `${sessionCookie}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${token ? sessionSeconds : 0}${secure ? '; Secure' : ''}`,
   );
 }
 
@@ -178,12 +194,9 @@ function layout(content: string, actor?: Actor, current?: string) {
     '>' +
     h(label) +
     '</a>';
-  const brand =
-    '<a class="brand" href="/"><span class="brand-mark">온</span><span>' +
-    h(academyName) +
-    '<small>ACADEMY ASSISTANT</small></span></a>';
+  const brand = '<a class="brand" href="/">' + h(academyName) + '</a>';
   const title =
-    pages.find((p) => p.path === current)?.label ?? '학원 소식과 상담';
+    pages.find((p) => p.path === current)?.label ?? (actor ? '홈' : '로그인');
   return (
     '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
     h(title) +
@@ -193,13 +206,11 @@ function layout(content: string, actor?: Actor, current?: string) {
     '<header class="topbar ' +
     (actor ? '' : 'login-top') +
     '">' +
+    (actor ? '<span class="topbar-title">' + h(title) + '</span>' : brand) +
     (actor
-      ? '<div><span class="topbar-title">' +
-        h(title) +
-        '</span><span class="topbar-meta">확인된 학원 자료와 함께하는 상담</span></div>'
-      : brand) +
-    (actor
-      ? '<div class="session"><span>' +
+      ? '<div class="session"><a class="profile-link" href="/settings" aria-label="설정"><img src="/assets/' +
+        character +
+        '.png" alt=""></a><span>' +
         h(actor.name) +
         ' · ' +
         h(roleLabels[actor.role]) +
@@ -209,16 +220,10 @@ function layout(content: string, actor?: Actor, current?: string) {
     (actor
       ? '<div class="workspace"><aside class="sidebar">' +
         brand +
-        '<div class="nav-section-label">우리 학원</div><nav aria-label="학원 운영">' +
+        '<nav aria-label="학원 운영">' +
         nav('/', '홈') +
         pages.map((p) => nav(p.path, p.label)).join('') +
-        '</nav><div class="sidebar-foot"><div class="helper-card"><img src="/assets/' +
-        character +
-        '.png" alt="상담 도우미"><div><small>자료와 함께 답하는</small><strong>우리 학원 상담 도우미</strong></div></div><div class="sidebar-profile">' +
-        h(actor.name) +
-        ' · ' +
-        h(roleLabels[actor.role]) +
-        '</div></div></aside><main id="main-content">' +
+        '</nav></aside><main id="main-content">' +
         content +
         '</main></div><nav class="mobile-nav" aria-label="주요 메뉴">' +
         nav('/', '홈') +
@@ -275,13 +280,13 @@ function loginPage(message = '') {
 }
 
 function home(actor: Actor) {
-  return `<section class="welcome"><div><p class="eyebrow">ACADEMY ASSISTANT</p><h1>안녕하세요,<br>무엇이 궁금하신가요?</h1><p>학원 소식부터 학생의 학습 기록까지.<br>확인된 자료로 함께 살펴보세요.</p></div><div class="welcome-art"><img src="/assets/${selectedCharacter({ db, actor })}.png" alt="상담 도우미"></div></section>
+  return `<div class="page-heading"><h1>${actor.role === 'admin' || actor.role === 'teacher' ? '학원 운영' : '우리 학원'}</h1></div>
     <div class="module-grid home-cards">${visibleModules(actor)
       .map(
         (
           operation,
         ) => `<a class="panel module-card" href="${h(operation.path)}">
-      <span class="card-symbol" aria-hidden="true">${({ '/consultation': '✦', '/learning': '▥', '/makeup': '▦', '/homework': '✓', '/documents': '▤', '/schedule': '◷', '/directory': '◎', '/settings': '⚙' } as Record<string, string>)[operation.path]}</span><h2>${h(operation.label)}</h2>
+      <h2>${h(operation.label)}</h2>
       <p>${h(academyDescriptions[operation.path])}</p>
     </a>`,
       )
@@ -337,8 +342,11 @@ async function readForm(request: IncomingMessage, url: URL) {
 }
 
 function verifyOrigin(request: IncomingMessage, url: URL) {
+  const origin =
+    request.headers.origin ??
+    (url.protocol === 'http:' ? url.origin : undefined);
   if (
-    (request.headers.origin && request.headers.origin !== url.origin) ||
+    origin !== url.origin ||
     request.headers['sec-fetch-site'] === 'cross-site'
   ) {
     throw new OperationError('이 화면에서 다시 요청해 주세요.', 403);
@@ -354,14 +362,20 @@ async function serve(request: IncomingMessage, response: ServerResponse) {
   );
   const host = request.headers.host;
   const localPort = request.socket.localPort;
-  if (host !== `127.0.0.1:${localPort}` && host !== `localhost:${localPort}`) {
+  const requestOrigin =
+    publicOrigin && host === publicOrigin.host
+      ? publicOrigin.origin
+      : host === `127.0.0.1:${localPort}` || host === `localhost:${localPort}`
+        ? `http://${host}`
+        : undefined;
+  if (!requestOrigin) {
     response.writeHead(400).end();
     return;
   }
   let actor: Actor | undefined;
   try {
-    const url = new URL(request.url ?? '/', `http://${host}`);
-    if (url.host !== host)
+    const url = new URL(request.url ?? '/', requestOrigin);
+    if (url.origin !== requestOrigin)
       throw new OperationError('올바른 주소에서 접속해 주세요.');
     if (request.method === 'GET' && url.pathname === '/service-ui.js') {
       response.writeHead(200, {
@@ -420,7 +434,7 @@ async function serve(request: IncomingMessage, response: ServerResponse) {
         );
         return;
       }
-      setSessionCookie(response, token);
+      setSessionCookie(response, url.protocol === 'https:', token);
       redirect(response, '/');
       return;
     }
@@ -432,7 +446,7 @@ async function serve(request: IncomingMessage, response: ServerResponse) {
     }
     if (url.pathname === '/logout' && request.method === 'POST') {
       deleteSession(request);
-      setSessionCookie(response);
+      setSessionCookie(response, url.protocol === 'https:');
       redirect(response, '/login');
       return;
     }

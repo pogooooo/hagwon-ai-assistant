@@ -107,6 +107,12 @@ RAG_GENERATION_DAILY_CALL_LIMIT=100
 
 브라우저에서는 달력의 정규/휴강/보강 표시, 목업 캐릭터 3종과 계정별 선택, 캐릭터 변경 중 질문 초안 유지, 모바일 가로 넘침을 확인했습니다. 원본 목업의 HTML/CSS·자산을 대조했으며 픽셀 단위 복제 검증은 아닙니다.
 
+## Cloudflare 데모
+
+[AXR 가상 학원](https://axr-academy.pogoo.workers.dev/login)은 Cloudflare Worker와 VPC 서비스를 통해 배포 PC의 `127.0.0.1:8793`에 연결됩니다. PC에서 Node 서버와 Cloudflare Tunnel이 실행 중일 때 접속할 수 있습니다. 가상 학원 전용 DB는 `.local/cloudflare-demo/academy.sqlite`입니다.
+
+배포 PC에서 서버를 다시 시작할 때 저장소 루트에서 `node --env-file=.local/cloudflare-demo/demo.env src/features/academy-operations/server.ts`를 실행합니다. 이 설정의 `AXR_OPERATIONS_PUBLIC_ORIGIN`은 Worker의 `AXR_PUBLIC_ORIGIN`과 같은 HTTPS 주소를 사용합니다. Worker를 다시 배포하려면 `.local/cloudflare-demo/wrangler.jsonc`를 사용합니다.
+
 ## 남은 운영 연결
 
 로컬 SQLite·가상 계정에서 구현·검증했습니다. 실제 팀 채점/분류 산출물 연결, 외부 인증·운영 DB/호스팅, 문자·알림톡 발송, 실제 CLOVA 계정 검증은 외부 시스템/자료가 필요합니다. 운영 업로드는 텍스트 PDF·DOCX·HWPX·TXT·Markdown을 읽습니다. 스캔 전용 PDF의 운영 업로드 OCR은 연결하지 않았고 확인된 텍스트를 별도로 입력합니다. RAG 자체 OCR과 원본 평가 경로는 보존했습니다. AI로 학습 원인·태도·미래 성적을 임의 진단하지 않습니다.

@@ -83,7 +83,7 @@ export const calendarModule: OperationModule = {
     teamScheduleModule.setup(db);
   },
   async render(ctx) {
-    return `<div class="page-heading"><p class="eyebrow">ACADEMY CALENDAR</p><h1>일정·예약</h1><p>정규 수업, 휴·보강, 학원 공지와 상담 예약을 한곳에서 확인합니다.</p></div>${calendar(ctx)}<nav class="section-links"><a href="#makeup">휴·보강 관리</a><a href="#notices-bookings">공지·상담 예약</a></nav><section id="makeup">${await teamScheduleModule.render(ctx)}</section><section id="notices-bookings">${await scheduleModule.render(ctx)}</section>`;
+    return `<div class="page-heading"><h1>일정·예약</h1></div>${calendar(ctx)}<nav class="section-links"><a href="#makeup">휴·보강 관리</a><a href="#notices-bookings">공지·상담 예약</a></nav><section id="makeup">${await teamScheduleModule.render(ctx)}</section><section id="notices-bookings">${await scheduleModule.render(ctx)}</section>`;
   },
   async submit(ctx, form) {
     if (teamActions.has(field(form, 'action')))

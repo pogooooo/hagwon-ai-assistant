@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const demoPassword = 'axr-http-test';
 
-async function startOperations(t: TestContext) {
+async function startOperations(t: TestContext, publicOrigin = '') {
   const directory = mkdtempSync(join(tmpdir(), 'axr-operations-test-'));
   const filename = join(directory, 'academy.sqlite');
   const child = spawn(
@@ -28,6 +28,7 @@ async function startOperations(t: TestContext) {
         AXR_OPERATIONS_DB: filename,
         AXR_OPERATIONS_PORT: '0',
         AXR_OPERATIONS_DEMO_PASSWORD: demoPassword,
+        AXR_OPERATIONS_PUBLIC_ORIGIN: publicOrigin,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -93,6 +94,52 @@ async function startOperations(t: TestContext) {
 
   return { origin, send, login, readDatabase, filename };
 }
+
+test('HTTPS 프록시 접속은 등록된 호스트와 같은 출처의 요청만 허용한다', async (t) => {
+  const publicOrigin = 'https://academy.example';
+  const { origin } = await startOperations(t, publicOrigin);
+  const body = new URLSearchParams({
+    username: 'TA_DIRECTOR',
+    password: demoPassword,
+  }).toString();
+
+  const login = (host: string, source?: string) =>
+    new Promise<{ status: number | undefined; cookie: string | undefined }>(
+      (resolve, reject) => {
+        const req = request(
+          origin + '/login',
+          {
+            method: 'POST',
+            headers: {
+              host,
+              ...(source ? { origin: source } : {}),
+              'content-type': 'application/x-www-form-urlencoded',
+              'content-length': Buffer.byteLength(body),
+            },
+          },
+          (res) => {
+            res.resume();
+            resolve({
+              status: res.statusCode,
+              cookie: res.headers['set-cookie']?.[0],
+            });
+          },
+        );
+        req.on('error', reject);
+        req.end(body);
+      },
+    );
+
+  assert.equal((await login('unrelated.example', publicOrigin)).status, 400);
+  assert.equal(
+    (await login('academy.example', 'https://unrelated.example')).status,
+    403,
+  );
+  assert.equal((await login('academy.example')).status, 403);
+  const accepted = await login('academy.example', publicOrigin);
+  assert.equal(accepted.status, 303);
+  assert.match(accepted.cookie ?? '', /; Secure$/);
+});
 
 test(
   '요청 본문을 읽는 중 관리자 권한이 회수되면 반을 생성하지 않는다',

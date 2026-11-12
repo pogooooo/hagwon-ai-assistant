@@ -28,7 +28,7 @@ export function selectedCharacter(
 }
 export const preferencesModule: OperationModule = {
   path: '/settings',
-  label: '화면·AI 설정',
+  label: '설정',
   roles: ['admin', 'teacher', 'student', 'guardian', 'visitor'],
   setup(db) {
     db.exec(
@@ -38,7 +38,7 @@ export const preferencesModule: OperationModule = {
   render(ctx) {
     const generation = operationsGeneration();
     const choice = selectedCharacter(ctx);
-    return `<div class="page-heading"><h1>화면·AI 설정</h1><p>상담 내용은 유지하고 도우미 캐릭터만 바꿉니다.</p></div><section class="panel"><form method="post"><input type="hidden" name="action" value="character"><div class="character-options">${Object.entries(
+    return `<div class="page-heading"><h1>설정</h1></div><section class="panel"><h2>상담 캐릭터</h2><form method="post"><input type="hidden" name="action" value="character"><div class="character-options">${Object.entries(
       characters,
     )
       .map(
