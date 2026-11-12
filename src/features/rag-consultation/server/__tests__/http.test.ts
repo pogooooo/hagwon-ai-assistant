@@ -173,6 +173,18 @@ describe('관리자 색인 API', () => {
     assert.equal(response.status, 202);
     const job = await response.json();
     assert.equal(job.status, 'activated');
+    const otherRegistration = await post(
+      '/index',
+      {
+        document: { ...document, academyId: 'AC_B', title: 'B학원 셔틀 안내' },
+        approve: true,
+      },
+      'ADMIN_B',
+    );
+    assert.equal(otherRegistration.status, 202);
+    const otherJob = await otherRegistration.json();
+    assert.equal(otherJob.status, 'activated');
+    assert.notEqual(otherJob.jobId, job.jobId);
     const status = await handler(
       new Request(`http://localhost/api/rag/index/jobs/${job.jobId}`, {
         headers: { 'x-test-user': 'ADMIN_A' },
@@ -185,5 +197,26 @@ describe('관리자 색인 API', () => {
       }),
     );
     assert.equal(other.status, 404);
+    const otherPath = `http://localhost/api/rag/index/jobs/${otherJob.jobId}`;
+    assert.equal(
+      (
+        await handler(
+          new Request(otherPath, {
+            headers: { 'x-test-user': 'ADMIN_B' },
+          }),
+        )
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await handler(
+          new Request(otherPath, {
+            headers: { 'x-test-user': 'ADMIN_A' },
+          }),
+        )
+      ).status,
+      404,
+    );
   });
 });

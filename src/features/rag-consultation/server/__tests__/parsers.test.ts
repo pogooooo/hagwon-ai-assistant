@@ -302,6 +302,48 @@ describe('DOCX · HWPX · TXT', () => {
     ]);
   });
 
+  test('DOCX: 가로·세로 병합과 행 시작 위치를 반영해 실제 요일 열을 유지한다', async () => {
+    const cell = (text: string, properties = '') =>
+      `<w:tc><w:tcPr>${properties}</w:tcPr><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+    const xml = `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body><w:tbl>
+        <w:tr>${['반', '월요일', '화요일', '수요일'].map((value) => cell(value)).join('')}</w:tr>
+        <w:tr>${cell('초등 수학반', '<w:vMerge w:val="restart"/>')}${cell('휴강', '<w:gridSpan w:val="2"/>')}${cell('17:00~18:00')}</w:tr>
+        <w:tr>${cell('', '<w:vMerge/>')}${cell('자습', '<w:gridSpan w:val="2"/>')}${cell('18:00~19:00')}</w:tr>
+        <w:tr><w:trPr><w:gridBefore w:val="1"/></w:trPr>${cell('안내 없음', '<w:gridSpan w:val="2"/>')}${cell('19:00~20:00')}</w:tr>
+      </w:tbl></w:body>
+    </w:document>`;
+    const parsed = await parseSourceFile({
+      bytes: zipSync({ 'word/document.xml': strToU8(xml) }),
+      fileName: 'merged-schedule.docx',
+      ocr: null,
+    });
+    assert.equal(parsed.status, 'ok');
+    const rows = tableRows(parsed.text);
+    assert.deepEqual(
+      rows.map(({ location }) => location.cells),
+      [
+        ['초등 수학반', '휴강', '휴강', '17:00~18:00'],
+        ['초등 수학반', '자습', '자습', '18:00~19:00'],
+        ['', '안내 없음', '안내 없음', '19:00~20:00'],
+      ],
+    );
+    assert.match(rows[0].text, /화요일: 휴강 \/ 수요일: 17:00~18:00/);
+  });
+
+  test('DOCX: 시작 셀이 없는 세로 병합은 잘못된 열로 답하지 않도록 실패 처리한다', async () => {
+    const xml = `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body><w:tbl><w:tr><w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p/></w:tc></w:tr></w:tbl></w:body>
+    </w:document>`;
+    const parsed = await parseSourceFile({
+      bytes: zipSync({ 'word/document.xml': strToU8(xml) }),
+      fileName: 'invalid-merge.docx',
+      ocr: null,
+    });
+    assert.equal(parsed.status, 'failed');
+    assert.equal(parsed.error, 'corrupt');
+  });
+
   test('HWPX: 문단과 표(번호 문단은 절 제목)', async () => {
     const parsed = await parse('PX_HWPX_REFUND__r1.hwpx');
     assert.equal(parsed.format, 'hwpx');

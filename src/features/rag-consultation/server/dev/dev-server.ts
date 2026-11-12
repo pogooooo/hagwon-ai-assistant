@@ -5,7 +5,7 @@
  *   curl -s localhost:8787/api/rag/query -H 'content-type: application/json' \
  *     -H 'x-dev-user: GA_GUARDIAN_KIM' -d '{"question":"서윤이 10월 성적 알려주세요"}'
  *
- * 자료: 합성 v1 스모크셋 + 가상 학원 3곳(academies-v1) + 개발용 가상 학원 1곳(academies-v2 AC_HANGYEOL).
+ * 자료: 합성 v1 스모크셋, 가상 학원, 개발용 가상 학원, 팀 휴·보강 자료.
  *       미공개 평가 학원(academies-v2 의 나머지)은 이 서버에 올리지 않는다.
  *
  * - 127.0.0.1 에만 바인딩한다. x-dev-user 헤더 / 화면의 계정 선택은 이 dev 서버에서만 허용되는 모의 인증이다.
@@ -57,6 +57,7 @@ import {
 const port = Number(process.env.RAG_DEV_PORT ?? 8787);
 const allowedOrigin =
   process.env.RAG_DEV_ALLOWED_ORIGIN ?? 'http://localhost:3000';
+const engine = process.env.RAG_DEV_ENGINE === 'legacy' ? 'legacy' : 'planned';
 
 // 검색기(개발 화면에 표시): 모델을 못 불러오면 BM25 로 내려간다.
 const retrieverChoice = process.env.RAG_DEV_RETRIEVER ?? 'bm25';
@@ -71,20 +72,33 @@ const academiesV1 = readAcademiesDataset();
 const academiesV2Dev = readAcademiesDataset(V2_DIR, {
   folders: ['AC_HANGYEOL'],
 });
-const store = await buildAcademiesStore(
-  academiesV2Dev,
-  await buildAcademiesStore(
-    academiesV1,
-    await buildFixtureStore(
-      data,
-      new InMemoryRagStore({ ranker: retriever.ranker }),
-    ),
-  ),
-  { ocr: null },
+const makeupSchedule = readAcademiesDataset(
+  join(import.meta.dirname, '../../../makeup-schedule/academies'),
 );
+const academyFixtures = [
+  { dataset: academiesV1, label: 'academies-v1' },
+  { dataset: academiesV2Dev, label: 'academies-v2(dev)' },
+  { dataset: makeupSchedule, label: 'makeup-schedule' },
+];
+const store = await buildFixtureStore(
+  data,
+  new InMemoryRagStore({ ranker: retriever.ranker }),
+);
+const unreadableFixtures = new Set<string>();
+for (const { dataset } of academyFixtures) {
+  await buildAcademiesStore(dataset, store, {
+    ocr: null,
+    onUnreadable: (document, reason) => {
+      unreadableFixtures.add(document.file);
+      console.warn(
+        `[rag-dev] 미리보기에서 색인 제외: ${document.file} (${reason})`,
+      );
+    },
+  });
+}
 const v1Catalog = createFixtureCatalogPort(data);
-const academyCatalogs = [academiesV1, academiesV2Dev].map(
-  createAcademyCatalogPort,
+const academyCatalogs = academyFixtures.map(({ dataset }) =>
+  createAcademyCatalogPort(dataset),
 );
 const catalog: CatalogPort = {
   async getAcademyCatalog(academyId) {
@@ -96,7 +110,9 @@ const catalog: CatalogPort = {
   },
 };
 const accessPorts = [
-  ...[academiesV1, academiesV2Dev].map(createAcademyAccessScopePort),
+  ...academyFixtures.map(({ dataset }) =>
+    createAcademyAccessScopePort(dataset),
+  ),
   createFixtureAccessScopePort(data),
 ];
 async function resolveAccess(userId: string): Promise<RagAccessScope | null> {
@@ -114,6 +130,7 @@ const conversations = new InMemoryConversationStore();
 const handoff = new InMemoryHandoffStore();
 const indexQueue = new IndexJobQueue({ documents: store, clock, logger });
 const service = createRagConsultationService({
+  engine,
   facts: store,
   documents: store,
   catalog,
@@ -151,8 +168,9 @@ interface DevDocument {
 }
 const users = [
   ...data.users.map((u) => ({ ...u, dataset: 'v1-smoke' })),
-  ...academiesV1.users.map((u) => ({ ...u, dataset: 'academies-v1' })),
-  ...academiesV2Dev.users.map((u) => ({ ...u, dataset: 'academies-v2(dev)' })),
+  ...academyFixtures.flatMap(({ dataset, label }) =>
+    dataset.users.map((user) => ({ ...user, dataset: label })),
+  ),
 ].map((u) => ({
   userId: u.user_id,
   role: u.role,
@@ -161,7 +179,10 @@ const users = [
 }));
 const academyDocs = (dataset: AcademiesDataset, origin: string) =>
   dataset.documents
-    .filter((d) => d.meta.status === 'approved_active')
+    .filter(
+      (d) =>
+        d.meta.status === 'approved_active' && !unreadableFixtures.has(d.file),
+    )
     .map((d) => ({
       academyId: d.file.split('/')[0],
       documentId: d.meta.document_id,
@@ -183,8 +204,9 @@ const documents: DevDocument[] = [
       visibility: 'fixture',
       origin: 'v1-smoke',
     })),
-  ...academyDocs(academiesV1, 'academies-v1'),
-  ...academyDocs(academiesV2Dev, 'academies-v2(dev)'),
+  ...academyFixtures.flatMap(({ dataset, label }) =>
+    academyDocs(dataset, label),
+  ),
 ];
 
 // ── 개발 전용 API ──────────────────────────────────────────────────
@@ -202,6 +224,7 @@ async function devApi(request: Request, path: string): Promise<Response> {
     return json(200, {
       users,
       documents,
+      engine,
       retriever: {
         choice: retrieverChoice,
         strategy,
@@ -296,7 +319,7 @@ async function devApi(request: Request, path: string): Promise<Response> {
     };
     const ports = instrumentStore(store, recorder, documentIds);
     const devService = createRagConsultationService({
-      engine: process.env.RAG_DEV_ENGINE === 'planned' ? 'planned' : 'legacy',
+      engine,
       facts: ports.facts,
       documents: ports.documents,
       catalog,

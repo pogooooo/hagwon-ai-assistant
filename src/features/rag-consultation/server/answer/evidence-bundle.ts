@@ -159,10 +159,18 @@ export function validateEvidence(
           ? member.fact.subjectId
           : member.fact.classId
         : member.chunk.classId;
+    // A learner's dated private result remains their evidence after a class transfer.
+    // Explicit class requests still constrain it; all source ACL checks remain in force.
+    const personalEvidence =
+      member.kind === 'fact'
+        ? member.fact.subjectType === 'student'
+        : member.chunk.visibility === 'student_private';
+    const requestedClasses =
+      personalEvidence && !ctx.frame.classIds.length ? [] : classes;
     if (
       classId &&
       (ctx.frame.negatedClassIds.includes(classId) ||
-        (classes.length && !classes.includes(classId)))
+        (requestedClasses.length && !requestedClasses.includes(classId)))
     ) {
       return decision(
         'missing',

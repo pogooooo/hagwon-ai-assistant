@@ -114,7 +114,8 @@ export function instrumentStore(
     corpusContains: (
       input: Parameters<InMemoryRagStore['corpusContains']>[0],
     ) => store.corpusContains(input),
-    factRefsAtChunk: (chunkId: string) => store.factRefsAtChunk(chunkId),
+    factRefsAtChunk: (chunkId: string, academyId?: string) =>
+      store.factRefsAtChunk(chunkId, academyId),
   };
   return { facts, documents };
 }

@@ -37,6 +37,11 @@ import {
 } from './answer/event-evidence.ts';
 import { answerConsultationWindow } from './answer/consultation-window.ts';
 import { answerEventLogistics } from './answer/event-logistics.ts';
+import {
+  answerClosureRefundAmount,
+  answerDatedScheduleNotice,
+  answerStudentAbsence,
+} from './answer/schedule-notice.ts';
 import { answerAnnouncementConflict } from './answer/announcement-conflict.ts';
 import {
   answerCohortBoundaries,
@@ -348,6 +353,11 @@ export function createRagConsultationService(
         trace.domain = 'info';
         return consultationWindow;
       }
+      const closureRefund = await answerClosureRefundAmount(ctx);
+      if (closureRefund) {
+        trace.domain = 'info';
+        return closureRefund;
+      }
       const policy = await answerPolicyEvidence(ctx, studentIdHint);
       if (policy) {
         trace.domain = 'info';
@@ -374,7 +384,10 @@ export function createRagConsultationService(
           },
         });
       }
-      const closure = await answerClosureMakeup(ctx);
+      const closure =
+        (await answerStudentAbsence(ctx, studentIdHint)) ??
+        (await answerDatedScheduleNotice(ctx)) ??
+        (await answerClosureMakeup(ctx));
       if (closure) {
         trace.domain = 'info';
         return closure;

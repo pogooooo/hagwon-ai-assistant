@@ -7,10 +7,28 @@
 import { createHash } from 'node:crypto';
 
 import { normalizeText } from '../text/normalize.ts';
-import { parseInstant, parseOptionalInstant } from '../text/time.ts';
+import { parseInstant } from '../text/time.ts';
 import type { ApprovedFactInput, SourceDocumentInput } from '../types.ts';
 
 const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+const INDEX_TIMESTAMP =
+  /^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function parseIndexTimestamp(value: string): number {
+  const date = INDEX_TIMESTAMP.exec(value)?.[1];
+  if (!date) throw new Error('Invalid timestamp format');
+  const calendarDay = new Date(parseInstant(date + 'T00:00:00Z'));
+  // Date.parse can normalize dates such as February 30 without an error.
+  if (!calendarDay.toISOString().startsWith(date))
+    throw new Error('Invalid calendar day');
+  return parseInstant(value);
+}
+
+function parseOptionalIndexTimestamp(
+  value: string | null | undefined,
+): number | null {
+  return value == null ? null : parseIndexTimestamp(value);
+}
 
 const INJECTION_PATTERNS = [
   /(시스템|system)\s*(지시|프롬프트|prompt|instruction)/i,
@@ -43,9 +61,18 @@ export function contentHash(
   facts: ApprovedFactInput[],
 ): string {
   const hash = createHash('sha256');
+  const content = { ...document };
+  // A draft can acquire its approval time without changing content.
+  delete content.approvedAt;
+  delete content.sourceId;
   hash.update(
     JSON.stringify({
-      document: { ...document, sourceId: document.sourceId ?? null },
+      document: {
+        ...content,
+        sourceId:
+          document.sourceId ??
+          `${document.documentId}:r${document.revision}:body`,
+      },
       facts: [...facts].sort((a, b) => a.factId.localeCompare(b.factId)),
     }),
   );
@@ -82,13 +109,39 @@ export function validateDocument(
   let validFrom: number | null = null;
   let validTo: number | null = null;
   try {
-    validFrom = parseInstant(document.validFrom);
-    validTo = parseOptionalInstant(document.validTo);
+    validFrom = parseIndexTimestamp(document.validFrom);
+    validTo = parseOptionalIndexTimestamp(document.validTo);
   } catch {
     problems.push('valid_interval_format');
   }
   if (validFrom !== null && validTo !== null)
     check(validTo > validFrom, 'valid_interval_order');
+  for (const field of ['approvedAt', 'sourceUpdatedAt'] as const) {
+    try {
+      parseOptionalIndexTimestamp(document[field]);
+    } catch {
+      problems.push(field);
+    }
+  }
+
+  check(
+    [
+      'academy_public',
+      'student_private',
+      'class_members',
+      'staff_only',
+    ].includes(document.visibility),
+    'visibility',
+  );
+  if (document.studentId != null) {
+    check(ID_PATTERN.test(document.studentId), 'studentId');
+    check(
+      document.visibility === 'student_private',
+      'student_document_must_be_private',
+    );
+  }
+  if (document.classId != null)
+    check(ID_PATTERN.test(document.classId), 'classId');
 
   const isStudentDocument =
     document.documentType === 'student_analysis' ||
@@ -143,8 +196,8 @@ export function validateDocument(
       );
     }
     try {
-      const from = parseInstant(fact.validFrom);
-      const to = parseOptionalInstant(fact.validTo);
+      const from = parseIndexTimestamp(fact.validFrom);
+      const to = parseOptionalIndexTimestamp(fact.validTo);
       if (to !== null) check(to > from, `${label}:valid_interval_order`);
     } catch {
       problems.push(`${label}:valid_interval_format`);

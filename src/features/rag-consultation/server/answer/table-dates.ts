@@ -1,5 +1,6 @@
 import { kstStartOfDay, toKstDate } from '../text/time.ts';
 import type { QueryFrame } from '../query/parse-query.ts';
+import type { FactValue } from '../types.ts';
 
 const weekdays = '일월화수목금토';
 const dayMs = 24 * 60 * 60 * 1000;
@@ -68,6 +69,39 @@ export function tableDateAt(
 ): number | undefined {
   const date = parseTableDate(value);
   return date && checkedDate(date, date.year ?? inferredYear);
+}
+
+/** The event interval is separate from the lifetime of the approved announcement. */
+export function scheduleChangeInterval(
+  value: Extract<FactValue, { kind: 'schedule_change' }>,
+) {
+  const day = tableDateAt(value.date, 0);
+  if (day === undefined) return;
+  const { event } = value;
+  if (event) {
+    const { startsAt, endsAt } = event;
+    return Number.isSafeInteger(startsAt) &&
+      Number.isSafeInteger(endsAt) &&
+      startsAt >= day &&
+      startsAt < day + dayMs &&
+      startsAt < endsAt
+      ? { start: startsAt, end: endsAt }
+      : undefined;
+  }
+  const time = /^(\d{2}):(\d{2})\s*[~–-]\s*(\d{2}):(\d{2})$/.exec(
+    value.time ?? '',
+  );
+  if (!time) return { start: day, end: day + dayMs };
+  const [, startHour, startMinute, endHour, endMinute] = time.map(Number);
+  const start = day + (startHour * 60 + startMinute) * 60_000;
+  const end = day + (endHour * 60 + endMinute) * 60_000;
+  return startHour < 24 &&
+    endHour < 24 &&
+    startMinute < 60 &&
+    endMinute < 60 &&
+    start < end
+    ? { start, end }
+    : undefined;
 }
 
 function checkedDate(date: TableDate, year: number): number | undefined {

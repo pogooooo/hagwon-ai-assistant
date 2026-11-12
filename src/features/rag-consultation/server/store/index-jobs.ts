@@ -1,9 +1,9 @@
 /**
  * 색인 작업 큐(Transactional Outbox 의 해커톤용 축소판).
- * - idempotencyKey = documentId:revision:jobType 로 중복 이벤트를 하나로 합친다.
+ * - 같은 학원·문서·개정에 대해 동일한 작업만 중복으로 처리한다.
  * - 같은 문서의 낮은 revision 부터 처리하고, 늦게 도착한 낮은 revision 은 저장소가 거부한다.
  * - 실패 시 지수 백오프로 재시도, 최대 횟수 초과 시 dead(운영자 확인 필요).
- * - 새 revision 이 검증되기 전까지 이전 revision 이 활성으로 남지만, 삭제·철회는 즉시 반영된다.
+ * - 승인된 새 revision 이 검증될 때까지 이전 revision 을 현재 값으로 답하지 않는다.
  *
  * 운영 DB 에서는 "문서/채점 변경 + 작업 행"을 같은 트랜잭션으로 저장해야 한다(메모리 구현은 단일 프로세스 가정).
  */
@@ -100,7 +100,18 @@ export class IndexJobQueue {
       payload.jobType === 'upsert'
         ? payload.document.academyId
         : payload.academyId;
-    const idempotencyKey = `${documentId}:${revision ?? 'all'}:${payload.jobType}`;
+    const action =
+      payload.jobType === 'upsert'
+        ? payload.approve
+          ? 'approve'
+          : 'stage'
+        : payload.reason;
+    const idempotencyKey = JSON.stringify([
+      academyId,
+      documentId,
+      revision,
+      action,
+    ]);
     const existingId = this.byKey.get(idempotencyKey);
     if (existingId) {
       const existing = this.jobs.get(existingId);
@@ -153,6 +164,7 @@ export class IndexJobQueue {
       .filter((job) => job.status === 'pending' && job.nextAttemptAt <= now)
       .sort(
         (a, b) =>
+          a.academyId.localeCompare(b.academyId) ||
           a.documentId.localeCompare(b.documentId) ||
           (a.revision ?? Number.MAX_SAFE_INTEGER) -
             (b.revision ?? Number.MAX_SAFE_INTEGER) ||
@@ -172,6 +184,7 @@ export class IndexJobQueue {
     try {
       if (payload.jobType === 'revoke') {
         await this.documents.revokeRevision({
+          academyId: payload.academyId,
           documentId: payload.documentId,
           revision: payload.revision,
           reason: payload.reason,

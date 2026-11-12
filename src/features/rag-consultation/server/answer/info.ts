@@ -34,6 +34,7 @@ import {
   type EvidenceExcerpt,
 } from './context.ts';
 import { formatKrw, josa } from './format.ts';
+import { scheduleChangeInterval } from './table-dates.ts';
 import { uncertainOcrNumbers } from './verify.ts';
 
 interface Part {
@@ -963,8 +964,14 @@ async function answerScheduleChange(
     candidates = [...cancels, ...makeups];
   } else if (range) {
     candidates = candidates.filter((fact) => {
-      const day =
-        fact.value.kind === 'schedule_change' ? dayOf(fact.value.date) : 0;
+      if (fact.value.kind !== 'schedule_change') return false;
+      if (fact.value.event) {
+        const interval = scheduleChangeInterval(fact.value);
+        return (
+          !!interval && interval.start < range.end && range.start < interval.end
+        );
+      }
+      const day = dayOf(fact.value.date);
       return day >= range.start && day < range.end;
     });
   } else {

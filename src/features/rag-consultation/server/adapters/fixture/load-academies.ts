@@ -444,12 +444,14 @@ export interface BuildStoreOptions {
     parsed: ParsedFile,
     cached: boolean,
   ) => void;
+  /** 개발 미리보기에서 파싱할 수 없는 파일을 로그에 남기고 색인에서 건너뛴다. */
+  onUnreadable?: (document: AcademyDocument, reason: string) => void;
 }
 
 async function documentInput(
   document: AcademyDocument,
   options: BuildStoreOptions,
-): Promise<SourceDocumentInput> {
+): Promise<SourceDocumentInput | null> {
   const base = toAcademyDocumentInput(document);
   if (!document.source) return base;
   const bytes = new Uint8Array(readFileSync(document.source.path));
@@ -459,8 +461,12 @@ async function documentInput(
       : options.ocr === null
         ? 'disabled'
         : `custom:${options.ocr.id}`;
+  // Invalidate the old collapsed DOCX grids without repeating cached PDF OCR.
+  const parserVersion = /\.docx$/i.test(document.source.fileName)
+    ? PARSER_VERSION + ':docx-grid-1'
+    : PARSER_VERSION;
   const key = createHash('sha256')
-    .update(JSON.stringify([PARSER_VERSION, document.source.fileName, ocrMode]))
+    .update(JSON.stringify([parserVersion, document.source.fileName, ocrMode]))
     .update(bytes)
     .digest('hex');
   const cachePath = join(parseCacheDir(), `${key}.json`);
@@ -488,10 +494,15 @@ async function documentInput(
     mkdirSync(parseCacheDir(), { recursive: true });
     writeFileSync(cachePath, JSON.stringify(prepared.parsed));
   }
-  if (!prepared.document)
+  if (!prepared.document) {
+    if (options.onUnreadable) {
+      options.onUnreadable(document, String(prepared.parsed.error));
+      return null;
+    }
     throw new Error(
       `원본 파싱 실패: ${document.file} (${prepared.parsed.error})`,
     );
+  }
   return prepared.document;
 }
 
@@ -532,6 +543,8 @@ export async function buildAcademiesStore(
       a.meta.revision - b.meta.revision,
   );
   for (const document of ordered) {
+    const input = await documentInput(document, options);
+    if (!input) continue;
     const facts = dataset.facts
       .filter(
         (fact) =>
@@ -540,7 +553,7 @@ export async function buildAcademiesStore(
       )
       .map(toAcademyFactInput);
     const result = await store.upsertIndexedRevision({
-      document: await documentInput(document, options),
+      document: input,
       facts,
       approve: document.meta.status === 'approved_active',
     });

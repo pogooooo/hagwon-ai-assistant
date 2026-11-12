@@ -40,6 +40,8 @@ type AccuracyFact = ApprovedFact & {
     total: number;
     unit: string;
     dimension?: AccuracyDimension;
+    referenceOnly?: boolean;
+    basis?: 'classified_assessed';
   };
 };
 type WeakAreaFact = ApprovedFact & {
@@ -176,8 +178,10 @@ function labelOf(fact: AccuracyFact): string {
 function line(ctx: AnswerContext, fact: AccuracyFact): string {
   const name = studentLabel(ctx.access, fact.subjectId);
   const revision =
-    fact.revision > 1 ? ` (채점 수정 반영본 r${fact.revision})` : '';
-  return `${name} 학생 ${formatPeriod(fact.period ?? '')} ${subjectTag(ctx, fact)}${labelOf(fact)}: ${fact.value.total}문항 중 ${fact.value.correct}문항 정답(정답률 ${percent(fact)}%)${revision}.`;
+    fact.revision > 1
+      ? ` (${fact.value.basis === 'classified_assessed' ? '분석 갱신본' : '채점 수정 반영본'} r${fact.revision})`
+      : '';
+  return `${name} 학생 ${formatPeriod(fact.period ?? '')} ${subjectTag(ctx, fact)}${labelOf(fact)}${fact.value.referenceOnly ? ' (참고용)' : ''}: ${fact.value.total}문항 중 ${fact.value.correct}문항 정답(정답률 ${percent(fact)}%)${revision}.`;
 }
 
 /** 분석 기간과 근거 숙제를 함께 제시한다. */
@@ -219,6 +223,10 @@ function sortFacts<T extends ApprovedFact>(facts: T[]): T[] {
 
 function notes(ctx: AnswerContext, facts: AccuracyFact[]): string[] {
   const result: string[] = [];
+  if (facts.some((fact) => fact.value.basis === 'classified_assessed'))
+    result.push(
+      '분류 가능한 문항 중 결과가 확인된 문항 기준입니다. 미분류·결과 미확인 문항은 제외했습니다.',
+    );
   for (const asked of ctx.frame.percents) {
     if (facts.length > 0 && !facts.some((fact) => percent(fact) === asked)) {
       const latest = facts[facts.length - 1];

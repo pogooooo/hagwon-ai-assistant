@@ -12,9 +12,16 @@ import {
   onDocumentChanged,
   type AnalysisReportPublished,
 } from '../events.ts';
+import { canReadRecord } from '../retrieval/access-filter.ts';
+import { Bm25Ranker } from '../retrieval/rankers.ts';
 import { InMemoryRagStore } from '../store/in-memory-store.ts';
 import { IndexJobQueue } from '../store/index-jobs.ts';
 import { parseInstant } from '../text/time.ts';
+import type {
+  ApprovedFactInput,
+  RagAccessScope,
+  SourceDocumentInput,
+} from '../types.ts';
 import { freshEnv, runQuery } from './helpers.ts';
 
 const asOf = '2026-11-25T10:00:00+09:00';
@@ -277,4 +284,400 @@ describe('revision 전환 규칙', () => {
     const fresh = await runQuery(env, { userId: 'GUARDIAN_A', question, asOf });
     assert.match(fresh.answer.answer, /15문항 정답/);
   });
+});
+
+function testAccess(academyId: string, studentId?: string): RagAccessScope {
+  return {
+    academyId,
+    actorId: 'TEST_ACTOR',
+    role: studentId ? 'guardian' : 'visitor',
+    allowedStudentIds: studentId ? [studentId] : [],
+    allowedClassIds: [],
+    studentRefs: [],
+    canViewPublicHistory: false,
+  };
+}
+
+test('학생 ID가 직원 전용 자료의 권한을 대신할 수 없다', async () => {
+  const store = new InMemoryRagStore();
+  const data = analysisReportToIndexInput(report(1, 13));
+  const document = {
+    ...data.document,
+    documentType: 'guidance' as const,
+    visibility: 'staff_only' as const,
+  };
+  assert.equal(
+    (await store.upsertIndexedRevision({ document, approve: true })).errorCode,
+    'INVALID_DOCUMENT',
+  );
+  assert.equal(
+    canReadRecord(
+      testAccess('AC_A', 'ST_A01'),
+      { ...document, studentId: 'ST_A01', classId: null },
+      ['ST_A01'],
+    ),
+    false,
+  );
+});
+
+test('동일 ID의 두 학원은 승인 작업, 청크, 사실, 인용, 철회가 독립적이다', async () => {
+  const store = new InMemoryRagStore({
+    ranker: new Bm25Ranker({
+      id: 'test-tokenizer',
+      tokenize: (text) => text.match(/[0-9]+|[가-힣]+/g) ?? [],
+    }),
+  });
+  const at = parseInstant(asOf);
+  const queue = new IndexJobQueue({
+    documents: store,
+    clock: new FixedClock(at),
+  });
+  const alpha = analysisReportToIndexInput(report(1, 13));
+  const beta = analysisReportToIndexInput({
+    ...report(1, 17),
+    academyId: 'AC_B',
+    studentId: 'ST_B01',
+    title: '학원 B 단원 분석',
+  });
+  const draftDocument = { ...alpha.document };
+  delete draftDocument.approvedAt;
+  const stage = {
+    jobType: 'upsert' as const,
+    ...alpha,
+    document: draftDocument,
+    approve: false,
+  };
+  const staged = queue.enqueue(stage);
+  assert.equal(queue.enqueue(stage).jobId, staged.jobId);
+  await queue.runPending();
+  assert.equal(queue.getJob(staged.jobId)?.status, 'staged');
+
+  const approvalA = queue.enqueue({
+    jobType: 'upsert',
+    ...alpha,
+    approve: true,
+  });
+  const approvalB = queue.enqueue({
+    jobType: 'upsert',
+    ...beta,
+    approve: true,
+  });
+  assert.notEqual(approvalA.jobId, staged.jobId);
+  assert.notEqual(approvalA.jobId, approvalB.jobId);
+  await queue.runPending();
+  assert.equal(queue.getJob(approvalA.jobId)?.status, 'activated');
+  assert.equal(queue.getJob(approvalB.jobId)?.status, 'activated');
+
+  const query = (access: RagAccessScope) => ({
+    access,
+    studentIds: access.allowedStudentIds,
+    asOf: at,
+  });
+  const queryA = query(testAccess('AC_A', 'ST_A01'));
+  const queryB = query(testAccess('AC_B', 'ST_B01'));
+  const search = (request: typeof queryA) =>
+    store.searchApprovedChunks({
+      ...request,
+      query: '일차방정식',
+      limit: 10,
+    });
+  const [a] = await search(queryA);
+  const [b] = await search(queryB);
+  assert.match(a.chunk.text, /정답 문항: 13\b/);
+  assert.match(b.chunk.text, /정답 문항: 17\b/);
+  assert.equal(a.chunk.chunkId, b.chunk.chunkId);
+  assert.deepEqual(
+    await store.searchApprovedChunks({
+      ...queryB,
+      query: '13',
+      limit: 10,
+    }),
+    [],
+  );
+  assert.deepEqual(store.factRefsAtChunk(a.chunk.chunkId), []);
+  assert.equal(
+    store.factRefsAtChunk(a.chunk.chunkId, 'AC_A')[0]?.subjectId,
+    'ST_A01',
+  );
+  assert.equal(
+    store.factRefsAtChunk(b.chunk.chunkId, 'AC_B')[0]?.subjectId,
+    'ST_B01',
+  );
+  const [factB] = await store.queryApprovedFacts({
+    ...queryB,
+    factTypes: ['accuracy'],
+  });
+  const sourceId = b.chunk.sourceId;
+  assert.equal(
+    (await store.getCitableSource({ ...queryB, sourceId }))?.title,
+    '학원 B 단원 분석',
+  );
+  assert.equal(
+    await store.getCitableSource({ ...queryA, sourceId, locate: factB }),
+    null,
+  );
+  const duplicateSource = await store.upsertIndexedRevision({
+    document: { ...alpha.document, documentId: 'UNRELATED' },
+    approve: true,
+  });
+  assert.equal(duplicateSource.errorCode, 'REVISION_CONFLICT');
+
+  await store.revokeRevision({
+    documentId: alpha.document.documentId,
+    reason: 'revoked',
+  });
+  assert.equal((await search(queryA)).length, 1);
+  assert.equal((await search(queryB)).length, 1);
+  const revoked = await onDocumentChanged(queue, {
+    type: 'access_revoked',
+    academyId: 'AC_A',
+    documentId: alpha.document.documentId,
+  });
+  assert.equal(revoked.status, 'revoked');
+  assert.equal((await search(queryA)).length, 0);
+  assert.equal((await search(queryB)).length, 1);
+});
+
+function feeRevision(
+  revision: number,
+  validFrom: string,
+  approvedAt: string,
+  amount: number,
+): { document: SourceDocumentInput; facts: ApprovedFactInput[] } {
+  const sourceId = `SAME_FEE:r${revision}:body`;
+  const academyId = 'AC_A';
+  const documentId = 'SAME_FEE';
+  return {
+    document: {
+      academyId,
+      documentId,
+      revision,
+      sourceId,
+      documentType: 'fee',
+      visibility: 'academy_public',
+      title: '수강료 안내',
+      text: `정규 수강료는 ${amount}원입니다.`,
+      validFrom,
+      approvedAt,
+    },
+    facts: [
+      {
+        academyId,
+        documentId,
+        revision,
+        sourceId,
+        factId: `FEE:r${revision}`,
+        subjectType: 'academy',
+        subjectId: academyId,
+        factType: 'monthly_fee',
+        value: { kind: 'money', amount, currency: 'KRW' },
+        period: null,
+        validFrom,
+        validTo: null,
+        approvalStatus: 'approved',
+      },
+    ],
+  };
+}
+
+test('잘못된 승인 날짜는 유효한 개정이나 검색 세대를 바꾸지 않는다', async () => {
+  const store = new InMemoryRagStore();
+  const start = '2026-11-01T00:00:00+09:00';
+  const r1 = feeRevision(1, start, start, 230000);
+  await store.upsertIndexedRevision({ ...r1, approve: true });
+  const generation = store.indexGeneration;
+  for (const badApproval of [
+    '2026-13-01T00:00:00+09:00',
+    '2026-02-30T00:00:00+09:00',
+  ]) {
+    const malformed = feeRevision(2, start, badApproval, 250000);
+    const result = await store.upsertIndexedRevision({
+      ...malformed,
+      approve: true,
+    });
+    assert.equal(result.errorCode, 'INVALID_DOCUMENT');
+    assert.equal(
+      store.hasPendingApprovedRevision(r1.document.documentId, 'AC_A'),
+      false,
+    );
+    assert.equal(store.indexGeneration, generation);
+  }
+  const results = await store.searchApprovedChunks({
+    access: testAccess('AC_A'),
+    studentIds: [],
+    asOf: parseInstant(asOf),
+    query: '수강료',
+    limit: 10,
+  });
+  assert.deepEqual(
+    results.map(({ chunk }) => chunk.sourceId),
+    [r1.document.sourceId],
+  );
+});
+
+test('승인 시각과 적용 시각을 구분해 현재와 미래의 출처를 선택한다', async () => {
+  const store = new InMemoryRagStore();
+  const currentStart = '2026-11-01T00:00:00+09:00';
+  const futureStart = '2026-12-01T00:00:00+09:00';
+  const current = feeRevision(1, currentStart, currentStart, 230000);
+  const future = feeRevision(
+    2,
+    futureStart,
+    '2026-11-20T00:00:00+09:00',
+    250000,
+  );
+  const unknown = feeRevision(
+    3,
+    futureStart,
+    '2026-11-28T00:00:00+09:00',
+    270000,
+  );
+  for (const revision of [current, future, unknown])
+    assert.equal(
+      (await store.upsertIndexedRevision({ ...revision, approve: true }))
+        .status,
+      'activated',
+    );
+  const request = {
+    access: testAccess('AC_A'),
+    studentIds: [],
+    asOf: parseInstant(asOf),
+  };
+  const effectiveAt = parseInstant(futureStart);
+  const factRequest = { ...request, factTypes: ['monthly_fee'] as const };
+  assert.deepEqual(
+    (await store.queryApprovedFacts(factRequest)).map(
+      ({ revision }) => revision,
+    ),
+    [1],
+  );
+  assert.deepEqual(
+    (await store.queryApprovedFacts({ ...factRequest, effectiveAt })).map(
+      ({ revision }) => revision,
+    ),
+    [2],
+  );
+  const search = { ...request, query: '수강료', limit: 10 };
+  assert.deepEqual(
+    (await store.searchApprovedChunks(search)).map(
+      ({ chunk }) => chunk.revision,
+    ),
+    [1],
+  );
+  assert.deepEqual(
+    (
+      await store.searchApprovedChunks({
+        ...search,
+        upcomingUntil: effectiveAt,
+      })
+    )
+      .map(({ chunk }) => chunk.revision)
+      .sort(),
+    [1, 2],
+  );
+  assert.equal(
+    await store.getCitableSource({
+      ...request,
+      sourceId: future.document.sourceId!,
+    }),
+    null,
+  );
+  assert.equal(
+    (
+      await store.getCitableSource({
+        ...request,
+        sourceId: future.document.sourceId!,
+        effectiveAt,
+      })
+    )?.revision,
+    2,
+  );
+  assert.equal(
+    await store.getCitableSource({
+      ...request,
+      sourceId: current.document.sourceId!,
+      effectiveAt,
+    }),
+    null,
+  );
+});
+
+test('미래 적용 개정으로 공개 범위가 축소되면 이전 개정에도 즉시 적용한다', async () => {
+  const store = new InMemoryRagStore();
+  const start = '2026-11-01T00:00:00+09:00';
+  const current = feeRevision(1, start, start, 230000);
+  const future = feeRevision(
+    2,
+    '2026-12-01T00:00:00+09:00',
+    '2026-11-20T00:00:00+09:00',
+    250000,
+  );
+  future.document.visibility = 'staff_only';
+  for (const revision of [current, future])
+    assert.equal(
+      (await store.upsertIndexedRevision({ ...revision, approve: true }))
+        .status,
+      'activated',
+    );
+
+  const request = {
+    access: testAccess('AC_A'),
+    studentIds: [],
+    asOf: parseInstant(asOf),
+  };
+  const citation = { ...request, sourceId: current.document.sourceId! };
+  const search = { ...request, query: '수강료', limit: 10 };
+  const facts = { ...request, factTypes: ['monthly_fee'] as const };
+  assert.equal(
+    (
+      await store.searchApprovedChunks({
+        ...search,
+        asOf: parseInstant('2026-11-19T00:00:00+09:00'),
+      })
+    ).length,
+    1,
+  );
+  assert.deepEqual(await store.searchApprovedChunks(search), []);
+  assert.deepEqual(await store.queryApprovedFacts(facts), []);
+  assert.equal(await store.getCitableSource(citation), null);
+  assert.equal(
+    await store.corpusContains({ ...request, term: '230000' }),
+    false,
+  );
+
+  const staff: RagAccessScope = { ...request.access, role: 'teacher' };
+  assert.equal(
+    (await store.getCitableSource({ ...citation, access: staff }))?.revision,
+    1,
+  );
+});
+
+test('비동기 검색 중 철회된 문서는 순위 응답에서 반환하지 않는다', async () => {
+  const pause = Promise.withResolvers<void>();
+  const store = new InMemoryRagStore({
+    ranker: {
+      id: 'test-delayed-ranker',
+      async rank(candidates) {
+        await pause.promise;
+        return candidates.map((chunk) => ({ chunk, score: 1 }));
+      },
+    },
+  });
+  const start = '2026-11-01T00:00:00+09:00';
+  const entry = feeRevision(1, start, start, 230000);
+  await store.upsertIndexedRevision({ ...entry, approve: true });
+  const pending = store.searchApprovedChunks({
+    access: testAccess('AC_A'),
+    studentIds: [],
+    asOf: parseInstant(asOf),
+    query: '수강료',
+    limit: 10,
+  });
+  await store.revokeRevision({
+    academyId: 'AC_A',
+    documentId: entry.document.documentId,
+    reason: 'revoked',
+  });
+  pause.resolve();
+  assert.deepEqual(await pending, []);
 });

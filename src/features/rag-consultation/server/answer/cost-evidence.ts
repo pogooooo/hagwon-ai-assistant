@@ -130,7 +130,13 @@ function selectCosts<Field extends MaterialField>(
       column === amountColumn ? cells[key].trim() : header[column].trim();
     const value = cells[column].trim();
     const match = AMOUNT.exec(value);
-    if (!match) return [];
+    const tenThousands = /^(\d+(?:\.\d+)?)\s*만\s*원$/.exec(value);
+    const amount = match
+      ? Number(match[1].replace(/,/g, ''))
+      : tenThousands
+        ? Math.round(Number(tenThousands[1]) * 10_000)
+        : NaN;
+    if (!Number.isSafeInteger(amount)) return [];
     const tableColumns = [
       ...new Set(
         [
@@ -148,7 +154,7 @@ function selectCosts<Field extends MaterialField>(
       {
         classId: klass.classId,
         field,
-        amount: Number(match[1].replace(/,/g, '')),
+        amount,
         label,
         value,
         chunk,
@@ -1832,6 +1838,16 @@ export async function answerFromCostEvidence(
     return answerUpcomingFee(ctx, classIds[0]);
   const distinctMaterials =
     fields.includes('textbook') && fields.includes('supplies');
+  const { at } = resolveEffectiveTime(frame, ctx.asOf);
+  const datedFee =
+    ctx.engine === 'planned' &&
+    at > ctx.asOf &&
+    classIds.length === 1 &&
+    fields.length === 1 &&
+    fields[0] === 'fee' &&
+    frame.months.length <= 1 &&
+    frame.explicitDates.length <= 1 &&
+    !frame.flags.compare;
   if (distinctMaterials && /포함|들어\s*있/.test(frame.normalized))
     return abstain(
       '교재비와 재료비의 포함 관계를 확인할 수 없습니다.',
@@ -1843,10 +1859,11 @@ export async function answerFromCostEvidence(
     !frame.topics.every(({ id }) => id === 'fee' || id === 'material') ||
     (frame.flags.compare && !(asksEquality && classIds.length === 2)) ||
     frame.flags.previousRevision ||
-    (frame.relativePeriod !== null &&
-      !(frame.relativePeriod === 'this_month' && distinctMaterials)) ||
-    frame.months.length > 0 ||
-    frame.explicitDates.length > 0 ||
+    (!datedFee &&
+      ((frame.relativePeriod !== null &&
+        !(frame.relativePeriod === 'this_month' && distinctMaterials)) ||
+        frame.months.length > 0 ||
+        frame.explicitDates.length > 0)) ||
     frame.amountsKrw.length ||
     /납부|결제|포함|무료|할인|언제|기한|환불|말고|제외|합쳐|합계|오르|인상|개정|별도\s*신청/.test(
       frame.normalized,
@@ -1858,11 +1875,11 @@ export async function answerFromCostEvidence(
   )
     return undefined;
 
-  const { at } = resolveEffectiveTime(frame, ctx.asOf);
   const hits = await ctx.documents.searchApprovedChunks({
     access: ctx.access,
     studentIds: [],
     asOf: ctx.asOf,
+    ...(datedFee ? { effectiveAt: at } : {}),
     query: [
       ctx.question,
       ...classIds.map((id) => className(ctx.catalog, id)),
@@ -1878,7 +1895,7 @@ export async function answerFromCostEvidence(
   const candidates = hits.flatMap(({ chunk }) =>
     selectCosts(ctx, chunk, classIds, fields, at),
   );
-  if (!candidates.length)
+  if (!candidates.length && !datedFee)
     return distinctMaterials
       ? abstain(
           '교재비와 재료비를 구분할 수 있는 승인 자료가 없습니다.',
@@ -1945,6 +1962,8 @@ export async function answerFromCostEvidence(
           'CONFLICTING_EVIDENCE',
         );
       }
+      // Keep the structured answer path for a verified fact at the requested date.
+      if (datedFee && scopedFacts.length) return undefined;
       const comparable = explicitPeriodOptions.length
         ? explicitPeriodOptions
         : options;
@@ -1974,7 +1993,14 @@ export async function answerFromCostEvidence(
         );
     }
   }
-  if (!selected.length) return undefined;
+  if (!selected.length) {
+    return datedFee
+      ? abstain(
+          '문의한 시점의 수강료를 확인할 수 있는 승인 자료가 없습니다.',
+          'INSUFFICIENT_EVIDENCE',
+        )
+      : undefined;
+  }
   const comparisons: string[] = [];
   if (asksEquality) {
     for (const field of fields) {
@@ -2005,6 +2031,7 @@ export async function answerFromCostEvidence(
     reasonCode: missing.length ? 'PARTIAL_EVIDENCE' : undefined,
     missingFields: missing.length ? missing : undefined,
     text: [
+      ...(datedFee ? [formatKstDate(at) + ' 기준'] : []),
       ...selected.map(
         ({ classId, label, value }) =>
           className(ctx.catalog, classId) + ' ' + label + ': ' + value,
@@ -2030,7 +2057,9 @@ export async function answerFromCostEvidence(
       kind: 'chunk',
       chunk,
       tableColumns,
+      ...(datedFee ? { effectiveAt: at } : {}),
     })),
     usedFacts,
+    ...(datedFee ? { instants: [at] } : {}),
   };
 }

@@ -8,7 +8,7 @@
   },
   "packageManager": "npm@11.17.0",
   "scripts": {
-    "dev": "next dev",
+    "dev": "npm run academy:dev",
     "build": "next build",
     "start": "sirv out --host 127.0.0.1 --port 3000",
     "lint": "eslint . --max-warnings=0",
@@ -19,12 +19,15 @@
     "check": "npm run lint && npm run typecheck && npm run format:check",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
     "rag:dev": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/dev/dev-server.ts",
+    "academy:dev": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/academy-operations/server.ts",
     "prepare": "husky",
     "cap:add:android": "npm run build && cap add android",
     "cap:add:ios": "npm run build && cap add ios",
     "cap:sync": "npm run build && cap sync",
     "cap:open:android": "cap open android",
-    "cap:open:ios": "cap open ios"
+    "cap:open:ios": "cap open ios",
+    "dev:prototype": "next dev",
+    "ai:check": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/generation/smoke-provider.ts"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs}": [

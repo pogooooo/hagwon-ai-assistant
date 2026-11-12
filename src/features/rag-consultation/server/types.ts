@@ -208,6 +208,13 @@ export type FactValue =
       date: string;
       time: string | null;
       text: string;
+      /** A confirmed incident and its half-open interval, independent of the document revision. */
+      event?: {
+        id: string;
+        startsAt: number;
+        endsAt: number;
+        makeupStatus?: 'pending' | 'scheduled' | 'none';
+      };
     }
   | {
       kind: 'enrollment';
@@ -223,6 +230,9 @@ export type FactValue =
       /** 단원명·유형명, overall 이면 "전체" */
       unit: string;
       dimension?: AccuracyDimension;
+      /** True when the rubric supports reference use only. */
+      referenceOnly?: boolean;
+      basis?: 'classified_assessed';
     }
   | { kind: 'weak_area'; unit: string; text: string };
 

@@ -10,8 +10,8 @@
  * 5. 사실(fact)은 자신이 속한 문서 revision 이 활성일 때만 보인다.
  * 6. 승인된 새 revision 의 색인이 끝나지 않았거나 실패하면, 그 문서의 이전 revision 은 검색·조회에서 제외한다
  *    (검증되지 않은 구버전을 현재 값으로 답하지 않도록 보류 쪽으로 실패).
- * 7. 조회 시각(asOf)에는 "그 시각까지 효력이 생긴 가장 높은 revision" 하나만 쓴다.
- *    (실서비스의 asOf 는 현재 시각이므로 항상 최신 revision 만 보인다. 과거 시각 재현은 감사·테스트용.)
+ * 7. 승인 시각(asOf)과 적용 시각을 구분한다. 조회 시점에 알려진 개정 중
+ *    질문한 적용 시점에 시작된 가장 높은 개정을 사용한다.
  */
 import { createHash } from 'node:crypto';
 
@@ -48,8 +48,14 @@ import type {
   StoredDocumentRevision,
 } from '../types.ts';
 
-const keyOf = (documentId: string, revision: number) =>
-  `${documentId}#${revision}`;
+const scopedKey = (academyId: string, id: string) =>
+  JSON.stringify([academyId, id]);
+const keyOf = ({
+  academyId,
+  documentId,
+  revision,
+}: Pick<StoredDocumentRevision, 'academyId' | 'documentId' | 'revision'>) =>
+  JSON.stringify([academyId, documentId, revision]);
 
 function sameSearchScope(a: StoredDocumentRevision, b: StoredDocumentRevision) {
   return (
@@ -61,6 +67,24 @@ function sameSearchScope(a: StoredDocumentRevision, b: StoredDocumentRevision) {
     a.validFrom === b.validFrom &&
     a.validTo === b.validTo &&
     JSON.stringify(a.extraction?.pages) === JSON.stringify(b.extraction?.pages)
+  );
+}
+
+function canReadRevision(
+  access: RagAccessScope,
+  stored: StoredDocumentRevision,
+  known: readonly StoredDocumentRevision[],
+  targets: readonly string[],
+): boolean {
+  // Effective time chooses the content. A published access restriction takes
+  // effect at approval, even if that revision's content applies later.
+  return (
+    canReadRecord(access, stored, targets) &&
+    known.every(
+      (revision) =>
+        revision.revision <= stored.revision ||
+        canReadRecord(access, revision, targets),
+    )
   );
 }
 
@@ -79,6 +103,7 @@ export interface InMemoryRagStoreOptions {
 export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   private readonly revisions = new Map<string, StoredDocumentRevision>();
   private readonly activeRevision = new Map<string, number>();
+  private readonly revisionBySource = new Map<string, string>();
   private readonly chunks = new Map<string, RagChunk>();
   private readonly factsByRevision = new Map<string, ApprovedFact[]>();
   /** 승인됐지만 아직 색인·검증이 끝나지 않은(또는 실패한) 최신 revision. 이 문서의 이전 revision 은 '현재 값'으로 쓰지 않는다. */
@@ -142,29 +167,40 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       };
     }
 
-    const key = keyOf(document.documentId, document.revision);
+    const { academyId, documentId, revision } = document;
+    const documentKey = scopedKey(academyId, documentId);
+    const key = keyOf(document);
+    const sourceId = document.sourceId ?? `${documentId}:r${revision}:body`;
+    const sourceKey = scopedKey(academyId, sourceId);
+    const owner = this.revisionBySource.get(sourceKey);
     const hash = contentHash(document, facts);
+    const approvedAt = parseOptionalInstant(document.approvedAt);
     const existing = this.revisions.get(key);
+    const approvalConflict =
+      existing?.activatedAt != null &&
+      approve &&
+      existing.approvedAt !== approvedAt;
     if (
-      existing &&
-      existing.status === 'index_failed' &&
-      existing.contentHash === hash
+      (owner !== undefined && owner !== key) ||
+      (existing && existing.contentHash !== hash) ||
+      approvalConflict
     ) {
+      this.log('REVISION_CONFLICT', document);
+      return {
+        ...base,
+        status: 'rejected',
+        reviewRequired: true,
+        errorCode: 'REVISION_CONFLICT',
+      };
+    }
+    if (existing && existing.status === 'index_failed') {
       // 색인 실패한 revision 의 재시도: 이전 시도 흔적을 지우고 다시 색인한다.
-      for (const chunkId of existing.chunkIds) this.chunks.delete(chunkId);
+      for (const chunkId of existing.chunkIds)
+        this.chunks.delete(scopedKey(academyId, chunkId));
       this.factsByRevision.delete(key);
       this.factChunkIndex.delete(key);
       this.revisions.delete(key);
     } else if (existing) {
-      if (existing.contentHash !== hash) {
-        this.log('REVISION_CONFLICT', document);
-        return {
-          ...base,
-          status: 'rejected',
-          reviewRequired: true,
-          errorCode: 'REVISION_CONFLICT',
-        };
-      }
       if (existing.status === 'deleted' || existing.status === 'revoked') {
         return {
           ...base,
@@ -174,7 +210,12 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         };
       }
       if (approve && existing.status === 'indexed_verified') {
-        return this.activateRevision(document.documentId, document.revision);
+        return this.activateRevision(
+          documentId,
+          revision,
+          academyId,
+          approvedAt,
+        );
       }
       return {
         ...base,
@@ -183,8 +224,8 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       };
     }
 
-    const active = this.activeRevision.get(document.documentId);
-    if (active !== undefined && active > document.revision) {
+    const active = this.activeRevision.get(documentKey);
+    if (active !== undefined && active > revision) {
       this.log('STALE_REVISION', document);
       return {
         ...base,
@@ -195,13 +236,12 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
     }
 
     if (approve) {
-      const pending = this.pendingApproved.get(document.documentId) ?? 0;
-      if (document.revision > pending)
-        this.pendingApproved.set(document.documentId, document.revision);
+      const pending = this.pendingApproved.get(documentKey) ?? 0;
+      if (revision > pending) this.pendingApproved.set(documentKey, revision);
+      // A failed approved update can make an earlier revision ineligible.
+      this.generation += 1;
     }
 
-    const sourceId =
-      document.sourceId ?? `${document.documentId}:r${document.revision}:body`;
     const stored: StoredDocumentRevision = {
       academyId: document.academyId,
       documentId: document.documentId,
@@ -213,7 +253,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       classId: document.classId ?? null,
       validFrom: parseInstant(document.validFrom),
       validTo: parseOptionalInstant(document.validTo),
-      approvedAt: parseOptionalInstant(document.approvedAt),
+      approvedAt,
       activatedAt: null,
       sourceId,
       status: 'indexing',
@@ -224,6 +264,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       ...(document.extraction ? { extraction: document.extraction } : {}),
     };
     this.revisions.set(key, stored);
+    this.revisionBySource.set(sourceKey, key);
     // Preserve paragraph and table boundaries when comparing the contents of two sources.
     const textHash = createHash('sha256')
       .update(document.text.replace(/\r\n?/g, '\n').trim())
@@ -237,8 +278,7 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         (other.status === 'approved_active' ||
           other.status === 'indexed_verified') &&
         !other.flags.includes('duplicate_content') &&
-        this.textHashes.get(keyOf(other.documentId, other.revision)) ===
-          textHash,
+        this.textHashes.get(keyOf(other)) === textHash,
     );
     if (original) {
       stored.flags.push('duplicate_content');
@@ -273,7 +313,8 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         errorCode: 'INDEX_FAILED',
       };
     }
-    for (const chunk of chunks) this.chunks.set(chunk.chunkId, chunk);
+    for (const chunk of chunks)
+      this.chunks.set(scopedKey(academyId, chunk.chunkId), chunk);
     stored.chunkIds = chunks.map((chunk) => chunk.chunkId);
     if (chunks.some((chunk) => chunk.suspicious))
       stored.flags.push('prompt_injection_suspected');
@@ -325,13 +366,29 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         reviewRequired: stored.flags.length > 0,
       };
     }
-    return this.activateRevision(document.documentId, document.revision);
+    return this.activateRevision(documentId, revision, academyId);
+  }
+
+  private uniqueAcademyForDocument(documentId: string): string | undefined {
+    const academyIds = new Set(
+      [...this.revisions.values()]
+        .filter((stored) => stored.documentId === documentId)
+        .map((stored) => stored.academyId),
+    );
+    return academyIds.size === 1 ? [...academyIds][0] : undefined;
   }
 
   /** 승인된 revision 을 원자적으로 활성 전환한다. 이전 활성 revision 은 superseded. */
-  activateRevision(documentId: string, revision: number): IndexRevisionResult {
+  activateRevision(
+    documentId: string,
+    revision: number,
+    academyId = this.uniqueAcademyForDocument(documentId),
+    approvedAt?: number | null,
+  ): IndexRevisionResult {
     const base = { documentId, revision };
-    const stored = this.revisions.get(keyOf(documentId, revision));
+    const stored = academyId
+      ? this.revisions.get(keyOf({ academyId, documentId, revision }))
+      : undefined;
     if (!stored || stored.status !== 'indexed_verified') {
       return {
         ...base,
@@ -340,7 +397,8 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         errorCode: 'NOT_APPROVED',
       };
     }
-    const active = this.activeRevision.get(documentId);
+    const documentKey = scopedKey(stored.academyId, documentId);
+    const active = this.activeRevision.get(documentKey);
     if (active !== undefined && active > revision) {
       return {
         ...base,
@@ -350,15 +408,18 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       };
     }
     if (active !== undefined) {
-      const previous = this.revisions.get(keyOf(documentId, active));
+      const previous = this.revisions.get(
+        keyOf({ academyId: stored.academyId, documentId, revision: active }),
+      );
       if (previous) previous.status = 'superseded';
     }
     stored.status = 'approved_active';
-    // 승인(공개) 시각부터 효력. 승인 시각이 없으면 유효 시작 시각.
+    if (approvedAt !== undefined) stored.approvedAt = approvedAt;
+    // 승인 시각은 자료를 알 수 있는 시점이다. 적용 기간은 조회할 때 별도로 판단한다.
     stored.activatedAt = stored.approvedAt ?? stored.validFrom;
-    this.activeRevision.set(documentId, revision);
-    if ((this.pendingApproved.get(documentId) ?? 0) <= revision)
-      this.pendingApproved.delete(documentId);
+    this.activeRevision.set(documentKey, revision);
+    if ((this.pendingApproved.get(documentKey) ?? 0) <= revision)
+      this.pendingApproved.delete(documentKey);
     this.generation += 1;
     stored.indexGeneration = this.generation;
     this.logger?.log({
@@ -375,12 +436,19 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   }
 
   async revokeRevision(input: {
+    academyId?: string;
     documentId: string;
     revision?: number;
     reason: 'deleted' | 'revoked';
   }): Promise<void> {
+    const { documentId } = input;
+    const academyId =
+      input.academyId ?? this.uniqueAcademyForDocument(documentId);
+    if (!academyId) return;
+    const documentKey = scopedKey(academyId, documentId);
     for (const stored of this.revisions.values()) {
-      if (stored.documentId !== input.documentId) continue;
+      if (stored.academyId !== academyId || stored.documentId !== documentId)
+        continue;
       if (input.revision !== undefined && stored.revision !== input.revision)
         continue;
       stored.status = input.reason;
@@ -389,19 +457,20 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
     const remaining = [...this.revisions.values()]
       .filter(
         (stored) =>
-          stored.documentId === input.documentId &&
+          stored.academyId === academyId &&
+          stored.documentId === documentId &&
           (stored.status === 'approved_active' ||
             stored.status === 'superseded'),
       )
       .map((stored) => stored.revision);
     if (remaining.length > 0)
-      this.activeRevision.set(input.documentId, Math.max(...remaining));
-    else this.activeRevision.delete(input.documentId);
+      this.activeRevision.set(documentKey, Math.max(...remaining));
+    else this.activeRevision.delete(documentKey);
     if (
       input.revision === undefined ||
-      this.pendingApproved.get(input.documentId) === input.revision
+      this.pendingApproved.get(documentKey) === input.revision
     ) {
-      this.pendingApproved.delete(input.documentId);
+      this.pendingApproved.delete(documentKey);
     }
     this.generation += 1;
     this.logger?.log({
@@ -413,33 +482,83 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   }
 
   /** 문서에 승인됐지만 아직 활성화되지 못한 revision 이 있는지(운영 알림·상태 조회용). */
-  hasPendingApprovedRevision(documentId: string): boolean {
-    const pending = this.pendingApproved.get(documentId);
+  hasPendingApprovedRevision(
+    documentId: string,
+    academyId = this.uniqueAcademyForDocument(documentId),
+  ): boolean {
+    if (!academyId) return false;
+    const documentKey = scopedKey(academyId, documentId);
+    const pending = this.pendingApproved.get(documentKey);
     return (
       pending !== undefined &&
-      pending > (this.activeRevision.get(documentId) ?? 0)
+      pending > (this.activeRevision.get(documentKey) ?? 0)
     );
   }
 
-  getRevisionStatus(documentId: string, revision: number) {
-    return this.revisions.get(keyOf(documentId, revision))?.status ?? null;
+  getRevisionStatus(
+    documentId: string,
+    revision: number,
+    academyId = this.uniqueAcademyForDocument(documentId),
+  ) {
+    return academyId
+      ? (this.revisions.get(keyOf({ academyId, documentId, revision }))
+          ?.status ?? null)
+      : null;
   }
 
-  /** asOf 시각에 효력이 있는 문서별 최신 revision. */
-  private activeRevisions(asOf: number): StoredDocumentRevision[] {
-    const best = new Map<string, StoredDocumentRevision>();
+  private knownRevisions(academyId: string, asOf: number) {
+    const documents = new Map<string, StoredDocumentRevision[]>();
     for (const stored of this.revisions.values()) {
+      if (stored.academyId !== academyId) continue;
       if (stored.status !== 'approved_active' && stored.status !== 'superseded')
         continue;
       if (stored.activatedAt === null || stored.activatedAt > asOf) continue;
-      const latest = this.activeRevision.get(stored.documentId) ?? 0;
-      const pending = this.pendingApproved.get(stored.documentId);
-      if (pending !== undefined && pending > latest) continue;
-      const current = best.get(stored.documentId);
-      if (!current || stored.revision > current.revision)
-        best.set(stored.documentId, stored);
+      const revisions = documents.get(stored.documentId) ?? [];
+      revisions.push(stored);
+      documents.set(stored.documentId, revisions);
     }
-    return [...best.values()];
+    for (const revisions of documents.values())
+      revisions.sort((a, b) => b.revision - a.revision);
+    return documents;
+  }
+
+  private applicableRevision(
+    revisions: readonly StoredDocumentRevision[],
+    asOf: number,
+    effectiveAt: number,
+  ): StoredDocumentRevision | undefined {
+    const selected = revisions.find(
+      (stored) => stored.validFrom <= effectiveAt,
+    );
+    if (!selected) return;
+    const { academyId, documentId } = selected;
+    const pending = this.pendingApproved.get(scopedKey(academyId, documentId));
+    if (pending !== undefined && pending > selected.revision) {
+      const update = this.revisions.get(
+        keyOf({ academyId, documentId, revision: pending }),
+      );
+      if (
+        update &&
+        (update.approvedAt ?? update.validFrom) <= asOf &&
+        update.validFrom <= effectiveAt
+      )
+        return;
+    }
+    return selected;
+  }
+
+  private revisionsStartingIn(
+    revisions: readonly StoredDocumentRevision[],
+    asOf: number,
+    from: number,
+    until: number,
+  ): StoredDocumentRevision[] {
+    return revisions.filter(
+      (stored) =>
+        stored.validFrom >= from &&
+        stored.validFrom < until &&
+        this.applicableRevision(revisions, asOf, stored.validFrom) === stored,
+    );
   }
 
   async queryApprovedFacts(query: FactQuery): Promise<ApprovedFact[]> {
@@ -449,56 +568,97 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       Boolean(query.includeHistory) && query.access.canViewPublicHistory;
     const result: ApprovedFact[] = [];
 
-    for (const stored of this.activeRevisions(query.asOf)) {
-      if (!canReadRecord(query.access, stored, targets)) continue;
-      const facts =
-        this.factsByRevision.get(keyOf(stored.documentId, stored.revision)) ??
-        [];
-      for (const fact of facts) {
-        if (fact.approvalStatus !== 'approved') continue;
-        if (fact.academyId !== query.access.academyId) continue;
-        if (!query.factTypes.includes(fact.factType)) continue;
-        if (fact.subjectType === 'student') {
-          if (!targets.includes(fact.subjectId)) continue;
-          // 학습 분석은 "현재 시각에 공개된 revision" 만 사용한다.
-          if (!isValidAt(fact.validFrom, fact.validTo, query.asOf)) continue;
-        } else {
-          const current = isValidAt(fact.validFrom, fact.validTo, effectiveAt);
-          const past =
-            historyAllowed &&
-            stored.visibility === 'academy_public' &&
-            fact.validTo !== null &&
-            fact.validTo <= effectiveAt;
-          const startsIn = query.startsIn;
-          if (
-            startsIn
-              ? fact.validFrom < startsIn.from ||
-                fact.validFrom >= startsIn.until
-              : !current && !past
-          )
-            continue;
+    const known = this.knownRevisions(query.access.academyId, query.asOf);
+    for (const revisions of known.values()) {
+      const current = this.applicableRevision(
+        revisions,
+        query.asOf,
+        query.asOf,
+      );
+      const effective =
+        effectiveAt > query.asOf
+          ? this.applicableRevision(revisions, query.asOf, effectiveAt)
+          : current;
+      const selected = new Set([current, effective]);
+      if (query.startsIn) {
+        for (const upcoming of this.revisionsStartingIn(
+          revisions,
+          query.asOf,
+          Math.max(query.startsIn.from, query.asOf + 1),
+          query.startsIn.until,
+        ))
+          selected.add(upcoming);
+      }
+      for (const stored of selected) {
+        if (!stored) continue;
+        if (!canReadRevision(query.access, stored, revisions, targets))
+          continue;
+        const facts = this.factsByRevision.get(keyOf(stored)) ?? [];
+        for (const fact of facts) {
+          if (fact.approvalStatus !== 'approved') continue;
+          if (fact.academyId !== query.access.academyId) continue;
+          if (!query.factTypes.includes(fact.factType)) continue;
+          if (fact.subjectType === 'student') {
+            if (stored !== current || !targets.includes(fact.subjectId))
+              continue;
+            // 학습 분석은 "현재 시각에 공개된 revision" 만 사용한다.
+            if (!isValidAt(fact.validFrom, fact.validTo, query.asOf)) continue;
+          } else {
+            if (!query.startsIn && stored !== effective) continue;
+            const applies = isValidAt(
+              fact.validFrom,
+              fact.validTo,
+              effectiveAt,
+            );
+            const past =
+              historyAllowed &&
+              stored.visibility === 'academy_public' &&
+              fact.validTo !== null &&
+              fact.validTo <= effectiveAt;
+            const startsIn = query.startsIn;
+            if (
+              startsIn
+                ? fact.validFrom < startsIn.from ||
+                  fact.validFrom >= startsIn.until
+                : !applies && !past
+            )
+              continue;
+          }
+          result.push(fact);
         }
-        result.push(fact);
       }
     }
     return result.sort((a, b) => a.factId.localeCompare(b.factId));
   }
 
   async searchApprovedChunks(query: ChunkSearchQuery): Promise<ScoredChunk[]> {
+    const generation = this.generation;
     const targets = restrictToAllowedStudents(query.access, query.studentIds);
     const candidates: RagChunk[] = [];
-    const eligible = this.activeRevisions(query.asOf).filter((stored) => {
-      if (!canReadRecord(query.access, stored, targets)) return false;
+    const known = this.knownRevisions(query.access.academyId, query.asOf);
+    const effectiveAt = Math.max(query.asOf, query.effectiveAt ?? query.asOf);
+    const eligible = [...known.values()].flatMap((revisions) => {
+      const current = this.applicableRevision(
+        revisions,
+        query.asOf,
+        effectiveAt,
+      );
       const upcoming =
-        query.upcomingUntil !== undefined &&
-        stored.visibility === 'academy_public' &&
-        stored.studentId === null &&
-        stored.validFrom > query.asOf &&
-        stored.validFrom <= query.upcomingUntil;
-      return (
-        (upcoming || isValidAt(stored.validFrom, stored.validTo, query.asOf)) &&
-        (!query.documentTypes ||
-          query.documentTypes.includes(stored.documentType))
+        effectiveAt === query.asOf && query.upcomingUntil !== undefined
+          ? this.revisionsStartingIn(
+              revisions,
+              query.asOf,
+              query.asOf + 1,
+              query.upcomingUntil + 1,
+            ).filter((stored) => stored.visibility === 'academy_public')
+          : [];
+      if (current && isValidAt(current.validFrom, current.validTo, effectiveAt))
+        upcoming.push(current);
+      return upcoming.filter(
+        (stored) =>
+          canReadRevision(query.access, stored, revisions, targets) &&
+          (!query.documentTypes ||
+            query.documentTypes.includes(stored.documentType)),
       );
     });
     const eligibleById = new Map(
@@ -511,12 +671,12 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       if (
         original &&
         sameSearchScope(original, stored) &&
-        this.textHashes.get(keyOf(original.documentId, original.revision)) ===
-          this.textHashes.get(keyOf(stored.documentId, stored.revision))
+        this.textHashes.get(keyOf(original)) ===
+          this.textHashes.get(keyOf(stored))
       )
         continue;
       for (const chunkId of stored.chunkIds) {
-        const chunk = this.chunks.get(chunkId);
+        const chunk = this.chunks.get(scopedKey(stored.academyId, chunkId));
         if (!chunk) continue;
         if (chunk.suspicious && !query.includeSuspicious) continue;
         candidates.push(chunk);
@@ -526,6 +686,8 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       question: query.question,
       rerank: query.rerank,
     });
+    // An asynchronous ranker may return after an approval or withdrawal.
+    if (generation !== this.generation) return [];
     return ranked.slice(0, query.limit).map(({ chunk, score, signals }) => ({
       chunk,
       score,
@@ -545,9 +707,20 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   }): Promise<SourceSummary | null> {
     const targets = restrictToAllowedStudents(input.access, input.studentIds);
     const at = input.effectiveAt ?? input.asOf;
-    for (const stored of this.activeRevisions(input.asOf)) {
+    const effectiveAt = Math.max(input.asOf, at);
+    for (const revisions of this.knownRevisions(
+      input.access.academyId,
+      input.asOf,
+    ).values()) {
+      const stored = this.applicableRevision(
+        revisions,
+        input.asOf,
+        effectiveAt,
+      );
+      if (!stored) continue;
       if (stored.sourceId !== input.sourceId) continue;
-      if (!canReadRecord(input.access, stored, targets)) return null;
+      if (!canReadRevision(input.access, stored, revisions, targets))
+        return null;
       const current = isValidAt(stored.validFrom, stored.validTo, at);
       const past =
         Boolean(input.includeHistory) &&
@@ -556,11 +729,23 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         stored.validTo !== null &&
         stored.validTo <= at;
       if (!current && !past) return null;
+      if (
+        input.locate &&
+        (keyOf(input.locate) !== keyOf(stored) ||
+          input.locate.sourceId !== stored.sourceId)
+      )
+        return null;
       const located = input.locate
         ? this.locateFact(input.locate, {
             classNames: input.locateClassNames ?? [],
           })
         : null;
+      if (
+        input.locate?.value.kind === 'accuracy' &&
+        input.locate.value.basis === 'classified_assessed' &&
+        !located
+      )
+        return null;
       let location = located?.location.label;
       if (located && input.locate?.value.kind === 'money') {
         const columns = moneyColumns(located, input.locate.value.amount);
@@ -598,10 +783,16 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
     const needle = input.term.replace(/\s/g, '').toLowerCase();
     if (!needle) return false;
     const targets = restrictToAllowedStudents(input.access, input.studentIds);
-    for (const stored of this.activeRevisions(input.asOf)) {
-      if (!canReadRecord(input.access, stored, targets)) continue;
+    for (const revisions of this.knownRevisions(
+      input.access.academyId,
+      input.asOf,
+    ).values()) {
+      const stored = this.applicableRevision(revisions, input.asOf, input.asOf);
+      if (!stored || !isValidAt(stored.validFrom, stored.validTo, input.asOf))
+        continue;
+      if (!canReadRevision(input.access, stored, revisions, targets)) continue;
       for (const chunkId of stored.chunkIds) {
-        const chunk = this.chunks.get(chunkId);
+        const chunk = this.chunks.get(scopedKey(stored.academyId, chunkId));
         if (
           chunk &&
           chunk.contextualText.replace(/\s/g, '').toLowerCase().includes(needle)
@@ -613,18 +804,29 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
   }
 
   /** 청크 위치에서 확인되는 정형 사실의 종류·대상(값 제외). 같은 revision 의 사실 위치를 한 번만 계산해 둔다. */
-  factRefsAtChunk(chunkId: string): Array<{
+  factRefsAtChunk(
+    chunkId: string,
+    academyId?: string,
+  ): Array<{
     factType: ApprovedFact['factType'];
     subjectType: ApprovedFact['subjectType'];
     subjectId: string;
     period: string | null;
   }> {
     const sourceId = chunkId.split('#')[0];
-    const stored = [...this.revisions.values()].find(
-      (r) => r.sourceId === sourceId,
-    );
-    if (!stored) return [];
-    const key = keyOf(stored.documentId, stored.revision);
+    const matches = academyId
+      ? [this.revisionBySource.get(scopedKey(academyId, sourceId))]
+      : [...this.revisions.values()]
+          .filter((stored) => stored.sourceId === sourceId)
+          .map(keyOf);
+    const key = matches.length === 1 ? matches[0] : undefined;
+    const stored = key ? this.revisions.get(key) : undefined;
+    if (
+      !key ||
+      !stored ||
+      (stored.status !== 'approved_active' && stored.status !== 'superseded')
+    )
+      return [];
     let index = this.factChunkIndex.get(key);
     if (!index) {
       index = new Map();
@@ -650,11 +852,28 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
     fact: ApprovedFact,
     citation?: { classNames: readonly string[] },
   ): RagChunk | null {
-    const stored = this.revisions.get(keyOf(fact.documentId, fact.revision));
+    const stored = this.revisions.get(keyOf(fact));
     if (!stored) return null;
     const chunks = stored.chunkIds
-      .map((id) => this.chunks.get(id))
+      .map((id) => this.chunks.get(scopedKey(stored.academyId, id)))
       .filter((chunk): chunk is RagChunk => Boolean(chunk));
+    if (
+      fact.value.kind === 'accuracy' &&
+      fact.value.basis === 'classified_assessed'
+    ) {
+      const value = fact.value;
+      const expected = compactText(
+        `${value.unit}${value.referenceOnly ? ' (참고용)' : ''}: ${value.total}문항 중 ${value.correct}문항 정답.`,
+      );
+      const locations = chunks.filter(
+        (chunk) =>
+          !chunk.suspicious &&
+          !chunk.extraction?.needsReview &&
+          !chunk.extraction?.uncertainTokens.length &&
+          compactText(chunk.text) === expected,
+      );
+      return locations.length === 1 ? locations[0] : null;
+    }
     if (citation && fact.value.kind === 'money') {
       const amount = fact.value.amount;
       const rows = chunks.filter(
