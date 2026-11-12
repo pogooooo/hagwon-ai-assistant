@@ -1,0 +1,69 @@
+{
+  "math-rubric-1": {
+    "math-ex-01": ["math-01"],
+    "math-ex-02": ["math-02"],
+    "math-ex-03": ["math-02"],
+    "math-ex-04": ["math-04"],
+    "math-ex-05": ["math-03"],
+    "math-ex-06": ["math-05"],
+    "math-ex-07": ["math-04"],
+    "math-ex-08": ["math-02"]
+  },
+  "math-rubric-2": {
+    "math-ex-09": ["math-04"],
+    "math-ex-10": ["math-07"],
+    "math-ex-11": ["math-05"],
+    "math-ex-12": ["math-02"],
+    "math-ex-13": ["math-06"],
+    "math-ex-14": ["math-02"],
+    "math-ex-15": ["math-07"],
+    "math-ex-16": ["math-03"],
+    "math-ex-17": ["math-08"],
+    "math-ex-18": ["math-02"]
+  },
+  "math-rubric-3": {
+    "math-ex-19": ["math-09"],
+    "math-ex-20": ["math-02"],
+    "math-ex-21": ["math-10"],
+    "math-ex-22": ["math-02"],
+    "math-ex-23": ["math-09", "math-10"],
+    "math-ex-24": ["math-11"],
+    "math-ex-25": ["math-02"]
+  },
+  "english-rubric-1": {
+    "english-ex-01": ["eng-01"],
+    "english-ex-02": ["eng-02"],
+    "english-ex-03": ["eng-02"],
+    "english-ex-04": ["eng-04"],
+    "english-ex-05": ["eng-03"],
+    "english-ex-06": ["eng-14"],
+    "english-ex-07": ["eng-04"],
+    "english-ex-08": ["eng-02"],
+    "english-ex-09": ["eng-01"],
+    "english-ex-10": ["eng-04"]
+  },
+  "english-rubric-2": {
+    "english-ex-11": ["eng-05"],
+    "english-ex-12": ["eng-02"],
+    "english-ex-13": ["eng-06"],
+    "english-ex-14": ["eng-12"],
+    "english-ex-15": ["eng-07"],
+    "english-ex-16": ["eng-02"],
+    "english-ex-17": ["eng-08"],
+    "english-ex-18": ["eng-06"],
+    "english-ex-19": ["eng-09"],
+    "english-ex-20": ["eng-14"]
+  },
+  "english-rubric-3": {
+    "english-ex-21": ["eng-10"],
+    "english-ex-22": ["eng-02"],
+    "english-ex-23": ["eng-11"],
+    "english-ex-24": ["eng-01"],
+    "english-ex-25": ["eng-12"],
+    "english-ex-26": ["eng-13"],
+    "english-ex-27": ["eng-13"],
+    "english-ex-28": ["eng-02"],
+    "english-ex-29": ["eng-14"],
+    "english-ex-30": ["eng-12"]
+  }
+}

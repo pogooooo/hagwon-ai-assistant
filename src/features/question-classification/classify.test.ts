@@ -101,6 +101,23 @@ test('원문에 없는 단서만 보류하고, 반복 일치 수와 공개 필�
   assert.equal(heldItem.itemStatus, 'no_adopted');
   assert.deepEqual(heldItem.tags, []);
 });
+test('인용의 따옴표 종류 차이만 허용하고 원문 구절로 되돌려 저장한다', () => {
+  const quoted = {
+    ...assignment,
+    items: [
+      { ...assignment.items[0], text: '‘x² ≥ x이다’의 참·거짓을 판단하시오.' },
+    ],
+  };
+  const check = (quote: string) =>
+    verifyResponse(quoted, response([{ ...valid, quote }]))[0].tags[0];
+  const straight = check("'x² ≥ x이다'의 참·거짓");
+  assert.equal(straight.quoteVerified, true);
+  assert.equal(straight.status, 'adopted');
+  assert.equal(straight.quote, '‘x² ≥ x이다’의 참·거짓');
+  const altered = check("'x² > x이다'의 참·거짓");
+  assert.equal(altered.quoteVerified, false);
+  assert.equal(altered.status, 'held');
+});
 test('식별자 충돌 및 다른 과목 태그는 거절한다', () => {
   assert.throws(() =>
     assignmentSchema.parse({

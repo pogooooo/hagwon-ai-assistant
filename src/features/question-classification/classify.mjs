@@ -124,6 +124,8 @@ export async function buildInstructions(subject) {
   ].join('\n');
 }
 
+const sameQuoteMarks = (s) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+
 export function verifyResponse(assignment, raw) {
   const { items } = responseSchema(assignment.subject).parse(raw);
   const byId = new Map(items.map((i) => [i.itemId, i]));
@@ -145,10 +147,18 @@ export function verifyResponse(assignment, raw) {
     return {
       ...result,
       tags: tags.map((tag) => {
-        const quoteVerified =
-          Boolean(tag.quote.trim()) && text.includes(tag.quote);
+        // 따옴표 종류(‘ ’ ' / “ ” ")만 같은 문자로 보고 나머지는 그대로 대조한다.
+        // 글자 수가 변하지 않으므로 같은 위치의 원문 구절을 quote로 되돌려 저장한다.
+        const at = tag.quote.trim()
+          ? sameQuoteMarks(text).indexOf(sameQuoteMarks(tag.quote))
+          : -1;
+        const quoteVerified = at >= 0;
         return quoteVerified
-          ? { ...tag, quoteVerified }
+          ? {
+              ...tag,
+              quote: text.slice(at, at + tag.quote.length),
+              quoteVerified,
+            }
           : {
               ...tag,
               status: 'held',
