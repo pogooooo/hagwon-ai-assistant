@@ -50,7 +50,10 @@ function responseSchema(subject) {
     quote: z
       .string()
       .describe(
-        '입력 text에 있는 연속된 원문 구절. 기호와 띄어쓰기까지 그대로 복사한다.',
+        '입력 text에 있는 연속된 원문 구절. 기호와 띄어쓰기까지 그대로 복사한다. ' +
+          (subject === 'E'
+            ? '지문이 아니라 발문에서 고른다.'
+            : '문항 전체가 아니라 이 행동을 요구하는 가장 짧은 구절만 고른다.'),
       ),
     action: nonempty,
     status:
@@ -106,6 +109,9 @@ export async function buildInstructions(subject) {
     math
       ? '예상 풀이와 검산 가능한 짧은 식을 reasoning에 쓴다. 여러 독립 행동을 허용한다. 다른 자연스러운 풀이에서 사라지면 reference. 조건, 필요한 행동, 포함·제외 조건을 대조한다.'
       : '풀지 말고 발문이 요구하는 정답의 역할을 reasoning에 쓴다. 태그는 최대 하나, reference 금지. 빈칸·괄호는 어법/어휘/요약문/본문, 밑줄은 의미/지칭/어휘/어법, 요지와 주장은 발문의 요구로 구별한다.',
+    math
+      ? 'quote는 문항 전체를 통째로 복사하지 않는다. 그 태그의 행동을 요구하는 조건이나 구하는 것을 말하는 가장 짧은 연속 구절만 고른다.'
+      : 'quote는 영어 지문이 아니라 발문(무엇을 고르거나 찾으라고 요구하는 문장)에서 고른다. 발문이 없을 때만 지문에서 고른다.',
     '그림·밑줄 등 필요한 단서가 없으면 보류한다. 태그마다 입력 text의 연속된 원문 구절을 그대로 quote에 쓰고, 필요한 행동은 action, 참고·보류 사유는 reason에 쓴다.',
     JSON.stringify(
       catalog.tags
