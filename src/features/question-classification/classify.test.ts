@@ -102,6 +102,42 @@ test('원문에 없는 단서만 보류하고, 반복 일치 수와 공개 필�
   assert.equal(heldItem.itemStatus, 'no_adopted');
   assert.deepEqual(heldItem.tags, []);
 });
+test('반복 결과가 한 번이라도 갈린 태그는 보류로 전달한다', () => {
+  const adopted = verifyResponse(assignment, response([valid]));
+  const reference = verifyResponse(
+    assignment,
+    response([{ ...valid, status: 'reference' }]),
+  );
+  const item = makeHandoff(
+    assignment,
+    [adopted, reference, adopted],
+    '2026-11-12T00:00:00Z',
+  ).items[0];
+  assert.equal(item.itemStatus, 'no_adopted');
+  assert.deepEqual(item.tags, []);
+  const kept = makeHandoff(
+    assignment,
+    [
+      verifyResponse(
+        assignment,
+        response([valid, { ...valid, tagId: 'math-10' }]),
+      ),
+      verifyResponse(assignment, response([valid])),
+      verifyResponse(assignment, response([valid])),
+    ],
+    '2026-11-12T00:00:00Z',
+  ).items[0];
+  assert.deepEqual(
+    kept.tags.map((t: { tagId: string; status: string }) => [
+      t.tagId,
+      t.status,
+    ]),
+    [
+      ['math-05', 'adopted'],
+      ['math-10', 'held'],
+    ],
+  );
+});
 test('인용의 따옴표 종류 차이만 허용하고 원문 구절로 되돌려 저장한다', () => {
   const quoted = {
     ...assignment,

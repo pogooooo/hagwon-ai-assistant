@@ -205,19 +205,18 @@ export function makeHandoff(assignment, runs, classifiedAt) {
   const items = assignment.items.map(
     ({ itemId, page, displayNumber }, index) => {
       const first = runs[0][index];
-      const tags = first.tags.map(({ tagId, status }) => ({
-        tagId,
-        status,
-        evidenceKind: 'text',
-        agreement: {
-          same: runs.filter((run) =>
-            run[index].tags.some(
-              (t) => t.tagId === tagId && t.status === status,
-            ),
-          ).length,
-          runs: runs.length,
-        },
-      }));
+      const tags = first.tags.map(({ tagId, status }) => {
+        const same = runs.filter((run) =>
+          run[index].tags.some((t) => t.tagId === tagId && t.status === status),
+        ).length;
+        return {
+          tagId,
+          // 반복 결과가 한 번이라도 갈린 태그는 보류로 전달한다.
+          status: same === runs.length ? status : 'held',
+          evidenceKind: 'text',
+          agreement: { same, runs: runs.length },
+        };
+      });
       const itemStatus = ['unreadable', 'out_of_scope'].includes(
         first.disposition,
       )
