@@ -32,7 +32,8 @@ export function compareMathReadings(first, second) {
     : '수학 문항의 두 판독이 일치하지 않음';
 }
 
-export async function transcribeImage(filename, { checkMath = false } = {}) {
+// 사진 한 장과 지시문을 보내 CLOVA 판독 모델의 응답 본문을 받는다.
+export async function visionChat(filename, prompt, { maxTokens = 800 } = {}) {
   const mime = {
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
@@ -65,16 +66,11 @@ export async function transcribeImage(filename, { checkMath = false } = {}) {
                   data: 'data:' + mime + ';base64,' + image.toString('base64'),
                 },
               },
-              {
-                type: 'text',
-                text: checkMath
-                  ? '수학 교재의 작은 글자 검수입니다. 사진에서 번호, 조건, 질문을 순서대로 전부 전사하세요. 각 밑 바로 오른쪽 위의 획을 관찰하고 위첨자는 ^{지수}로 적으세요. 작거나 번져서 숫자 모양을 확실히 구별할 수 없는 곳은 반드시 [불명]으로 남기세요. 수식 패턴이나 추정한 답으로 빈 곳을 채우지 마세요. 문항만 한 줄로 출력하세요.'
-                  : '이미지에 보이는 문항 원문만 그대로 전사하세요. 띄어쓰기, 괄호, 부호, 지수를 보존하고 유니코드 일반 텍스트로 쓰세요. 풀이, 설명, 마크다운은 넣지 마세요. 읽을 수 없는 글자는 [불명]으로 표시하세요.',
-              },
+              { type: 'text', text: prompt },
             ],
           },
         ],
-        maxTokens: 800,
+        maxTokens,
         temperature: 0,
       }),
     },
@@ -88,4 +84,13 @@ export async function transcribeImage(filename, { checkMath = false } = {}) {
   )
     throw Error('완성된 전사 응답을 받지 못했습니다.');
   return { model, text: result.message.content, usage: result.usage };
+}
+
+export async function transcribeImage(filename, { checkMath = false } = {}) {
+  return visionChat(
+    filename,
+    checkMath
+      ? '수학 교재의 작은 글자 검수입니다. 사진에서 번호, 조건, 질문을 순서대로 전부 전사하세요. 각 밑 바로 오른쪽 위의 획을 관찰하고 위첨자는 ^{지수}로 적으세요. 작거나 번져서 숫자 모양을 확실히 구별할 수 없는 곳은 반드시 [불명]으로 남기세요. 수식 패턴이나 추정한 답으로 빈 곳을 채우지 마세요. 문항만 한 줄로 출력하세요.'
+      : '이미지에 보이는 문항 원문만 그대로 전사하세요. 띄어쓰기, 괄호, 부호, 지수를 보존하고 유니코드 일반 텍스트로 쓰세요. 풀이, 설명, 마크다운은 넣지 마세요. 읽을 수 없는 글자는 [불명]으로 표시하세요.',
+  );
 }

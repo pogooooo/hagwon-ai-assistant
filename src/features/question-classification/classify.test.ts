@@ -191,6 +191,280 @@ test('식별자 충돌 및 다른 과목 태그는 거절한다', () => {
   );
 });
 
+import {
+  applyCrossCheck,
+  itemsFromPhoto,
+  mergeMathPage,
+  parseCrossCheck,
+  parsePageReading,
+} from './read-page.mjs';
+import {
+  annotateEvidence,
+  assignmentInputSchema,
+  buildInstructions,
+  buildItemText,
+} from './classify.mjs';
+
+test('사진 판독 JSON은 울타리를 벗기고 그림 정보 없는 문항도 받아들인다', () => {
+  const reading = parsePageReading(
+    '```json\n' +
+      JSON.stringify({
+        items: [
+          { displayNumber: '1', text: 'x를 구하시오.' },
+          {
+            displayNumber: '2',
+            text: '그래프를 보시오.',
+            figure: {
+              dependence: '필수',
+              reads: [
+                { content: '점 (1, 2)', method: '적힌 값', state: '선명' },
+              ],
+            },
+          },
+        ],
+      }) +
+      '\n```',
+  );
+  assert.equal(reading.length, 2);
+  assert.equal(reading[0].figure, undefined);
+  assert.equal(reading[1].figure?.dependence, '필수');
+  assert.throws(() => parsePageReading('{"items":[]}'));
+  assert.throws(() =>
+    parsePageReading(
+      '{"items":[{"displayNumber":"1","text":"x","figure":{"dependence":"가끔","reads":[]}}]}',
+    ),
+  );
+});
+
+test('두 판독을 합칠 때 번호·본문이 갈리면 보류하고 그림 항목이 갈리면 불명으로 남긴다', () => {
+  const first = [
+    { displayNumber: '1', text: 'a³ − b³' },
+    { displayNumber: '2', text: 'f(2)를 구하시오.' },
+    {
+      displayNumber: '3',
+      text: '그림을 보시오.',
+      figure: {
+        dependence: '보조',
+        reads: [
+          { content: '점 (1, 2)', method: '적힌 값', state: '선명' },
+          { content: '기울기 2', method: '눈금에서 읽음', state: '선명' },
+        ],
+      },
+    },
+  ];
+  const second = [
+    { displayNumber: '1', text: '$a ^ { 3 } - b^3$' },
+    { displayNumber: '5', text: 'f(2)를 구하시오.' },
+    {
+      displayNumber: '3',
+      text: '그림을 보시오.',
+      figure: {
+        dependence: '필수',
+        reads: [
+          { content: '점 (1, 2)', method: '모양에서 추정', state: '선명' },
+          { content: '기울기 3', method: '눈금에서 읽음', state: '선명' },
+          { content: '절편 1', method: '적힌 값', state: '선명' },
+        ],
+      },
+    },
+  ];
+  const merged = mergeMathPage(first, second);
+  assert.deepEqual(
+    merged.map((m: { displayNumber: string }) => m.displayNumber),
+    ['1', '2', '3', '5'],
+  );
+  assert.equal(merged[0].holdReason, undefined);
+  assert.equal(merged[0].text, 'a³ − b³');
+  assert.ok(merged[1].holdReason);
+  assert.ok(merged[3].holdReason);
+  assert.equal(merged[2].figure.dependence, '필수');
+  assert.deepEqual(
+    merged[2].figure.reads.map((r: { method: string; state: string }) => [
+      r.method,
+      r.state,
+    ]),
+    [
+      ['모양에서 추정', '선명'],
+      ['눈금에서 읽음', '불명'],
+      ['적힌 값', '불명'],
+    ],
+  );
+});
+
+test('교차 검수에서 차이나 누락이 나온 문항은 보류하고 기존 보류는 유지한다', () => {
+  const verdicts = parseCrossCheck(
+    '```json\n{"items":[{"displayNumber":"1","verdict":"일치"},{"displayNumber":"2","verdict":"차이","note":"사진: 2의 5승 / 전사: 2의 3승"}]}\n```',
+  );
+  const items = applyCrossCheck(
+    [
+      { displayNumber: '1', text: 'x' },
+      { displayNumber: '2', text: 'y' },
+      { displayNumber: '3', text: 'z' },
+      { displayNumber: '4', text: '', holdReason: '판독 불명' },
+    ],
+    verdicts,
+  );
+  assert.equal(items[0].holdReason, undefined);
+  assert.match(items[1].holdReason, /차이.*5승/);
+  assert.equal(items[1].text, '');
+  assert.match(items[2].holdReason, /누락/);
+  assert.equal(items[3].holdReason, '판독 불명');
+});
+
+test('사진에서 나눈 문항은 고유 ID를 받고 겹친 번호는 하나로 합쳐 보류한다', () => {
+  const items = itemsFromPhoto('hw-1', 7, [
+    { displayNumber: '12', text: 'x를 구하시오.' },
+    { displayNumber: '13 (가)', text: 'y를 구하시오.' },
+    { displayNumber: '12', text: '다른 전사' },
+  ]);
+  assert.deepEqual(
+    items.map((i: { itemId: string }) => i.itemId),
+    ['hw-1-p7-12', 'hw-1-p7-13'],
+  );
+  assert.equal(items[0].text, '');
+  assert.match(items[0].holdReason, /여러 번 감지/);
+  assert.equal(items[1].text, 'y를 구하시오.');
+  assert.equal(items[1].page, 7);
+});
+
+test('그림 의존도 필수에서 추정·불명 그림 정보만 근거인 태그는 보류하고 근거 종류를 남긴다', () => {
+  const figure = {
+    dependence: '필수',
+    reads: [
+      { content: '꼭짓점 (2, 3)', method: '적힌 값', state: '선명' },
+      { content: '기울기 양수', method: '모양에서 추정', state: '선명' },
+    ],
+  };
+  const built = buildItemText('그래프의 식을 구하시오.', figure);
+  assert.equal(
+    built.text,
+    '그래프의 식을 구하시오.\n[그림 의존도: 필수]\n[그림1] 꼭짓점 (2, 3) (적힌 값, 선명)\n[그림2] 기울기 양수 (모양에서 추정, 선명)',
+  );
+  for (const [i, span] of built.figureSpans.entries())
+    assert.equal(
+      built.text.slice(span.start, span.end),
+      '[그림' +
+        (i + 1) +
+        '] ' +
+        span.read.content +
+        ' (' +
+        span.read.method +
+        ', ' +
+        span.read.state +
+        ')',
+    );
+  const figures = new Map([['q1', built]]);
+  const textById = new Map([['q1', built.text]]);
+  const figureTag = (quote: string) => ({
+    tagId: 'math-05',
+    status: 'adopted',
+    quote,
+    action: '행동',
+    reason: '',
+    quoteVerified: true,
+  });
+  const annotated = (quote: string) =>
+    annotateEvidence(
+      [
+        {
+          itemId: 'q1',
+          disposition: 'assessed',
+          reasoning: 'r',
+          tags: [figureTag(quote)],
+        },
+      ],
+      figures,
+      textById,
+    )[0].tags[0];
+  const written = annotated('꼭짓점 (2, 3)');
+  assert.equal(written.evidenceKind, 'figure');
+  assert.equal(written.status, 'adopted');
+  const guessed = annotated('기울기 양수 (모양에서 추정');
+  assert.equal(guessed.evidenceKind, 'figure');
+  assert.equal(guessed.status, 'held');
+  assert.match(guessed.reason, /추정·불명/);
+  const mixed = annotated(
+    '식을 구하시오.\n[그림 의존도: 필수]\n[그림1] 꼭짓점',
+  );
+  assert.equal(mixed.evidenceKind, 'text_and_figure');
+  assert.equal(mixed.status, 'adopted');
+  assert.equal(annotated('그래프의 식').evidenceKind, 'text');
+  const noFigure = annotateEvidence(
+    [
+      {
+        itemId: 'q9',
+        disposition: 'assessed',
+        reasoning: 'r',
+        tags: [figureTag('x')],
+      },
+    ],
+    figures,
+    textById,
+  )[0].tags[0];
+  assert.equal(noFigure.evidenceKind, undefined);
+  const handoff = makeHandoff(
+    {
+      assignmentId: 'hw',
+      subject: 'M',
+      items: [{ itemId: 'q1', page: 1, displayNumber: '1', text: built.text }],
+    },
+    [
+      [
+        {
+          itemId: 'q1',
+          disposition: 'assessed',
+          reasoning: 'r',
+          tags: [written],
+        },
+      ],
+    ],
+    '2026-11-13T00:00:00Z',
+  ).items[0];
+  assert.deepEqual(handoff.tags, [
+    {
+      tagId: 'math-05',
+      status: 'adopted',
+      evidenceKind: 'figure',
+      agreement: { same: 1, runs: 1 },
+    },
+  ]);
+});
+
+test('photos 입력을 허용하되 문항과 사진이 모두 비면 거절하고, 그림 정보가 있는 문항도 받는다', () => {
+  const base = { assignmentId: 'hw-photo', subject: 'M' };
+  const parsed = assignmentInputSchema.parse({
+    ...base,
+    items: [],
+    photos: [{ page: 7, image: 'page7.png' }],
+  });
+  assert.equal(parsed.photos?.length, 1);
+  assert.throws(() => assignmentInputSchema.parse({ ...base, items: [] }));
+  const withFigure = assignmentInputSchema.parse({
+    ...base,
+    items: [
+      {
+        itemId: 'q1',
+        page: 1,
+        displayNumber: '1',
+        text: '그래프를 보시오.',
+        figure: {
+          dependence: '보조',
+          reads: [{ content: '점 (1, 2)', method: '적힌 값', state: '선명' }],
+        },
+      },
+    ],
+  });
+  assert.equal(withFigure.items[0].figure?.dependence, '보조');
+});
+
+test('그림 안내문은 그림 정보가 있을 때만 들어가고 글자 전용 지시는 그대로다', async () => {
+  const plain = await buildInstructions('M');
+  const withFigures = await buildInstructions('M', { withFigures: true });
+  assert.ok(!plain.includes('[그림'));
+  assert.ok(withFigures.includes('[그림'));
+  assert.equal(await buildInstructions('M', { withFigures: false }), plain);
+});
+
 test('행동을 판정하고 태그를 누락한 응답은 거절하고, 근거 부족은 기존 no_adopted로 전달한다', () => {
   assert.throws(() => verifyResponse(assignment, response([])));
   const unclear = {

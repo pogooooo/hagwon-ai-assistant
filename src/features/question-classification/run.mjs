@@ -3,13 +3,22 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
   aliasItemIds,
+  annotateEvidence,
   assignmentInputSchema,
+  assignmentSchema,
   buildInstructions,
+  buildItemText,
   clovaOutputSchema,
   verifyResponse,
   makeHandoff,
 } from './classify.mjs';
-import { compareMathReadings, transcribeImage } from './read-image.mjs';
+import {
+  applyCrossCheck,
+  crossCheckPage,
+  itemsFromPhoto,
+  mergeMathPage,
+  readPage,
+} from './read-page.mjs';
 
 async function save(folder, name, data) {
   await mkdir(folder, { recursive: true });
@@ -38,6 +47,28 @@ async function run() {
   const items = [];
   const transcriptions = [];
   const held = new Map();
+  // 영어 사진은 한 번 판독하고, 수학 사진은 두 번 판독해 비교한 뒤
+  // 같은 오독을 줄이기 위해 사진과 전사를 직접 대조하는 교차 검수를 한 번 더 한다.
+  async function readSheet(filename) {
+    const first = await readPage(filename, { subject: source.subject });
+    const reads = [first];
+    let detected = first.items;
+    if (source.subject === 'M') {
+      const check = await readPage(filename, { subject: 'M', pass: 'check' });
+      reads.push(check);
+      detected = mergeMathPage(first.items, check.items);
+      const sound = detected.filter((m) => !m.holdReason && m.text.trim());
+      if (sound.length) {
+        const cross = await crossCheckPage(filename, sound);
+        reads.push(cross);
+        detected = applyCrossCheck(detected, cross.verdicts);
+      }
+    }
+    return {
+      detected,
+      reads: reads.map(({ model, text, usage }) => ({ model, text, usage })),
+    };
+  }
   for (const item of source.items) {
     if (!item.image) {
       items.push(item);
@@ -45,36 +76,94 @@ async function run() {
     }
     const { image, ...fields } = item;
     const filename = path.resolve(path.dirname(input), image);
-    const result = await transcribeImage(filename);
-    const check =
-      source.subject === 'M'
-        ? await transcribeImage(filename, { checkMath: true })
-        : null;
-    const reason = check ? compareMathReadings(result.text, check.text) : null;
-    if (reason) held.set(item.itemId, reason);
-    transcriptions.push({
-      itemId: item.itemId,
-      image,
-      ...result,
-      ...(check ? { check, holdReason: reason } : {}),
-    });
-    items.push({ ...fields, text: reason ? '' : result.text });
+    try {
+      const { detected, reads } = await readSheet(filename);
+      const read = detected.length === 1 ? detected[0] : null;
+      const reason = read
+        ? read.holdReason
+        : '사진에서 문항 ' +
+          detected.length +
+          '개가 감지됨 — photos 입력으로 등록하세요';
+      if (reason) held.set(item.itemId, reason);
+      transcriptions.push({ itemId: item.itemId, image, reads, detected });
+      items.push({
+        ...fields,
+        text: reason ? '' : read.text,
+        ...(!reason && read.figure ? { figure: read.figure } : {}),
+      });
+    } catch (error) {
+      held.set(item.itemId, '사진 판독 실패: ' + error.message);
+      transcriptions.push({ itemId: item.itemId, image, error: error.message });
+      items.push({ ...fields, text: '' });
+    }
   }
-  const assignment = { ...source, items };
+  for (const photo of source.photos ?? []) {
+    const filename = path.resolve(path.dirname(input), photo.image);
+    try {
+      const { detected, reads } = await readSheet(filename);
+      const generated = itemsFromPhoto(
+        source.assignmentId,
+        photo.page,
+        detected,
+      );
+      for (const {
+        itemId,
+        page,
+        displayNumber,
+        text,
+        figure,
+        holdReason,
+      } of generated) {
+        if (holdReason) held.set(itemId, holdReason);
+        items.push({
+          itemId,
+          page,
+          displayNumber,
+          text: holdReason ? '' : text,
+          ...(!holdReason && figure ? { figure } : {}),
+        });
+      }
+      transcriptions.push({ ...photo, reads, detected: generated });
+    } catch (error) {
+      transcriptions.push({ ...photo, error: error.message });
+      console.error(
+        '사진 판독 실패로 이 사진의 문항이 기록에서 빠졌습니다: ' +
+          photo.image +
+          ' — ' +
+          error.message,
+      );
+    }
+  }
+  const unsaved = {
+    assignmentId: source.assignmentId,
+    subject: source.subject,
+    items,
+  };
   if (transcriptions.length) {
-    await save(
-      path.join(output, 'transcribed'),
-      assignment.assignmentId,
-      assignment,
-    );
+    await save(path.join(output, 'transcribed'), unsaved.assignmentId, unsaved);
   }
+  if (!items.length)
+    throw Error('사진에서 분류할 문항을 하나도 얻지 못했습니다.');
+  const assignment = assignmentSchema.parse(unsaved);
   const model = process.env.CLASSIFICATION_MODEL?.trim() || 'HCX-007';
-  const instructions = await buildInstructions(assignment.subject);
+  // 그림 정보는 [그림N] 줄로 원문 뒤에 붙여 보내고, 각 줄의 위치로 인용 근거를 가른다.
+  const builtTexts = new Map();
+  const figures = new Map();
+  for (const item of assignment.items) {
+    const built = buildItemText(item.text, item.figure);
+    builtTexts.set(item.itemId, built.text);
+    if (built.figureSpans.length) figures.set(item.itemId, built);
+  }
+  const instructions = await buildInstructions(assignment.subject, {
+    withFigures: figures.size > 0,
+  });
   const runs = [];
   const usage = [];
   const readable = {
     ...assignment,
-    items: items.filter((item) => item.text.trim()),
+    items: assignment.items
+      .filter((item) => item.text.trim())
+      .map((item) => ({ ...item, text: builtTexts.get(item.itemId) })),
   };
   function inAssignmentOrder(classified) {
     const byId = new Map(classified.map((item) => [item.itemId, item]));
@@ -142,7 +231,13 @@ async function run() {
       .trim()
       .replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1');
     runs.push(
-      inAssignmentOrder(restore(verifyResponse(aliased, JSON.parse(json)))),
+      inAssignmentOrder(
+        annotateEvidence(
+          restore(verifyResponse(aliased, JSON.parse(json))),
+          figures,
+          builtTexts,
+        ),
+      ),
     );
   }
   const classifiedAt = new Date().toISOString();

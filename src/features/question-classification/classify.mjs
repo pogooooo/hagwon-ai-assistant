@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
+import { figureSchema } from './read-page.mjs';
 
 const readAsset = (name) =>
   readFile(new URL('./rubrics/' + name, import.meta.url), 'utf8');
@@ -10,7 +11,12 @@ const itemFields = {
   page: z.number().int().positive(),
   displayNumber: nonempty,
 };
-const textItem = z.object({ ...itemFields, text: z.string() });
+// figure는 사진 판독이 남긴 그림 정보다. transcribed/ 파일을 다시 입력해도 그림 규칙이 유지된다.
+const textItem = z.object({
+  ...itemFields,
+  text: z.string(),
+  figure: figureSchema.optional(),
+});
 export const assignmentSchema = z
   .object({
     assignmentId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/),
@@ -26,20 +32,29 @@ export const assignmentSchema = z
   );
 
 // Validate the whole assignment (including duplicate IDs) before any paid call.
-export const assignmentInputSchema = assignmentSchema.safeExtend({
-  items: z
-    .array(
-      z.union([
-        textItem.extend({ image: z.never().optional() }),
-        z.object({
-          ...itemFields,
-          image: nonempty,
-          text: z.never().optional(),
-        }),
-      ]),
-    )
-    .min(1),
-});
+// photos는 여러 문항이 담긴 사진이다. 문항 경계는 판독이 나누고 ID는 프로그램이 만든다.
+export const assignmentInputSchema = assignmentSchema
+  .safeExtend({
+    items: z
+      .array(
+        z.union([
+          textItem.extend({ image: z.never().optional() }),
+          z.object({
+            ...itemFields,
+            image: nonempty,
+            text: z.never().optional(),
+          }),
+        ]),
+      )
+      .default([]),
+    photos: z
+      .array(z.object({ page: z.number().int().positive(), image: nonempty }))
+      .optional(),
+  })
+  .refine(
+    ({ items, photos }) => items.length + (photos?.length ?? 0) > 0,
+    '문항 또는 사진을 하나 이상 입력하세요.',
+  );
 
 function responseSchema(subject) {
   const ids = catalog.tags
@@ -99,7 +114,7 @@ export const clovaOutputSchema = (subject) =>
     },
   });
 
-export async function buildInstructions(subject) {
+export async function buildInstructions(subject, { withFigures = false } = {}) {
   const math = subject === 'M';
   const rubric = await readAsset(
     math ? 'math-behavior-rubric.md' : 'english-behavior-rubric.md',
@@ -117,6 +132,12 @@ export async function buildInstructions(subject) {
       ? '⑩ 판정 질문: 문항이 묻지 않았고 소문항·지시문으로도 주어지지 않은 값을 먼저 구해야 최종 답에 이르는가? 그렇다면 ⑩은 reference가 아니라 adopted다. ⑨와 함께 붙일 때는 개념 연결과 별개인 그 중간 값을 action에 쓴다. 연결만으로 요구한 값이 바로 나오면 ⑨만 붙인다.'
       : '⑦ 판정 질문: 대화에서 다음 사람이 할 말이나 상황에 맞는 표현을 고르는가? 아니면 ⑦이 아니다. 글쓴이가 바라는 행동·요구·글의 목적을 물으면 ④다.',
     '그림·밑줄 등 필요한 단서가 없으면 보류한다. 태그마다 입력 text의 연속된 원문 구절을 그대로 quote에 쓰고, 필요한 행동은 action, 참고·보류 사유는 reason에 쓴다.',
+    // 그림 정보가 실제로 포함된 숙제에만 넣는다. 글자 전용 숙제의 지시는 바뀌지 않는다.
+    ...(withFigures
+      ? [
+          '원문 아래의 [그림 의존도]와 [그림N] 줄은 사진의 그림·표·그래프에서 프로그램이 읽어 둔 정보다. 그림 단서로 판정한 태그는 해당 [그림N] 줄의 연속 구절을 quote로 쓴다. (모양에서 추정) 또는 (…, 불명)으로 표시된 정보뿐인 판정은 채택하지 않고 보류한다.',
+        ]
+      : []),
     JSON.stringify(
       catalog.tags
         .filter((t) => t.subject === subject)
@@ -200,12 +221,81 @@ export function verifyResponse(assignment, raw) {
   });
 }
 
+// 그림 정보를 분류 입력에 [그림N] 줄로 붙이고, 각 줄의 위치를 기억해 인용과 대조한다.
+export function buildItemText(text, figure) {
+  if (!figure || (figure.dependence === '없음' && !figure.reads.length))
+    return { text, dependence: '없음', figureSpans: [] };
+  const lines = [text.trimEnd(), '[그림 의존도: ' + figure.dependence + ']'];
+  const figureSpans = [];
+  for (const [i, read] of figure.reads.entries()) {
+    const line =
+      '[그림' +
+      (i + 1) +
+      '] ' +
+      read.content +
+      ' (' +
+      read.method +
+      ', ' +
+      read.state +
+      ')';
+    const start = lines.join('\n').length + 1;
+    figureSpans.push({ start, end: start + line.length, read });
+    lines.push(line);
+  }
+  return { text: lines.join('\n'), dependence: figure.dependence, figureSpans };
+}
+
+// 설계 문서 76행: 그림 의존도가 '필수'인데 태그의 단서가 '불명'이거나
+// '모양에서 추정'인 그림 정보뿐이면 그 태그를 보류한다. 근거 종류도 함께 기록한다.
+export function annotateEvidence(results, figures, textById) {
+  return results.map((result) => {
+    const built = figures.get(result.itemId);
+    if (!built?.figureSpans.length) return result;
+    const text = textById.get(result.itemId);
+    return {
+      ...result,
+      tags: result.tags.map((tag) => {
+        if (!tag.quoteVerified) return tag;
+        const start = sameQuoteMarks(text).indexOf(sameQuoteMarks(tag.quote));
+        const end = start + tag.quote.length;
+        const overlapped = built.figureSpans.filter(
+          (span) => span.start < end && start < span.end,
+        );
+        if (!overlapped.length) return { ...tag, evidenceKind: 'text' };
+        const bodyClue = [...text.slice(start, end)].some(
+          (ch, i) =>
+            /\S/.test(ch) &&
+            !overlapped.some(
+              (span) => span.start <= start + i && start + i < span.end,
+            ),
+        );
+        const evidenceKind = bodyClue ? 'text_and_figure' : 'figure';
+        const unclearOnly =
+          built.dependence === '필수' &&
+          !bodyClue &&
+          overlapped.every(
+            ({ read }) =>
+              read.method === '모양에서 추정' || read.state === '불명',
+          );
+        return unclearOnly && tag.status !== 'held'
+          ? {
+              ...tag,
+              evidenceKind,
+              status: 'held',
+              reason: '그림 의존도가 필수인데 추정·불명 그림 정보만 근거',
+            }
+          : { ...tag, evidenceKind };
+      }),
+    };
+  });
+}
+
 export function makeHandoff(assignment, runs, classifiedAt) {
   // 첫 판정을 전달하고 나머지 실행은 일치도 측정에만 쓴다.
   const items = assignment.items.map(
     ({ itemId, page, displayNumber }, index) => {
       const first = runs[0][index];
-      const tags = first.tags.map(({ tagId, status }) => {
+      const tags = first.tags.map(({ tagId, status, evidenceKind }) => {
         const same = runs.filter((run) =>
           run[index].tags.some((t) => t.tagId === tagId && t.status === status),
         ).length;
@@ -213,7 +303,7 @@ export function makeHandoff(assignment, runs, classifiedAt) {
           tagId,
           // 반복 결과가 한 번이라도 갈린 태그는 보류로 전달한다.
           status: same === runs.length ? status : 'held',
-          evidenceKind: 'text',
+          evidenceKind: evidenceKind ?? 'text',
           agreement: { same, runs: runs.length },
         };
       });
