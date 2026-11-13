@@ -22,6 +22,8 @@ import {
 import { homeworkModule } from './homework.ts';
 import { learningModule } from './learning.ts';
 import { calendarModule } from './calendar.ts';
+import { calendarNotices } from './schedule.ts';
+import { calendarSessions } from './team-schedule.ts';
 import { preferencesModule, selectedCharacter } from './preferences.ts';
 import {
   escapeHtml as h,
@@ -54,6 +56,28 @@ const academyDescriptions: Record<string, string> = {
   '/schedule': '수업, 휴·보강, 상담 예약',
   '/settings': '상담 캐릭터 선택',
 };
+const menuOrder = [
+  '/consultation',
+  '/schedule',
+  '/documents',
+  '/learning',
+  '/homework',
+  '/directory',
+  '/settings',
+];
+const menuIcons: Record<string, string> = {
+  '/consultation': 'chat',
+  '/schedule': 'calendar',
+  '/documents': 'files',
+  '/learning': 'chart',
+  '/homework': 'check',
+  '/directory': 'people',
+  '/settings': 'settings',
+};
+
+function serviceIcon(path: string) {
+  return `<span class="service-icon icon-${menuIcons[path]}" aria-hidden="true"></span>`;
+}
 
 export interface OperationsServerOptions {
   db: OperationsDatabase;
@@ -184,6 +208,13 @@ export function createOperationsServer({
     );
   }
 
+  function serviceMenu(actor: Actor) {
+    const pages = visibleModules(actor);
+    return menuOrder.flatMap((path) =>
+      pages.filter((page) => page.path === path),
+    );
+  }
+
   function layout(content: string, actor?: Actor, current?: string) {
     const academyName = actor
       ? one<{ name: string }>(
@@ -192,7 +223,7 @@ export function createOperationsServer({
           actor.academyId,
         )?.name
       : 'AXR 학원';
-    const pages = actor ? visibleModules(actor) : [];
+    const pages = actor ? serviceMenu(actor) : [];
     const character = actor ? selectedCharacter({ db, actor }) : 'walnut';
     const nav = (path: string, label: string) =>
       '<a href="' +
@@ -202,61 +233,43 @@ export function createOperationsServer({
       '>' +
       h(label) +
       '</a>';
-    const brand = '<a class="brand" href="/">' + h(academyName) + '</a>';
+    const brand = `<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">A</span><span>AXR 학원</span></a>`;
     const title =
       pages.find((p) => p.path === current)?.label ?? (actor ? '홈' : '로그인');
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · AXR</title><link rel="stylesheet" href="/operations.css"><link rel="stylesheet" href="/service-design.css"></head><body data-account="' +
+      ' · AXR</title><link rel="stylesheet" href="/operations.css?v=2"><link rel="stylesheet" href="/service-design.css?v=2"></head><body data-account="' +
       h(actor?.id ?? '') +
-      '"><script src="/service-ui.js" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
-      '<header class="topbar ' +
-      (actor ? '' : 'login-top') +
-      '">' +
-      (actor ? '<span class="topbar-title">' + h(title) + '</span>' : brand) +
+      '"><script src="/service-ui.js?v=2" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '<header class="topbar"><div class="shell topbar-inner">' +
+      brand +
+      (actor && academyName
+        ? '<span class="academy-name">' + h(academyName) + '</span>'
+        : '') +
       (actor
-        ? '<div class="session"><a class="profile-link" href="/settings" aria-label="설정"><img src="/assets/' +
+        ? '<div class="session"><a class="profile-link" href="/settings" aria-label="계정 설정"><img src="/assets/' +
           character +
           '.png" alt=""></a><span>' +
           h(actor.name) +
-          ' · ' +
-          h(roleLabels[actor.role]) +
+          (actor.name === roleLabels[actor.role]
+            ? ''
+            : '<small>' + h(roleLabels[actor.role]) + '</small>') +
           '</span><form method="post" action="/logout"><button class="secondary">로그아웃</button></form></div>'
         : '') +
-      '</header>' +
+      '</div>' +
       (actor
-        ? '<div class="workspace"><aside class="sidebar">' +
-          brand +
-          '<nav aria-label="학원 운영">' +
-          nav('/', '홈') +
-          pages.map((p) => nav(p.path, p.label)).join('') +
-          '</nav></aside><main id="main-content">' +
-          content +
-          '</main></div><nav class="mobile-nav" aria-label="주요 메뉴">' +
+        ? '<div class="menu-bar"><nav class="shell service-nav" aria-label="학원 메뉴">' +
           nav('/', '홈') +
           pages
-            .filter((p) =>
-              [
-                '/consultation',
-                '/documents',
-                '/schedule',
-                '/learning',
-              ].includes(p.path),
-            )
             .map((p) =>
-              nav(
-                p.path,
-                p.path === '/consultation'
-                  ? '상담'
-                  : p.path === '/documents'
-                    ? '학원 자료'
-                    : p.label,
-              ),
+              nav(p.path, p.path === '/consultation' ? '상담' : p.label),
             )
             .join('') +
-          '</nav>'
-        : '<main class="sign-in" id="main-content">' + content + '</main>') +
+          '</nav></div>'
+        : '') +
+      '</header>' +
+      `<main class="${actor ? 'shell workspace' : 'sign-in'}" id="main-content">${content}</main>` +
       '</body></html>'
     );
   }
@@ -269,8 +282,8 @@ export function createOperationsServer({
       ['보호자', 'TA_GUARDIAN_E_MATH'],
       ['방문자', 'TA_VISITOR'],
     ];
-    return `<section class="panel">
-    <h1>학원 운영 로그인</h1>
+    return `<section class="panel sign-in-form">
+    <div class="sign-in-heading"><img src="/assets/walnut.png" alt=""><h1>학원 운영 로그인</h1></div>
     ${message ? `<p class="notice" role="alert">${h(message)}</p>` : ''}
     <form method="post" action="/login">
       <label>계정 <input name="username" autocomplete="username" required maxlength="100"></label>
@@ -278,7 +291,7 @@ export function createOperationsServer({
       <button type="submit">로그인</button>
     </form>
   </section>
-  <section class="panel">
+  <section class="panel sign-in-accounts">
     <h2>가상 학원 계정</h2>
     ${showDefaultPassword ? '<p>초기 비밀번호 <code>axr-demo</code></p>' : ''}
     <dl class="demo-accounts">${demoAccounts
@@ -290,18 +303,64 @@ export function createOperationsServer({
   </section>`;
   }
 
-  function home(actor: Actor) {
+  function home(actor: Actor, url: URL) {
+    const pages = serviceMenu(actor);
+    const hasSchedule = pages.some(({ path }) => path === '/schedule');
+    const character = selectedCharacter({ db, actor });
+    const today = Date.now() + 9 * 60 * 60 * 1000;
+    const from = new Date(today).toISOString().slice(0, 10);
+    const to = new Date(today + 13 * 86_400_000).toISOString().slice(0, 10);
+    const ctx = { db, actor, url };
+    const events = hasSchedule
+      ? [
+          ...calendarNotices(ctx, from, to),
+          ...calendarSessions(ctx, from, to).map(({ date, label, kind }) => ({
+            date,
+            title: label,
+            kind,
+          })),
+        ]
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .slice(0, 5)
+      : [];
+    const agenda = hasSchedule
+      ? `<section class="panel home-agenda"><div class="panel-heading"><h2>다가오는 일정</h2><a href="/schedule">달력 보기</a></div>
+        ${
+          events.length
+            ? `<ul class="agenda-list">${events
+                .map(
+                  ({ date, title, kind }) =>
+                    `<li><a href="/schedule?month=${date.slice(0, 7)}&amp;day=${date}"><time datetime="${date}">${Number(date.slice(5, 7))}.${date.slice(8)}</time><span class="event-dot calendar-${h(kind)}" aria-hidden="true"></span><span>${h(title)}</span></a></li>`,
+                )
+                .join('')}</ul>`
+            : '<p class="empty">앞으로 2주간 등록된 일정이 없습니다.</p>'
+        }
+      </section>`
+      : '';
     return `<div class="page-heading"><h1>${actor.role === 'admin' || actor.role === 'teacher' ? '학원 운영' : '우리 학원'}</h1></div>
-    <div class="module-grid home-cards">${visibleModules(actor)
-      .map(
-        (
-          operation,
-        ) => `<a class="panel module-card" href="${h(operation.path)}">
-      <h2>${h(operation.label)}</h2>
-      <p>${h(academyDescriptions[operation.path])}</p>
-    </a>`,
-      )
-      .join('')}</div>`;
+    <section class="home-hero" aria-labelledby="home-consultation-title">
+      <div class="home-hero-copy">
+        <h2 id="home-consultation-title">학원 상담</h2>
+        <p>수업 시간, 수강료, 휴·보강이 궁금할 때<br>학원 자료를 바탕으로 답변해 드려요.</p>
+        <a class="button-link" href="/consultation">질문하기 <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="home-hero-art"><img src="/assets/${character}.png" alt=""></div>
+    </section>
+    <div class="home-columns${hasSchedule ? ' with-agenda' : ''}">
+      <section class="panel home-services" aria-labelledby="service-title">
+        <h2 id="service-title">서비스 바로가기</h2>
+        <ul class="service-list">${pages
+          .map(
+            (operation) => `<li><a href="${h(operation.path)}">
+          <span class="service-icon-tile">${serviceIcon(operation.path)}</span>
+          <span class="service-link-label"><strong>${h(operation.label)}</strong><small>${h(academyDescriptions[operation.path])}</small></span>
+          <span class="link-arrow" aria-hidden="true">›</span>
+        </a></li>`,
+          )
+          .join('')}</ul>
+      </section>
+      ${agenda}
+    </div>`;
   }
 
   function sendPage(
@@ -442,7 +501,7 @@ export function createOperationsServer({
         return;
       }
       if (url.pathname === '/' && request.method === 'GET') {
-        sendPage(response, 200, home(actor), actor, '/');
+        sendPage(response, 200, home(actor, url), actor, '/');
         return;
       }
       if (url.pathname === '/documents/download' && request.method === 'GET') {

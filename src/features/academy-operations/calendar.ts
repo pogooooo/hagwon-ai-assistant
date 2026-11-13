@@ -40,12 +40,12 @@ function calendar(ctx: PageContext) {
       .map((s) => ({ title: s.label, kind: s.kind })),
     ...notices.filter((n) => n.date === day),
   ];
-  return `<section class="panel"><div class="panel-heading"><a href="/schedule?month=${previous}">이전 달</a><h2>${h(month)} 일정</h2><a href="/schedule?month=${next}">다음 달</a></div><div class="calendar-grid" role="table" aria-label="월간 일정">${[...'일월화수목금토'].map((d) => `<div class="calendar-weekday" role="columnheader">${d}</div>`).join('')}${'<div class="calendar-empty"></div>'.repeat(date.getUTCDay())}${Array.from(
+  return `<section class="panel calendar-panel"><div class="calendar-heading"><h2>${date.getUTCFullYear()}년 ${date.getUTCMonth() + 1}월</h2><nav aria-label="달력 월 이동"><a href="/schedule?month=${previous}" aria-label="이전 달">‹</a><a href="/schedule">오늘</a><a href="/schedule?month=${next}" aria-label="다음 달">›</a></nav></div><div class="calendar-grid" aria-label="월간 일정">${[...'일월화수목금토'].map((d) => `<div class="calendar-weekday">${d}</div>`).join('')}${'<div class="calendar-empty"></div>'.repeat(date.getUTCDay())}${Array.from(
     { length: days },
     (_, i) => {
       const day = month + '-' + String(i + 1).padStart(2, '0');
       const items = entries(day);
-      return `<a role="cell" class="calendar-day${day === today ? ' today' : ''}" href="/schedule?month=${month}&amp;day=${day}" aria-label="${day} 일정 ${items.length}건"><strong>${i + 1}</strong>${items
+      return `<a class="calendar-day${day === today ? ' today' : ''}${day === selected ? ' selected' : ''}" href="/schedule?month=${month}&amp;day=${day}" aria-label="${day} 일정 ${items.length}건"${day === selected ? ' aria-current="date"' : ''}><strong>${i + 1}</strong>${items
         .slice(0, 3)
         .map(
           (s) => `<small class="calendar-${h(s.kind)}">${h(s.title)}</small>`,
@@ -54,7 +54,9 @@ function calendar(ctx: PageContext) {
           '',
         )}${items.length > 3 ? `<small>외 ${items.length - 3}건</small>` : ''}</a>`;
     },
-  ).join('')}</div>${
+  ).join(
+    '',
+  )}${'<div class="calendar-empty"></div>'.repeat((7 - ((date.getUTCDay() + days) % 7)) % 7)}</div>${
     selected && selected.startsWith(month + '-')
       ? `<section class="day-detail"><h3>${h(selected)} 상세</h3><ul>${
           entries(selected)

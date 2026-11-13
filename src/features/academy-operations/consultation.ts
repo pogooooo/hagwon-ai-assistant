@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { operationsGeneration } from './runtime-generation.ts';
+import { selectedCharacter } from './preferences.ts';
 import {
   learningEvidence,
   learningLabels,
@@ -581,22 +582,25 @@ function renderConsultation(ctx: PageContext) {
     : '';
   return `<h1>상담 및 이력</h1>
     <div class="split consultation-layout">
-      <section class="panel">
+      <aside class="panel consultation-history">
         <div class="panel-heading"><h2>상담 목록</h2><a href="/consultation">새 상담</a></div>
         ${
           threads.length
             ? `<ul class="item-list">${threads
                 .map(
                   (row) =>
-                    `<li><a href="/consultation?id=${encodeURIComponent(row.id)}">${h(row.title)}</a><small>${h(threadLabels[row.status])}</small></li>`,
+                    `<li><a href="/consultation?id=${encodeURIComponent(row.id)}"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.title)}</span><small>${h(threadLabels[row.status])}</small></a></li>`,
                 )
                 .join('')}</ul>`
             : '<p class="muted">저장된 상담이 없습니다.</p>'
         }
-      </section>
-      <section class="panel">
-        <h2>${thread ? h(thread.title) : '학원 자료에 질문'}</h2>
-        ${thread ? `<p class="muted">${h(threadLabels[thread.status])}</p>` : ''}
+      </aside>
+      <section class="panel consultation-main">
+        ${
+          thread
+            ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
+            : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>어떤 도움이 필요하신가요?</h2><p>수업과 학원 생활에 대해 질문해 보세요.</p></div></div>`
+        }
         ${messages.map((message) => renderMessage(message, currentRevisions)).join('')}
         ${
           own && thread?.status !== 'closed'

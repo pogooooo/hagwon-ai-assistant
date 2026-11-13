@@ -1,3 +1,12 @@
+const menu = document.querySelector('.service-nav');
+const selectedMenu = menu?.querySelector('[aria-current="page"]');
+if (selectedMenu) {
+  const overflow =
+    selectedMenu.getBoundingClientRect().right -
+    menu.getBoundingClientRect().right;
+  if (overflow > 0) menu.scrollLeft += overflow + 16;
+}
+
 // Keep an unsent question only in this browser tab and only for this account.
 const account = document.body.dataset.account;
 if (account) {
