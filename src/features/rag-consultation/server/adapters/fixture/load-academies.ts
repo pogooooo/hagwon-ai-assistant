@@ -16,6 +16,7 @@ import {
 } from 'node:fs';
 import { homedir } from 'node:os';
 import { extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { prepareFileDocument } from '../../ingest/ingest-file.ts';
 import {
@@ -39,13 +40,9 @@ import type {
   Visibility,
 } from '../../types.ts';
 
-export const ACADEMIES_DIR = join(
-  import.meta.dirname,
-  '..',
-  '..',
-  '__fixtures__',
-  'academies-v1',
-);
+export const ACADEMIES_DIR = import.meta.url?.startsWith('file:')
+  ? fileURLToPath(new URL('../../__fixtures__/academies-v1', import.meta.url))
+  : '/bundle/academies';
 
 export interface AcademyJson {
   academy_id: string;

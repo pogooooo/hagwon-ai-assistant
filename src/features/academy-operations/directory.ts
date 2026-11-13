@@ -5,7 +5,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import type { DatabaseSync } from 'node:sqlite';
+import type { OperationsDatabase } from './database.ts';
 
 import {
   escapeHtml,
@@ -41,7 +41,7 @@ interface DirectoryClass {
   subject: string;
 }
 
-function setup(db: DatabaseSync): void {
+function setup(db: OperationsDatabase): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS academies (
       id TEXT PRIMARY KEY,
@@ -140,7 +140,10 @@ function verifyPassword(password: string, hash: string): boolean {
   );
 }
 
-export function getActor(db: DatabaseSync, id: string): Actor | undefined {
+export function getActor(
+  db: OperationsDatabase,
+  id: string,
+): Actor | undefined {
   return one<Actor>(
     db,
     'SELECT ' + ACTOR_COLUMNS + ' FROM accounts WHERE id = ?',
@@ -149,7 +152,7 @@ export function getActor(db: DatabaseSync, id: string): Actor | undefined {
 }
 
 export function getSessionActor(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   digest: string,
   now: number,
 ): Actor | undefined {
@@ -163,7 +166,7 @@ export function getSessionActor(
 }
 
 export function authenticate(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   username: string,
   password: string,
 ): Actor | undefined {
@@ -184,15 +187,14 @@ export function authenticate(
     : undefined;
 }
 
-function readFixture<T>(name: string): T {
-  return JSON.parse(
-    readFileSync(new URL(FIXTURES + name + '.json', import.meta.url), 'utf8'),
-  ) as T;
+function readFixture<T>(name: string, root: URL): T {
+  return JSON.parse(readFileSync(new URL(name + '.json', root), 'utf8')) as T;
 }
 
 export function initializeIdentity(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   demoPassword: string,
+  fixturesRoot = new URL(FIXTURES, import.meta.url),
 ): void {
   setup(db);
   if (db.prepare('SELECT 1 FROM academies WHERE id = ?').get(DEMO_ACADEMY_ID))
@@ -206,15 +208,13 @@ export function initializeIdentity(
       subject: string;
       grade: string;
     }[];
-  }>('academy');
-  const students =
-    readFixture<{ student_id: string; name: string; class_ids: string[] }[]>(
-      'students',
-    );
-  const accounts =
-    readFixture<
-      { user_id: string; role: Role; allowed_student_ids: string[] }[]
-    >('users');
+  }>('academy', fixturesRoot);
+  const students = readFixture<
+    { student_id: string; name: string; class_ids: string[] }[]
+  >('students', fixturesRoot);
+  const accounts = readFixture<
+    { user_id: string; role: Role; allowed_student_ids: string[] }[]
+  >('users', fixturesRoot);
   transaction(db, () => {
     if (db.prepare('SELECT 1 FROM academies WHERE id = ?').get(DEMO_ACADEMY_ID))
       return;
@@ -298,7 +298,7 @@ export function initializeIdentity(
 }
 
 export function accessibleStudents(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   actor: Actor,
 ): DirectoryStudent[] {
   const selection =
@@ -339,7 +339,7 @@ export function accessibleStudents(
 }
 
 export function accessibleClasses(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   actor: Actor,
 ): DirectoryClass[] {
   const selection =
@@ -370,7 +370,7 @@ export function accessibleClasses(
 }
 
 export function canReadStudent(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   actor: Actor,
   studentId: string,
 ): boolean {
@@ -382,7 +382,11 @@ function assertAdmin(actor: Actor): void {
     throw new OperationError('관리자만 계정과 반을 수정할 수 있습니다.', 403);
 }
 
-function validateClass(db: DatabaseSync, academyId: string, id: string): void {
+function validateClass(
+  db: OperationsDatabase,
+  academyId: string,
+  id: string,
+): void {
   if (
     !db
       .prepare('SELECT 1 FROM classes WHERE id = ? AND academy_id = ?')
@@ -392,7 +396,7 @@ function validateClass(db: DatabaseSync, academyId: string, id: string): void {
 }
 
 function validateStudent(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academyId: string,
   id: string,
 ): void {

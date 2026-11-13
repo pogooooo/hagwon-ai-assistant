@@ -23,11 +23,6 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 type PdfJs = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
-let pdfjsPromise: Promise<PdfJs> | null = null;
-function loadPdfJs(): Promise<PdfJs> {
-  pdfjsPromise ??= import('pdfjs-dist/legacy/build/pdf.mjs');
-  return pdfjsPromise;
-}
 
 /** 한글 CID 글꼴(Adobe-Korea1)·표준 글꼴 해석용 데이터 경로(패키지에 포함). */
 function pdfjsDataPaths() {
@@ -38,6 +33,21 @@ function pdfjsDataPaths() {
     cMapUrl: join(root, 'cmaps') + '/',
     standardFontDataUrl: join(root, 'standard_fonts') + '/',
   };
+}
+
+type PdfRuntime = {
+  library: PdfJs;
+  options: NonNullable<Parameters<PdfJs['getDocument']>[0]> & object;
+};
+let pdfRuntime: Promise<PdfRuntime> | undefined;
+let loadPdfRuntime = async (): Promise<PdfRuntime> => ({
+  library: await import('pdfjs-dist/legacy/build/pdf.mjs'),
+  options: pdfjsDataPaths(),
+});
+
+export function configurePdfRuntime(load: () => Promise<PdfRuntime>) {
+  loadPdfRuntime = load;
+  pdfRuntime = undefined;
 }
 
 const MIN_TEXT_CHARS = 20;
@@ -190,12 +200,13 @@ export async function parsePdf(
     tables: number;
   }
 > {
-  const pdfjs = await loadPdfJs();
+  const { library: pdfjs, options: pdfOptions } = await (pdfRuntime ??=
+    loadPdfRuntime());
   const warnings: ParseWarning[] = [];
   let document: import('pdfjs-dist/legacy/build/pdf.mjs').PDFDocumentProxy;
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(bytes),
-    ...pdfjsDataPaths(),
+    ...pdfOptions,
     cMapPacked: true,
     disableFontFace: true,
     useSystemFonts: false,

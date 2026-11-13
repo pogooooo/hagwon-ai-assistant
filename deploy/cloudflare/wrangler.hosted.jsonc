@@ -1,0 +1,35 @@
+{
+  "name": "axr-academy-hosted",
+  "main": "hosted.mjs",
+  "compatibility_date": "2026-11-12",
+  "base_dir": "../../.local/cloudflare-hosted-modules",
+  "find_additional_modules": true,
+  "preserve_file_names": true,
+  "rules": [
+    {
+      "type": "Data",
+      "globs": ["academies/**", "cmaps/*.bcmap", "standard_fonts/*"],
+      "fallthrough": false,
+    },
+  ],
+  "alias": {
+    "@napi-rs/canvas": "./native-unavailable.mjs",
+    "tesseract.js": "./native-unavailable.mjs",
+  },
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "../../.local/cloudflare-hosted-assets",
+    "html_handling": "none",
+  },
+  "vars": {
+    "AXR_OPERATIONS_PUBLIC_ORIGIN": "https://axr-academy-hosted.pogoo.workers.dev",
+    "RAG_GENERATION_PROVIDER": "gemini",
+    "RAG_GENERATION_DAILY_CALL_LIMIT": "20",
+    "RAG_GEMINI_ALLOW_PERSONAL_DATA": "false",
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "ACADEMY", "class_name": "AcademyDemo" }],
+  },
+  "migrations": [{ "tag": "hosted-v1", "new_sqlite_classes": ["AcademyDemo"] }],
+}

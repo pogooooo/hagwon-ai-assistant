@@ -1,4 +1,4 @@
-import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import type { OperationsDatabase, SQLInputValue } from './database.ts';
 
 export type Role = 'admin' | 'teacher' | 'student' | 'guardian' | 'visitor';
 
@@ -12,9 +12,10 @@ export interface Actor {
 }
 
 export interface PageContext {
-  db: DatabaseSync;
+  db: OperationsDatabase;
   actor: Actor;
   url: URL;
+  maxDocumentBytes?: number;
   assertCurrentAccess?: () => void;
 }
 
@@ -22,7 +23,7 @@ export interface OperationModule {
   path: string;
   label: string;
   roles: readonly Role[];
-  setup(db: DatabaseSync): void;
+  setup(db: OperationsDatabase, documentsRoot?: string): void;
   render(ctx: PageContext): string | Promise<string>;
   submit(
     ctx: PageContext,
@@ -83,7 +84,7 @@ export function required(
 }
 
 export function rows<T>(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   sql: string,
   ...params: SQLInputValue[]
 ): T[] {
@@ -91,14 +92,15 @@ export function rows<T>(
 }
 
 export function one<T>(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   sql: string,
   ...params: SQLInputValue[]
 ): T | undefined {
   return db.prepare(sql).get(...params) as T | undefined;
 }
 
-export function transaction<T>(db: DatabaseSync, write: () => T): T {
+export function transaction<T>(db: OperationsDatabase, write: () => T): T {
+  if (db.transactionSync) return db.transactionSync(write);
   db.exec('BEGIN IMMEDIATE');
   try {
     const result = write();

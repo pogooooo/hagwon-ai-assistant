@@ -14,6 +14,11 @@ export function operationsGeneration(): GenerationPort {
       process.env.RAG_GENERATION_DAILY_CALL_LIMIT ?? '100',
   }));
 }
+
+export function configureOperationsGeneration(generation: GenerationPort) {
+  provider = generation;
+}
+
 export function createOperationsGeneration(
   env: GenerationEnv,
   fetchImpl?: typeof fetch,

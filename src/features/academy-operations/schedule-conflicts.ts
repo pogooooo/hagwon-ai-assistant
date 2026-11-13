@@ -1,5 +1,5 @@
 import { classesOnDate } from '../makeup-schedule/model/timetable.ts';
-import type { DatabaseSync } from 'node:sqlite';
+import type { OperationsDatabase } from './database.ts';
 import type {
   AcademyConfig,
   ScheduleState,
@@ -16,10 +16,10 @@ interface NoticeRange {
 }
 const overlap = (a: number, b: number, c: number, d: number) => a < d && c < b;
 const at = (day: string, time: string) => Date.parse(`${day}T${time}:00+09:00`);
-const hasTable = (db: DatabaseSync, name: string) =>
+const hasTable = (db: OperationsDatabase, name: string) =>
   !!one(db, "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", name);
 export function assertUnifiedSchedule(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academy: string,
   state: ScheduleState,
   config: Pick<AcademyConfig, 'classes'>,
@@ -77,7 +77,7 @@ export function assertUnifiedSchedule(
   }
 }
 export function checkNoticeAgainstTeam(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academy: string,
   notice: NoticeRange,
 ) {
@@ -97,7 +97,7 @@ export function checkNoticeAgainstTeam(
     );
 }
 export function assertTeacherFree(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academy: string,
   teacher: string,
   start: number,

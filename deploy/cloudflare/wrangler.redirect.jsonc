@@ -1,0 +1,10 @@
+{
+  "name": "axr-academy",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-12",
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "AXR_HOSTED_ORIGIN": "https://axr-academy-hosted.pogoo.workers.dev",
+  },
+}

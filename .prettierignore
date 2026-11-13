@@ -9,3 +9,6 @@ next-env.d.ts
 *.tsbuildinfo
 # 제공된 합성 평가자료 원본은 수정하지 않는다
 src/features/rag-consultation/server/__fixtures__/
+.local/
+deploy/cloudflare/.local/
+deploy/cloudflare/.wrangler/

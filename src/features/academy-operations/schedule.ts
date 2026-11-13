@@ -3,7 +3,7 @@ import {
   checkNoticeAgainstTeam,
   assertTeacherFree,
 } from './schedule-conflicts.ts';
-import type { DatabaseSync } from 'node:sqlite';
+import type { OperationsDatabase } from './database.ts';
 import type {
   ApprovedFactInput,
   SourceDocumentInput,
@@ -133,7 +133,10 @@ function requireClassScope(ctx: PageContext, classId: string | null): void {
   throw new OperationError('관리 권한이 없는 공지 대상입니다.', 403);
 }
 
-function noticesForAcademy(db: DatabaseSync, academyId: string): Notice[] {
+function noticesForAcademy(
+  db: OperationsDatabase,
+  academyId: string,
+): Notice[] {
   return rows<Notice>(
     db,
     'SELECT * FROM ops_schedule_notices WHERE academy_id = ? AND revoked_at IS NULL ' +
@@ -674,7 +677,7 @@ function renderBookings(ctx: PageContext): string {
     </section>`;
 }
 
-function setup(db: DatabaseSync): void {
+function setup(db: OperationsDatabase): void {
   db.exec(String.raw`
     CREATE TABLE IF NOT EXISTS ops_schedule_notices (
       id TEXT PRIMARY KEY,
@@ -789,7 +792,7 @@ function closureLabel(notice: Notice): string {
 }
 
 export function scheduleDocuments(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academyId: string,
 ): SourceDocumentInput[] {
   return noticesForAcademy(db, academyId).flatMap((notice) => {
@@ -825,7 +828,7 @@ export function scheduleDocuments(
 }
 
 export function scheduleFacts(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academyId: string,
 ): ApprovedFactInput[] {
   return noticesForAcademy(db, academyId).flatMap((notice) => {

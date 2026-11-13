@@ -1,6 +1,6 @@
 import { previewDocument } from './document-preview.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
+import type { OperationsDatabase } from './database.ts';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -34,9 +34,6 @@ import {
 } from './shared.ts';
 
 export const maxDocumentBytes = DEFAULT_PARSE_LIMITS.maxBytes;
-const demoDirectory = fileURLToPath(
-  new URL('../makeup-schedule/academies/', import.meta.url),
-);
 const documentTypes: Record<DocumentType, string> = {
   academy_info: '학원 안내',
   fee: '수강료',
@@ -71,7 +68,7 @@ interface DocumentRow {
 }
 
 const indexCache = new WeakMap<
-  DatabaseSync,
+  OperationsDatabase,
   Map<string, { version: string; store: Promise<InMemoryRagStore> }>
 >();
 
@@ -84,7 +81,12 @@ function toVersion(row: DocumentRow): DocumentVersion {
   };
 }
 
-function setupDocuments(db: DatabaseSync) {
+function setupDocuments(
+  db: OperationsDatabase,
+  demoDirectory = fileURLToPath(
+    new URL('../makeup-schedule/academies/', import.meta.url),
+  ),
+) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS op_document_versions (
       academy_id TEXT NOT NULL REFERENCES academies(id),
@@ -152,7 +154,7 @@ function setupDocuments(db: DatabaseSync) {
   });
 }
 
-function academyVersions(db: DatabaseSync, academyId: string) {
+function academyVersions(db: OperationsDatabase, academyId: string) {
   return rows<DocumentRow>(
     db,
     `SELECT document_id, revision, input, facts, state, original_name
@@ -195,7 +197,7 @@ function applicableVersions(known: DocumentVersion[], now: number) {
   });
 }
 
-function publishedGeneration(db: DatabaseSync, academyId: string) {
+function publishedGeneration(db: OperationsDatabase, academyId: string) {
   return (
     one<{ generation: number }>(
       db,
@@ -215,7 +217,7 @@ function scheduleVersion(
 }
 
 export function documentsIndexVersion(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academyId: string,
   extraDocuments: SourceDocumentInput[],
   extraFacts: ApprovedFactInput[],
@@ -228,7 +230,7 @@ export function documentsIndexVersion(
 }
 
 async function createDocumentsIndex(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academyId: string,
   extraDocuments: SourceDocumentInput[],
   extraFacts: ApprovedFactInput[],
@@ -286,7 +288,7 @@ async function createDocumentsIndex(
 }
 
 export async function buildDocumentsIndex(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academyId: string,
   extraDocuments: SourceDocumentInput[],
   extraFacts: ApprovedFactInput[],
@@ -404,7 +406,10 @@ export function documentDownload(ctx: PageContext) {
       revision,
     );
     if (original?.original_file && document.originalName) {
-      return { name: document.originalName, content: original.original_file };
+      return {
+        name: document.originalName,
+        content: new Uint8Array(original.original_file),
+      };
     }
   }
   return {
@@ -595,7 +600,7 @@ async function renderDocuments(ctx: PageContext) {
     ${admin ? revisionForm(ctx, selected?.input) : ''}`;
 }
 
-function latestRevision(db: DatabaseSync, academyId: string, id: string) {
+function latestRevision(db: OperationsDatabase, academyId: string, id: string) {
   return (
     one<{ revision: number }>(
       db,
@@ -608,7 +613,7 @@ function latestRevision(db: DatabaseSync, academyId: string, id: string) {
 }
 
 function latestPublishedRevision(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academyId: string,
   id: string,
 ) {
@@ -788,8 +793,12 @@ async function submitDocument(ctx: PageContext, form: FormData) {
   requireScope(ctx, meta);
   const file = form.get('file');
   const original = file instanceof File && file.size ? file : null;
-  if (original && original.size > maxDocumentBytes) {
-    throw new OperationError('파일은 20MB 이하로 올려 주세요.');
+  const uploadLimit = ctx.maxDocumentBytes ?? maxDocumentBytes;
+  if (original && original.size > uploadLimit) {
+    throw new OperationError(
+      `파일은 ${uploadLimit / (1024 * 1024)}MB 이하로 올려 주세요.`,
+      413,
+    );
   }
   const bytes = original
     ? new Uint8Array(await original.arrayBuffer())

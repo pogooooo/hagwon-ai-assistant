@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
+import type { OperationsDatabase } from './database.ts';
 import type {
   ApprovedFactInput,
   SourceDocumentInput,
@@ -62,7 +62,7 @@ const staff = (ctx: PageContext) =>
 const key = (...parts: string[]) =>
   createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 32);
 
-export function setupLearning(db: DatabaseSync) {
+export function setupLearning(db: OperationsDatabase) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS op_learning_assignments (
       academy_id TEXT NOT NULL, assignment_id TEXT NOT NULL, class_id TEXT NOT NULL REFERENCES classes(id),
@@ -117,7 +117,7 @@ function assignmentFor(ctx: PageContext, id: string): Assignment {
   return row;
 }
 function currentResult(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academy: string,
   assignment: string,
   student: string,
@@ -148,7 +148,7 @@ function expectedRevision(form: FormData, actual: number, name = 'revision') {
 
 /** Rebuild one monthly publication from current, reviewed rows only. Never sum overlapping tag counts as overall counts. */
 function publish(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academy: string,
   student: string,
   classId: string,
@@ -325,7 +325,7 @@ function publish(
 }
 
 export function learningEvidence(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   academy: string,
 ): { documents: SourceDocumentInput[]; facts: ApprovedFactInput[] } {
   // Joining the live roster prevents former teachers from finding reports through the old class scope.

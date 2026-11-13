@@ -109,9 +109,11 @@ RAG_GENERATION_DAILY_CALL_LIMIT=100
 
 ## Cloudflare 데모
 
-[AXR 가상 학원](https://axr-academy.pogoo.workers.dev/login)은 Cloudflare Worker와 VPC 서비스를 통해 배포 PC의 `127.0.0.1:8793`에 연결됩니다. PC에서 Node 서버와 Cloudflare Tunnel이 실행 중일 때 접속할 수 있습니다. 가상 학원 전용 DB는 `.local/cloudflare-demo/academy.sqlite`입니다.
+[AXR 가상 학원](https://axr-academy-hosted.pogoo.workers.dev/login)은 Cloudflare Workers에서 요청을 받고 Durable Objects에서 앱과 SQLite를 실행합니다. 기존 Cloudflare 주소는 새 주소로 연결됩니다. 클라우드 데모는 저장소에 있는 가상 학원 자료로 초기화하며, 로컬 데모 DB와 별도로 저장합니다.
 
-배포 PC에서 서버를 다시 시작할 때 저장소 루트에서 `node --env-file=.local/cloudflare-demo/demo.env src/features/academy-operations/server.ts`를 실행합니다. 이 설정의 `AXR_OPERATIONS_PUBLIC_ORIGIN`은 Worker의 `AXR_PUBLIC_ORIGIN`과 같은 HTTPS 주소를 사용합니다. Worker를 다시 배포하려면 `.local/cloudflare-demo/wrangler.jsonc`를 사용합니다.
+저장소 루트에서 `node deploy/cloudflare/prepare-hosted.mjs`로 정적 파일과 가상 학원 자료를 준비하고, `wrangler deploy --config deploy/cloudflare/wrangler.hosted.jsonc`로 배포합니다. 첫 배포에서는 `AXR_HOSTED_DEMO_PASSWORD`와 Gemini 설정을 Wrangler 시크릿으로 등록합니다.
+
+클라우드 데모의 문서 업로드는 최대 5MB입니다. 텍스트 PDF를 파싱하고 원본을 내려받을 수 있습니다. Gemini 연결 확인은 현재 Google의 호출 위치 제한으로 실패하며, 저장된 자료를 바탕으로 한 정형 상담과 출처 표시는 동작합니다.
 
 ## 남은 운영 연결
 

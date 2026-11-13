@@ -7,7 +7,7 @@ import {
   setupLearning,
 } from './learning.ts';
 import { teamScheduleEvidence, setupTeamSchedule } from './team-schedule.ts';
-import type { DatabaseSync } from 'node:sqlite';
+import type { OperationsDatabase } from './database.ts';
 
 import type {
   RagAnswer,
@@ -83,7 +83,7 @@ interface Message {
   created_at: string;
 }
 
-function setupConsultation(db: DatabaseSync) {
+function setupConsultation(db: OperationsDatabase) {
   setupLearning(db);
   setupTeamSchedule(db);
   db.exec(`
@@ -118,7 +118,7 @@ function isStaff(actor: Actor) {
   return actor.role === 'admin' || actor.role === 'teacher';
 }
 
-function coversScope(db: DatabaseSync, actor: Actor, thread: Thread) {
+function coversScope(db: OperationsDatabase, actor: Actor, thread: Thread) {
   if (thread.staff_scope && !isStaff(actor)) return false;
   const students = new Set(accessibleStudents(db, actor).map(({ id }) => id));
   const classes = new Set(accessibleClasses(db, actor).map(({ id }) => id));
@@ -156,7 +156,7 @@ function loadThread(ctx: PageContext, id: string) {
 }
 
 function addMessage(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   id: string,
   kind: Message['kind'],
   text: string,
@@ -231,7 +231,7 @@ function consultationAccess({ db, actor }: PageContext): RagAccessScope {
   };
 }
 
-function supplementaryEvidence(db: DatabaseSync, academyId: string) {
+function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
   const learning = learningEvidence(db, academyId);
   const team = teamScheduleEvidence(db, academyId);
   return {

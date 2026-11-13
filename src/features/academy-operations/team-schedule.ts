@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { OperationsDatabase } from './database.ts';
 import { assertUnifiedSchedule } from './schedule-conflicts.ts';
 import { z } from 'zod';
 import {
@@ -90,11 +90,11 @@ const initial: Config = {
 const staff = (ctx: PageContext) =>
   ['admin', 'teacher'].includes(ctx.actor.role);
 
-export function setupTeamSchedule(db: DatabaseSync) {
+export function setupTeamSchedule(db: OperationsDatabase) {
   db.exec(`CREATE TABLE IF NOT EXISTS op_team_schedule (academy_id TEXT PRIMARY KEY, version INTEGER NOT NULL, config TEXT NOT NULL, state TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS op_team_schedule_history (academy_id TEXT NOT NULL, version INTEGER NOT NULL, actor_id TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(academy_id, version));`);
 }
-function stored(db: DatabaseSync, academy: string): Stored {
+function stored(db: OperationsDatabase, academy: string): Stored {
   return (
     one<Stored>(
       db,
@@ -108,7 +108,7 @@ function stored(db: DatabaseSync, academy: string): Stored {
   );
 }
 function academyConfig(
-  db: DatabaseSync,
+  db: OperationsDatabase,
   id: string,
   config: Config,
 ): AcademyConfig {
@@ -161,7 +161,10 @@ function visible(ctx: PageContext, event: ScheduleEvent) {
 function dateTime(date: string, time: string) {
   return Date.parse(`${date}T${time}:00+09:00`);
 }
-export function teamScheduleEvidence(db: DatabaseSync, academyId: string) {
+export function teamScheduleEvidence(
+  db: OperationsDatabase,
+  academyId: string,
+) {
   const row = stored(db, academyId);
   const state = JSON.parse(row.state) as ScheduleState;
   const academy = academyConfig(db, academyId, JSON.parse(row.config));

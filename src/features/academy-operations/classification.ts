@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import bundledTags from './tags.json' with { type: 'json' };
 import { z } from 'zod';
 import { OperationError } from './shared.ts';
 
@@ -47,9 +47,7 @@ export interface Tag {
   area: string;
   referenceOnly: boolean;
 }
-export const tagCatalog = JSON.parse(
-  readFileSync(new URL('./tags.json', import.meta.url), 'utf8'),
-) as { rubricVersion: string; tags: Tag[] };
+export const tagCatalog = bundledTags as { rubricVersion: string; tags: Tag[] };
 export const tagById = new Map(tagCatalog.tags.map((tag) => [tag.tagId, tag]));
 
 /** Unknown producer fields are stripped. Both documented empty tags and the held-tag example are accepted. */
