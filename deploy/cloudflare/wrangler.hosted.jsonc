@@ -18,6 +18,7 @@
   },
   "workers_dev": true,
   "preview_urls": false,
+  "services": [{ "binding": "GEMINI", "service": "axr-academy-gemini" }],
   "assets": {
     "directory": "../../.local/cloudflare-hosted-assets",
     "html_handling": "none",

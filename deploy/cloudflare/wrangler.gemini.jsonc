@@ -1,0 +1,8 @@
+{
+  "name": "axr-academy-gemini",
+  "main": "gemini.mjs",
+  "compatibility_date": "2026-11-12",
+  "workers_dev": false,
+  "preview_urls": false,
+  "placement": { "region": "aws:us-east-1" },
+}

@@ -1,4 +1,5 @@
 import { operationsGeneration } from './runtime-generation.ts';
+import { validateGeneratedOutput } from '../rag-consultation/server/generation/validate-output.ts';
 import {
   escapeHtml as h,
   field,
@@ -54,6 +55,7 @@ export const preferencesModule: OperationModule = {
       if (ctx.actor.role !== 'admin')
         throw new OperationError('관리자만 연결을 확인할 수 있습니다.', 403);
       ctx.assertCurrentAccess?.();
+      const sourceId = 'SYNTHETIC_NOTICE';
       const result = await operationsGeneration().generateGroundedAnswer(
         {
           requestId: 'operations-synthetic-probe',
@@ -61,7 +63,7 @@ export const preferencesModule: OperationModule = {
           facts: [],
           sources: [
             {
-              sourceId: 'SYNTHETIC_NOTICE',
+              sourceId,
               title: '가상 안내',
               location: '안내 데스크',
               text: '가상 학원의 안내 데스크는 14시에 엽니다.',
@@ -72,10 +74,27 @@ export const preferencesModule: OperationModule = {
         { timeoutMs: 15000, now: Date.now() },
       );
       ctx.assertCurrentAccess?.();
+      if (!result.ok) {
+        return (
+          '/settings?probe=' + encodeURIComponent(`연결 실패 (${result.error})`)
+        );
+      }
+      const validated = validateGeneratedOutput(result.rawText, {
+        allowedSourceIds: [sourceId],
+        allowedNumbers: new Set([14]),
+        studentCodePattern: /ST_([A-Z0-9]+)/g,
+        allowedStudentCodes: [],
+      });
+      const passed =
+        validated.ok &&
+        validated.output.status === 'answered' &&
+        /14\s*시/.test(validated.output.answer);
       return (
         '/settings?probe=' +
         encodeURIComponent(
-          result.ok ? 'API 응답 수신 완료' : `연결 실패 (${result.error})`,
+          passed
+            ? 'API 응답 수신 완료 · 14시 · 출처: 가상 안내'
+            : 'API 응답 수신 완료 · 가상 안내 근거 검증 실패',
         )
       );
     }

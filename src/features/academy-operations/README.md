@@ -111,9 +111,17 @@ RAG_GENERATION_DAILY_CALL_LIMIT=100
 
 [AXR 가상 학원](https://axr-academy-hosted.pogoo.workers.dev/login)은 Cloudflare Workers에서 요청을 받고 Durable Objects에서 앱과 SQLite를 실행합니다. 기존 Cloudflare 주소는 새 주소로 연결됩니다. 클라우드 데모는 저장소에 있는 가상 학원 자료로 초기화하며, 로컬 데모 DB와 별도로 저장합니다.
 
-저장소 루트에서 `node deploy/cloudflare/prepare-hosted.mjs`로 정적 파일과 가상 학원 자료를 준비하고, `wrangler deploy --config deploy/cloudflare/wrangler.hosted.jsonc`로 배포합니다. 첫 배포에서는 `AXR_HOSTED_DEMO_PASSWORD`와 Gemini 설정을 Wrangler 시크릿으로 등록합니다.
+저장소 루트에서 아래 순서로 배포합니다. 데모 Worker에 `AXR_HOSTED_DEMO_PASSWORD`와 `RAG_GEMINI_API_KEY`를 시크릿으로 등록합니다. `RAG_GEMINI_MODEL`로 모델을 지정할 수 있습니다.
 
-클라우드 데모의 문서 업로드는 최대 5MB입니다. 텍스트 PDF를 파싱하고 원본을 내려받을 수 있습니다. Gemini 연결 확인은 현재 Google의 호출 위치 제한으로 실패하며, 저장된 자료를 바탕으로 한 정형 상담과 출처 표시는 동작합니다.
+```sh
+node deploy/cloudflare/prepare-hosted.mjs
+wrangler deploy --config deploy/cloudflare/wrangler.gemini.jsonc
+wrangler deploy --config deploy/cloudflare/wrangler.hosted.jsonc
+```
+
+데모는 미국 동부 배치 힌트를 설정한 비공개 Worker에 서비스 바인딩으로 Gemini 요청을 보냅니다. 관리자 계정으로 로그인한 뒤 [설정](https://axr-academy-hosted.pogoo.workers.dev/settings)의 **가상 안내로 연결 확인**을 누르면 실제 모델이 운영 시작 시각을 14시로 답하고 가상 안내를 인용했는지 확인합니다. 공개 데모에서는 학생 자료의 외부 AI 전송을 차단합니다. 확정 수치와 일정은 저장된 근거를 조회해 답합니다.
+
+클라우드 데모의 문서 업로드는 최대 5MB입니다. 텍스트 PDF를 파싱하고 원본을 내려받을 수 있습니다.
 
 ## 남은 운영 연결
 

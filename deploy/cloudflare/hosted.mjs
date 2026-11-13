@@ -7,6 +7,7 @@ import {
   createOperationsGeneration,
 } from '../../src/features/academy-operations/runtime-generation.ts';
 import { configurePdfRuntime } from '../../src/features/rag-consultation/server/ingest/parsers/pdf.ts';
+import { geminiEndpoint } from './gemini.mjs';
 
 const fixtureRoot = '/bundle/academies/';
 
@@ -64,7 +65,11 @@ export class AcademyDemo extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     if (!env.AXR_HOSTED_DEMO_PASSWORD) throw new Error('Missing demo password');
-    configureOperationsGeneration(createOperationsGeneration(env));
+    configureOperationsGeneration(
+      createOperationsGeneration(env, (url, init) =>
+        url === geminiEndpoint ? env.GEMINI.fetch(url, init) : fetch(url, init),
+      ),
+    );
     const server = createOperationsServer({
       db: database(ctx.storage),
       publicOrigin: new URL(env.AXR_OPERATIONS_PUBLIC_ORIGIN),
