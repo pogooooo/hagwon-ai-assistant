@@ -93,7 +93,12 @@ async function run() {
       });
     } catch (error) {
       held.set(item.itemId, '사진 판독 실패: ' + error.message);
-      transcriptions.push({ itemId: item.itemId, image, error: error.message });
+      transcriptions.push({
+        itemId: item.itemId,
+        image,
+        error: error.message,
+        ...(error.raw ? { raw: error.raw } : {}),
+      });
       items.push({ ...fields, text: '' });
     }
   }
@@ -125,12 +130,17 @@ async function run() {
       }
       transcriptions.push({ ...photo, reads, detected: generated });
     } catch (error) {
-      transcriptions.push({ ...photo, error: error.message });
+      transcriptions.push({
+        ...photo,
+        error: error.message,
+        ...(error.raw ? { raw: error.raw } : {}),
+      });
       console.error(
         '사진 판독 실패로 이 사진의 문항이 기록에서 빠졌습니다: ' +
           photo.image +
           ' — ' +
-          error.message,
+          error.message +
+          (error.raw ? '\n--- 판독 원문 ---\n' + error.raw : ''),
       );
     }
   }

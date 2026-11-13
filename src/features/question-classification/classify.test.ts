@@ -197,7 +197,26 @@ import {
   mergeMathPage,
   parseCrossCheck,
   parsePageReading,
+  repairJsonText,
 } from './read-page.mjs';
+
+test('판독 JSON의 문자열 안 개행과 잘못된 이스케이프를 복구하고 원문 응답을 오류에 남긴다', () => {
+  assert.deepEqual(
+    JSON.parse(repairJsonText('{"a":"1행\n2행\t끝","b":"\\(x\\)","c":"\\n"}')),
+    { a: '1행\n2행\t끝', b: '\\(x\\)', c: '\n' },
+  );
+  const reading = parsePageReading(
+    '{"items":[{"displayNumber":"1","text":"첫 줄\n둘째 줄 \\sqrt"}]}',
+  );
+  assert.equal(reading[0].text, '첫 줄\n둘째 줄 \\sqrt');
+  try {
+    parsePageReading('문항이 없습니다.');
+    assert.fail('해석 실패여야 한다');
+  } catch (error) {
+    assert.match((error as Error).message, /판독 JSON 해석 실패/);
+    assert.equal((error as { raw?: string }).raw, '문항이 없습니다.');
+  }
+});
 import {
   annotateEvidence,
   assignmentInputSchema,
@@ -205,35 +224,33 @@ import {
   buildItemText,
 } from './classify.mjs';
 
-test('사진 판독 JSON은 울타리를 벗기고 그림 정보 없는 문항도 받아들인다', () => {
+test('사진 판독 JSON은 울타리·최상위 배열을 받아들이고 어긋난 그림 값은 보수적으로 강등한다', () => {
   const reading = parsePageReading(
     '```json\n' +
-      JSON.stringify({
-        items: [
-          { displayNumber: '1', text: 'x를 구하시오.' },
-          {
-            displayNumber: '2',
-            text: '그래프를 보시오.',
-            figure: {
-              dependence: '필수',
-              reads: [
-                { content: '점 (1, 2)', method: '적힌 값', state: '선명' },
-              ],
-            },
-          },
-        ],
-      }) +
+      JSON.stringify([
+        { displayNumber: '1', text: 'x를 구하시오.' },
+        {
+          displayNumber: '2',
+          text: '그래프를 보시오.',
+          figureDependence: '그림이 꼭 필수입니다',
+          figureReads: [
+            '점 (1, 2) | 적힌 값 | 선명',
+            '값 a | b | 3 | 모르는 방식 | 흐림',
+          ],
+        },
+      ]) +
       '\n```',
   );
   assert.equal(reading.length, 2);
   assert.equal(reading[0].figure, undefined);
-  assert.equal(reading[1].figure?.dependence, '필수');
+  assert.deepEqual(reading[1].figure, {
+    dependence: '필수',
+    reads: [
+      { content: '점 (1, 2)', method: '적힌 값', state: '선명' },
+      { content: '값 a | b | 3', method: '모양에서 추정', state: '불명' },
+    ],
+  });
   assert.throws(() => parsePageReading('{"items":[]}'));
-  assert.throws(() =>
-    parsePageReading(
-      '{"items":[{"displayNumber":"1","text":"x","figure":{"dependence":"가끔","reads":[]}}]}',
-    ),
-  );
 });
 
 test('두 판독을 합칠 때 번호·본문이 갈리면 보류하고 그림 항목이 갈리면 불명으로 남긴다', () => {

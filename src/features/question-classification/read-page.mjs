@@ -14,17 +14,47 @@ export const figureSchema = z.object({
     }),
   ),
 });
-const pageReadingSchema = z.object({
+// 판독 모델에는 중첩 없는 납작한 형식을 요구하고, 받은 값을 내부 figure 구조로 바꾼다.
+const rawReadingSchema = z.object({
   items: z
     .array(
       z.object({
         displayNumber: nonempty,
         text: z.string(),
-        figure: figureSchema.optional(),
+        figureDependence: z.string().optional(),
+        figureReads: z.array(z.string()).optional(),
       }),
     )
     .min(1),
 });
+
+// 어긋난 값은 버리지 않고 보수적으로 강등한다: 모르는 읽은 방식은 '모양에서 추정',
+// 모르는 상태는 '불명'으로 두어 이후 그림 보류 규칙이 걸리게 한다.
+const methods = ['적힌 값', '눈금에서 읽음', '모양에서 추정'];
+function toFigure(dependenceText = '', lines = []) {
+  const dependence = dependenceText.includes('필수')
+    ? '필수'
+    : dependenceText.includes('보조')
+      ? '보조'
+      : '없음';
+  const reads = lines
+    .filter((line) => line.trim())
+    .map((line) => {
+      const parts = line.split('|').map((part) => part.trim());
+      const [content, method = '', state = ''] =
+        parts.length > 2
+          ? [parts.slice(0, -2).join(' | '), ...parts.slice(-2)]
+          : parts;
+      return {
+        content: content || '[불명]',
+        method: methods.find((name) => name === method) ?? '모양에서 추정',
+        state: state === '선명' ? '선명' : '불명',
+      };
+    });
+  return dependence === '없음' && !reads.length
+    ? undefined
+    : { dependence, reads };
+}
 const crossCheckSchema = z.object({
   items: z.array(
     z.object({
@@ -38,17 +68,62 @@ const crossCheckSchema = z.object({
 const stripFence = (content) =>
   content.trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1');
 
-export const parsePageReading = (content) =>
-  pageReadingSchema.parse(JSON.parse(stripFence(content))).items;
+// 판독 모델이 JSON 문자열 안에 그대로 넣은 개행과 잘못된 이스케이프(예: LaTeX의 \f)를
+// 유효한 JSON으로 복구한다. 따옴표 안팎만 추적하는 결정적 변환이라 내용은 바꾸지 않는다.
+export function repairJsonText(json) {
+  let out = '';
+  let inString = false;
+  for (let i = 0; i < json.length; i++) {
+    const ch = json[i];
+    if (!inString) {
+      if (ch === '"') inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === '"') {
+      inString = false;
+      out += ch;
+    } else if (ch === '\\') {
+      const next = json[i + 1] ?? '';
+      if ('"\\/bfnrtu'.includes(next)) {
+        out += ch + next;
+        i++;
+      } else out += '\\\\';
+    } else if (ch === '\n') out += '\\n';
+    else if (ch === '\t') out += '\\t';
+    else if (ch !== '\r') out += ch;
+  }
+  return out;
+}
 
-export const parseCrossCheck = (content) =>
-  crossCheckSchema.parse(JSON.parse(stripFence(content))).items;
+const parseWith =
+  (schema, convert = (item) => item) =>
+  (content) => {
+    try {
+      const json = JSON.parse(repairJsonText(stripFence(content)));
+      // 최상위를 배열로 출력하는 응답도 받아들인다.
+      const wrapped = Array.isArray(json) ? { items: json } : json;
+      return schema.parse(wrapped).items.map(convert);
+    } catch (cause) {
+      const error = Error('판독 JSON 해석 실패: ' + cause.message);
+      error.raw = content;
+      throw error;
+    }
+  };
+export const parsePageReading = parseWith(
+  rawReadingSchema,
+  ({ displayNumber, text, figureDependence, figureReads }) => {
+    const figure = toFigure(figureDependence, figureReads);
+    return { displayNumber, text, ...(figure ? { figure } : {}) };
+  },
+);
+export const parseCrossCheck = parseWith(crossCheckSchema);
 
 const formatRule =
-  '사진에 인쇄된 문항을 빠짐없이 찾아 JSON 하나로만 출력하세요. 형식: ' +
-  '{"items":[{"displayNumber":"인쇄된 문항 번호 그대로","text":"문항 원문 전사","figure":{"dependence":"필수|보조|없음","reads":[{"content":"그림·표·그래프에서 읽은 정보 한 항목","method":"적힌 값|눈금에서 읽음|모양에서 추정","state":"선명|불명"}]}}]}';
+  '사진에 인쇄된 문항을 빠짐없이 찾아 JSON 하나로만 출력하세요. 최상위는 {"items":[...]} 하나입니다. 각 문항은 다음 네 칸을 가집니다: ' +
+  '{"displayNumber":"인쇄된 문항 번호 그대로","text":"문항 원문 전사","figureDependence":"필수|보조|없음","figureReads":["내용 | 읽은 방식 | 상태"]}. 다른 칸이나 중첩 객체는 쓰지 마세요. 모든 문자열의 따옴표를 닫으세요.';
 const figureRule =
-  '그림 규칙: 문항에 그림·표·그래프가 없으면 dependence는 "없음", reads는 []로 둡니다. 있으면 풀이에 필요한 정보를 항목별로 reads에 적고, 숫자가 적혀 있으면 "적힌 값", 축·눈금에서 읽으면 "눈금에서 읽음", 모양만 보고 추정하면 "모양에서 추정"을 method에 적습니다. 그림 없이 글만으로 풀 수 있으면 dependence는 "보조", 그림을 봐야만 풀 수 있으면 "필수"입니다.';
+  '그림 규칙: 문항에 그림·표·그래프가 없으면 figureDependence는 "없음", figureReads는 []입니다. 있으면 풀이에 필요한 정보를 figureReads에 한 항목씩 "내용 | 읽은 방식 | 상태" 문자열로 적습니다. 읽은 방식은 숫자가 적혀 있으면 "적힌 값", 축·눈금에서 읽으면 "눈금에서 읽음", 모양만 보고 추정하면 "모양에서 추정"입니다. 상태는 또렷하면 "선명", 작거나 번지면 "불명"입니다. 예: "점 (1, 2)를 지남 | 적힌 값 | 선명", "직선의 기울기 양수 | 모양에서 추정 | 선명". 그림 없이 글만으로 풀 수 있으면 figureDependence는 "보조", 그림을 봐야만 풀 수 있으면 "필수"입니다.';
 const prompts = {
   'M:read':
     formatRule +
