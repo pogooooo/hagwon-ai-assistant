@@ -475,7 +475,7 @@ function renderNoticeForm(
         <label>보강 종료<input type="datetime-local" name="makeup_end" value="${localDateTime(editing?.makeup_end)}"></label>
       </div>
       <div class="actions"><button type="submit">${editing ? '변경 확정' : '공지 확정'}</button>
-      ${editing ? '<a href="/schedule">편집 취소</a>' : ''}</div>
+      ${editing ? '<a href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
     </form>`;
 }
 
@@ -549,7 +549,7 @@ function renderSlotForm(ctx: PageContext, editing: Slot | undefined): string {
         <label>상담 종료<input type="datetime-local" name="slot_end" required value="${localDateTime(editing?.ends_at)}"></label>
       </div>
       <div class="actions"><button type="submit">${editing ? '상담 시간 저장' : '예약 가능 시간 추가'}</button>
-      ${editing ? '<a href="/schedule">편집 취소</a>' : ''}</div>
+      ${editing ? '<a href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
     </form>`;
 }
 
@@ -621,7 +621,7 @@ function renderBookingForm(
         </select></label>
       </div>
       <div class="actions"><button type="submit">${editing ? '예약 변경' : '상담 예약'}</button>
-      ${editing ? '<a href="/schedule">편집 취소</a>' : ''}</div>
+      ${editing ? '<a href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
     </form>`;
 }
 

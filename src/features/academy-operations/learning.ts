@@ -572,6 +572,37 @@ function table(summary: LearningSummary) {
     <div class="table-wrap"><table><caption>채택 태그별 결과</caption><thead><tr><th>유형</th><th>영역</th><th>정답 / 확인 문항</th><th>정답률</th></tr></thead><tbody>${summary.tags.map((t) => `<tr><td>${h(t.name)}${t.referenceOnly ? ' <span class="pill">참고용</span>' : ''}</td><td>${h(t.area)}</td><td>${t.correct} / ${t.total}</td><td>${percent(t.correct, t.total)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
+function canReadPublication(
+  ctx: PageContext,
+  publication: Pick<Publication, 'student_id' | 'class_id'>,
+  students = accessibleStudents(ctx.db, ctx.actor),
+) {
+  return students.some(
+    (student) =>
+      student.id === publication.student_id &&
+      (!staff(ctx) || student.classIds.includes(publication.class_id)),
+  );
+}
+
+export function recentLearningReports(ctx: PageContext) {
+  const students = accessibleStudents(ctx.db, ctx.actor);
+  return rows<Pick<Publication, 'id' | 'student_id' | 'class_id' | 'period'>>(
+    ctx.db,
+    `SELECT p.id, p.student_id, p.class_id, p.period
+      FROM op_learning_publications p WHERE p.academy_id = ? AND p.payload IS NOT NULL
+      AND p.revision = (SELECT MAX(x.revision) FROM op_learning_publications x WHERE x.id = p.id)
+      ORDER BY p.period DESC, p.id`,
+    ctx.actor.academyId,
+  )
+    .filter((report) => canReadPublication(ctx, report, students))
+    .slice(0, 4)
+    .map(({ id, student_id, period }) => ({
+      id,
+      name: students.find(({ id }) => id === student_id)?.name ?? '',
+      period,
+    }));
+}
+
 function render(ctx: PageContext) {
   const publicationId = ctx.url.searchParams.get('publication');
   if (publicationId) {
@@ -581,14 +612,7 @@ function render(ctx: PageContext) {
       ctx.actor.academyId,
       publicationId,
     );
-    if (
-      !publication?.payload ||
-      !accessibleStudents(ctx.db, ctx.actor).some(
-        (s) =>
-          s.id === publication.student_id &&
-          (!staff(ctx) || s.classIds.includes(publication.class_id)),
-      )
-    )
+    if (!publication?.payload || !canReadPublication(ctx, publication))
       throw new OperationError('조회 가능한 학습 근거가 아닙니다.', 404);
     const payload = JSON.parse(publication.payload) as {
       documents: SourceDocumentInput[];

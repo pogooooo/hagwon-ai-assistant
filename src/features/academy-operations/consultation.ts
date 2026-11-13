@@ -75,6 +75,7 @@ interface Thread {
   staff_scope: number;
   conversation_state: string | null;
   version: number;
+  updated_at: string;
 }
 
 interface Message {
@@ -154,6 +155,39 @@ function loadThread(ctx: PageContext, id: string) {
     throw new OperationError('상담 기록을 찾을 수 없습니다.', 404);
   }
   return thread;
+}
+
+function visibleThreads(ctx: PageContext) {
+  return rows<Thread>(
+    ctx.db,
+    'SELECT * FROM op_consultation_threads WHERE academy_id = ? ORDER BY updated_at DESC, id',
+    ctx.actor.academyId,
+  ).filter((thread) => canViewThread(ctx, thread));
+}
+
+function needsStaffAttention(actor: Actor, thread: Thread) {
+  return (
+    (thread.status === 'requested' && actor.role === 'admin') ||
+    (thread.status === 'assigned' &&
+      (actor.role === 'admin' || thread.assignee_id === actor.id))
+  );
+}
+
+export function consultationOverview(ctx: PageContext) {
+  const threads = visibleThreads(ctx);
+  return {
+    pending: threads
+      .filter((thread) => needsStaffAttention(ctx.actor, thread))
+      .map(toOverviewItem),
+    recent: threads
+      .filter((thread) => thread.owner_id === ctx.actor.id)
+      .slice(0, 4)
+      .map(toOverviewItem),
+  };
+}
+
+function toOverviewItem({ id, title, status }: Thread) {
+  return { id, title, label: threadLabels[status] };
 }
 
 function addMessage(
@@ -553,11 +587,18 @@ function renderConsultation(ctx: PageContext) {
   const { db, actor, url } = ctx;
   const id = url.searchParams.get('id');
   const thread = id ? loadThread(ctx, id) : undefined;
-  const threads = rows<Thread>(
-    db,
-    'SELECT * FROM op_consultation_threads WHERE academy_id = ? ORDER BY updated_at DESC',
-    actor.academyId,
-  ).filter((row) => canViewThread(ctx, row));
+  const allThreads = visibleThreads(ctx);
+  const actorIsStaff = isStaff(actor);
+  const view = url.searchParams.get('view');
+  const inbox = actorIsStaff && view === 'inbox';
+  const archive = actorIsStaff && view === 'archive';
+  const queue = inbox || archive;
+  const threads = inbox
+    ? allThreads.filter((row) => needsStaffAttention(actor, row))
+    : archive
+      ? allThreads.filter((row) => row.status === 'closed')
+      : allThreads.filter((row) => row.owner_id === actor.id);
+  const filter = inbox ? '&amp;view=inbox' : archive ? '&amp;view=archive' : '';
   const active =
     thread && (thread.status === 'requested' || thread.status === 'assigned');
   const staff =
@@ -575,35 +616,42 @@ function renderConsultation(ctx: PageContext) {
     ? currentCitationRevisions(ctx)
     : new Map<string, ReadonlySet<number>>();
   const link = thread
-    ? '/consultation?id=' + encodeURIComponent(thread.id)
+    ? '/consultation?' +
+      new URLSearchParams({
+        id: thread.id,
+        ...(queue ? { view: inbox ? 'inbox' : 'archive' } : {}),
+      })
     : '/consultation';
   const hiddenThread = thread
     ? `<input type="hidden" name="id" value="${h(thread.id)}">`
     : '';
-  return `<h1>상담 및 이력</h1>
+  return `<div class="workspace-heading"><h1>상담 및 이력</h1>${thread || inbox || archive ? '<a class="button-link" href="/consultation">새 상담</a>' : ''}</div>
     <div class="split consultation-layout">
       <aside class="panel consultation-history">
-        <div class="panel-heading"><h2>상담 목록</h2><a href="/consultation">새 상담</a></div>
+        <h2>상담 목록</h2>
+        ${actorIsStaff ? `<nav class="view-tabs" aria-label="상담 목록 범위"><a href="/consultation?view=inbox"${inbox ? ' aria-current="page"' : ''}>처리 중</a><a href="/consultation"${!inbox && !archive ? ' aria-current="page"' : ''}>내 상담</a><a href="/consultation?view=archive"${archive ? ' aria-current="page"' : ''}>완료</a></nav>` : ''}
         ${
           threads.length
             ? `<ul class="item-list">${threads
                 .map(
                   (row) =>
-                    `<li><a href="/consultation?id=${encodeURIComponent(row.id)}"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.title)}</span><small>${h(threadLabels[row.status])}</small></a></li>`,
+                    `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.title)}</span><small>${h(threadLabels[row.status])}</small></a></li>`,
                 )
                 .join('')}</ul>`
-            : '<p class="muted">저장된 상담이 없습니다.</p>'
+            : `<p class="muted">${inbox ? '처리할 상담이 없습니다.' : archive ? '완료된 상담이 없습니다.' : '저장된 상담이 없습니다.'}</p>`
         }
       </aside>
       <section class="panel consultation-main">
         ${
           thread
             ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
-            : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>어떤 도움이 필요하신가요?</h2><p>수업과 학원 생활에 대해 질문해 보세요.</p></div></div>`
+            : inbox || archive
+              ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : ''}`
+              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>새 상담</h2><p>수업 일정, 수강료, 학습 기록에 대해 질문할 수 있어요.</p></div></div>`
         }
         ${messages.map((message) => renderMessage(message, currentRevisions)).join('')}
         ${
-          own && thread?.status !== 'closed'
+          own && thread?.status !== 'closed' && (thread || !queue)
             ? `<form class="chat-composer" method="post" action="${h(link)}">
           ${hiddenThread}<input type="hidden" name="conversationId" value="${thread?.id ?? randomUUID()}">
           ${students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}

@@ -74,6 +74,7 @@ export class AcademyDemo extends DurableObject {
       db: database(ctx.storage),
       publicOrigin: new URL(env.AXR_OPERATIONS_PUBLIC_ORIGIN),
       demoPassword: env.AXR_HOSTED_DEMO_PASSWORD,
+      showDemoAccounts: true,
       assetsRoot: null,
       fixturesRoot: new URL('file://' + fixtureRoot + 'AC_TEST_A/'),
       documentsRoot: fixtureRoot,

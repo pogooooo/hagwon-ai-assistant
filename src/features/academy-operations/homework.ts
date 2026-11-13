@@ -396,9 +396,9 @@ function reviewScores(ctx: PageContext, form: FormData): void {
 function renderAssignmentForm(ctx: PageContext): string {
   const classrooms = accessibleClasses(ctx.db, ctx.actor);
   if (!classrooms.length) {
-    return '<section class="panel"><h2>숙제 등록</h2><p>배정할 반을 먼저 등록하거나 연결해 주세요.</p></section>';
+    return '<section class="panel" id="homework-create"><h2>숙제 등록</h2><p>배정할 반을 먼저 등록하거나 연결해 주세요.</p></section>';
   }
-  return `<section class="panel">
+  return `<section class="panel" id="homework-create">
     <h2>숙제 등록</h2>
     <form method="post" action="/homework">
       <input type="hidden" name="action" value="create">
@@ -617,6 +617,53 @@ function renderSubmission(ctx: PageContext, id: string): string {
     ${submission.confirmed_at ? renderWrongAnswers(ctx, submission, marks) : ''}`;
 }
 
+function visibleHomework(ctx: PageContext, pendingOnly = false) {
+  const { actor, db } = ctx;
+  const staff = isStaff(actor.role);
+  const classes = new Set(accessibleClasses(db, actor).map(({ id }) => id));
+  const students = new Set(accessibleStudents(db, actor).map(({ id }) => id));
+  const submissions = rows<Submission>(
+    db,
+    submissionsSql +
+      (pendingOnly ? ' AND s.confirmed_at IS NULL\n' : '') +
+      submissionsOrder,
+    actor.academyId,
+  ).filter(
+    ({ student_id, class_id }) =>
+      students.has(student_id) && (!staff || classes.has(class_id)),
+  );
+  const assignments =
+    !pendingOnly && (staff || actor.role === 'student')
+      ? rows<Assignment>(
+          db,
+          assignmentsSql + ' ORDER BY a.due_date DESC, a.title',
+          actor.academyId,
+        ).filter(({ class_id }) => classes.has(class_id))
+      : [];
+  return { assignments, submissions };
+}
+
+export function homeworkOverview(ctx: PageContext) {
+  const staff = isStaff(ctx.actor.role);
+  const { assignments, submissions } = visibleHomework(ctx, staff);
+  const submitted = new Set(
+    submissions.map(({ assignment_id }) => assignment_id),
+  );
+  return {
+    review: staff ? submissions : [],
+    due: assignments
+      .filter(({ id, due_date }) => !submitted.has(id) && !isLate(due_date))
+      .sort(
+        (a, b) =>
+          a.due_date.localeCompare(b.due_date) ||
+          a.title.localeCompare(b.title),
+      ),
+    results: staff
+      ? []
+      : submissions.filter(({ confirmed_at }) => confirmed_at).slice(0, 4),
+  };
+}
+
 export const homeworkModule: OperationModule = {
   path: '/homework',
   label: '숙제·채점',
@@ -684,39 +731,28 @@ export const homeworkModule: OperationModule = {
     }
   },
   render(ctx) {
-    const { actor, db, url } = ctx;
+    const { actor, url } = ctx;
     const submissionId = url.searchParams.get('submission');
     if (submissionId) return renderSubmission(ctx, submissionId);
     const assignmentId = url.searchParams.get('assignment');
     if (assignmentId) return renderStudentForm(ctx, assignmentId);
 
     const staff = isStaff(actor.role);
-    const classes = new Set(
-      accessibleClasses(db, actor).map((classroom) => classroom.id),
-    );
-    const students = new Set(
-      accessibleStudents(db, actor).map((student) => student.id),
-    );
-    const submissions = rows<Submission>(
-      db,
-      submissionsSql + submissionsOrder,
-      actor.academyId,
-    ).filter(
-      (submission) =>
-        students.has(submission.student_id) &&
-        (!staff || classes.has(submission.class_id)),
-    );
-    const assignments =
-      staff || actor.role === 'student'
-        ? rows<Assignment>(
-            db,
-            assignmentsSql + ' ORDER BY a.due_date DESC, a.title',
-            actor.academyId,
-          ).filter((assignment) => classes.has(assignment.class_id))
-        : [];
+    const pending = staff && url.searchParams.get('view') === 'review';
+    const { assignments, submissions } = visibleHomework(ctx, pending);
     return [
-      staff ? renderAssignmentForm(ctx) : '',
-      staff || actor.role === 'student'
+      '<div class="workspace-heading"><h1>숙제·채점</h1>' +
+        (staff
+          ? '<a class="button-link" href="/homework?view=create#homework-create">숙제 등록</a>'
+          : '') +
+        '</div>',
+      staff
+        ? `<nav class="view-tabs page-tabs" aria-label="숙제 보기"><a href="/homework"${!pending ? ' aria-current="page"' : ''}>전체 숙제</a><a href="/homework?view=review"${pending ? ' aria-current="page"' : ''}>검수 대기</a></nav>`
+        : '',
+      staff && url.searchParams.get('view') === 'create'
+        ? renderAssignmentForm(ctx)
+        : '',
+      !pending && (staff || actor.role === 'student')
         ? renderAssignments(assignments, submissions, staff)
         : '',
       renderSubmissions(submissions, staff),

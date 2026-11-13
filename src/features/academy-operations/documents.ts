@@ -386,6 +386,25 @@ function visibleVersions(ctx: PageContext): DocumentVersion[] {
     : readablePublishedVersions(ctx);
 }
 
+export function recentPublishedDocuments(ctx: PageContext) {
+  const sorted = readablePublishedVersions(ctx)
+    .map(({ input }) => input)
+    .filter(({ validFrom }) => Date.parse(validFrom) <= Date.now())
+    .sort(
+      (a, b) =>
+        Date.parse(b.approvedAt ?? '') - Date.parse(a.approvedAt ?? '') ||
+        b.revision - a.revision,
+    );
+  const seen = new Set<string>();
+  return sorted
+    .filter(({ documentId }) => {
+      if (seen.has(documentId)) return false;
+      seen.add(documentId);
+      return true;
+    })
+    .slice(0, 4);
+}
+
 export function documentDownload(ctx: PageContext) {
   const id = ctx.url.searchParams.get('id');
   const revision = Number(ctx.url.searchParams.get('revision'));
@@ -478,7 +497,7 @@ function parseLocalDateTime(value: string) {
 function revisionForm(ctx: PageContext, previous?: SourceDocumentInput) {
   const classes = accessibleClasses(ctx.db, ctx.actor);
   const students = accessibleStudents(ctx.db, ctx.actor);
-  return `<section class="panel">
+  return `<section class="panel" id="document-edit">
     <h2>${previous ? '새 개정판 작성' : '자료 등록'}</h2>
     <form method="post" action="/documents" enctype="multipart/form-data">
       <input type="hidden" name="action" value="save">
@@ -562,7 +581,9 @@ async function renderDocuments(ctx: PageContext) {
       <td>${h(label)}</td></tr>`;
     })
     .join('');
-  return `<h1>학원 자료</h1>
+  const create = admin && ctx.url.searchParams.get('view') === 'create';
+  return `<div class="workspace-heading"><h1>학원 자료</h1>${admin ? '<a class="button-link" href="/documents?view=create#document-edit">자료 등록</a>' : ''}</div>
+    ${create ? revisionForm(ctx) : ''}
     <section class="panel">
       <h2>자료 목록</h2><form class="document-filters" method="get"><label>자료 검색<input name="q" value="${h(search)}" maxlength="200" placeholder="제목 또는 본문"></label><label>분류<select name="category"><option value="">전체 분류</option>${Object.entries(
         documentTypes,
@@ -597,7 +618,7 @@ async function renderDocuments(ctx: PageContext) {
     </section>`
         : ''
     }
-    ${admin ? revisionForm(ctx, selected?.input) : ''}`;
+    ${admin && selected && !create ? revisionForm(ctx, selected.input) : ''}`;
 }
 
 function latestRevision(db: OperationsDatabase, academyId: string, id: string) {

@@ -495,6 +495,8 @@ test(
       questions: '2 + 2? | 4 | 5 | 덧셈',
     };
     assert.equal((await send('/homework', teacher, assignment)).status, 303);
+    assert.match((await send('/', student)).text, /점수 정정 확인/);
+    assert.doesNotMatch((await send('/', guardian)).text, /점수 정정 확인/);
     const { assignmentId, questionId } = readDatabase(
       (db) =>
         db
@@ -528,6 +530,11 @@ test(
       ),
     );
     const submission = '/homework?submission=' + submissionId;
+    assert.ok((await send('/', teacher)).text.includes(submission));
+    assert.ok(
+      (await send('/homework?view=review', teacher)).text.includes(submission),
+    );
+    assert.doesNotMatch((await send('/', guardian)).text, /점수 정정 확인/);
     const review = {
       action: 'review',
       submissionId,
@@ -544,6 +551,10 @@ test(
       303,
     );
     assert.match((await send(submission, guardian)).text, /5\/5점/);
+    assert.ok((await send('/', guardian)).text.includes(submission));
+    assert.ok(
+      !(await send('/homework?view=review', teacher)).text.includes(submission),
+    );
 
     const correction = {
       ...review,
@@ -737,6 +748,8 @@ test(
     assert.ok(source);
     assert.equal((await send(source, guardian)).status, 200);
     assert.equal((await send(source, other)).status, 404);
+    assert.ok((await send('/', guardian)).text.includes(source));
+    assert.ok(!(await send('/', other)).text.includes(source));
     document.classifiedAt = '2026-11-11T10:00:00+09:00';
     document.items[0].tags[0].tagId = 'math-09';
     assert.equal((await upload('1')).status, 303);
@@ -783,4 +796,50 @@ test('통합 일정 경로와 캐릭터 설정은 로그인·동일 출처와 �
   assert.equal(blocked.status, 403);
   const probe = await s.send('/settings', parent, { action: 'probe' });
   assert.equal(probe.status, 403);
+});
+
+test('운영 홈과 상담 목록은 열람 범위와 처리 상태를 따른다', async (t) => {
+  const s = await startOperations(t);
+  const admin = await s.login('TA_DIRECTOR');
+  const parent = await s.login('TA_GUARDIAN_E_MATH');
+  const other = await s.login('TA_GUARDIAN_M2');
+  const id = randomUUID();
+  const path = '/consultation?id=' + id;
+  const title = '운영 홈에서만 확인할 상담';
+  assert.equal(
+    (
+      await s.send('/consultation', parent, {
+        action: 'ask',
+        conversationId: id,
+        question: title,
+        studentId: 'TA_STU_001',
+      })
+    ).status,
+    303,
+  );
+  assert.match((await s.send('/', parent)).text, new RegExp(title));
+  assert.doesNotMatch((await s.send('/', admin)).text, new RegExp(title));
+  assert.equal((await s.send(path, other)).status, 404);
+  assert.equal(
+    (await s.send(path, parent, { action: 'handoff', id })).status,
+    303,
+  );
+  assert.match((await s.send('/', admin)).text, new RegExp(title));
+  assert.match(
+    (await s.send('/consultation?view=inbox', admin)).text,
+    new RegExp(title),
+  );
+  assert.doesNotMatch((await s.send('/', other)).text, new RegExp(title));
+  assert.equal(
+    (await s.send(path, admin, { action: 'close', id })).status,
+    303,
+  );
+  assert.doesNotMatch(
+    (await s.send('/consultation?view=inbox', admin)).text,
+    new RegExp(title),
+  );
+  assert.match(
+    (await s.send('/consultation?view=archive', admin)).text,
+    new RegExp(title),
+  );
 });
