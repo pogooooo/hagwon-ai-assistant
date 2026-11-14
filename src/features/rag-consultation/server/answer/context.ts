@@ -160,6 +160,17 @@ export function resolveEffectiveTime(
   if (!date) {
     // 날짜는 없지만 미래 시점을 묻는 경우: "1월부터 얼마"·"다음 달 수강료" → 그 달 1일 기준 값
     const now = toKstDate(asOf);
+    const yearMonth = /(?<!\d)(\d{4})\s*년\s*(1[0-2]|0?[1-9])\s*월/.exec(
+      frame.normalized,
+    );
+    if (yearMonth && frame.months.length === 1) {
+      const start = kstStartOfDay({
+        year: Number(yearMonth[1]),
+        month: Number(yearMonth[2]),
+        day: 1,
+      });
+      if (start > asOf) return { at: start, explicitDay: null };
+    }
     const month =
       frame.relativePeriod === 'next_month'
         ? (now.month % 12) + 1

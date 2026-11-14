@@ -22,7 +22,12 @@ import {
   type EvidenceExcerpt,
 } from './context.ts';
 import { classTableRows, dayWordCovers, explicitClassIds } from './info.ts';
-import { tableDateAt, tablePeriodAt, weekdayAt } from './table-dates.ts';
+import {
+  scheduleChangeInterval,
+  tableDateAt,
+  tablePeriodAt,
+  weekdayAt,
+} from './table-dates.ts';
 import { supportsExcerpt } from './verify.ts';
 import {
   fromPublicExcerpts,
@@ -983,8 +988,18 @@ async function findScheduleChanges(
     .map(compactText)
     .filter((name) => name.length >= 3);
   return facts.filter((fact) => {
-    if (fact.value.kind !== 'schedule_change' || fact.value.date !== isoDate)
-      return false;
+    if (fact.value.kind !== 'schedule_change') return false;
+    if (fact.value.event) {
+      const day = tableDateAt(isoDate, 0);
+      const interval = scheduleChangeInterval(fact.value);
+      if (
+        day === undefined ||
+        !interval ||
+        interval.start >= day + 24 * 60 * 60 * 1000 ||
+        day >= interval.end
+      )
+        return false;
+    } else if (fact.value.date !== isoDate) return false;
     if (fact.subjectType === 'class') return fact.subjectId === classId;
     if (fact.subjectType !== 'academy') return false;
     const text = compactText(fact.value.text);

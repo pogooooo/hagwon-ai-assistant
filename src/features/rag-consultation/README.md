@@ -213,7 +213,7 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 
 ## 계획 기반 엔진 비교 실행
 
-기존 엔진은 기본 경로입니다. 개발 테스트 화면의 `/dev/api/ask`에서만 `RAG_DEV_ENGINE=planned`로 계획 기반 경로를 선택할 수 있습니다. 공개 요청과 응답 계약은 동일합니다.
+로컬 개발 서버의 테스트 화면(`/dev/api/ask`)과 API(`/api/rag/query`)는 모두 계획 엔진을 기본으로 사용합니다. 기존 엔진과 비교하려면 `RAG_DEV_ENGINE=legacy`를 설정합니다. 공개 요청과 응답 계약은 동일합니다.
 
 ```bash
 node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/run-eval.ts --suite v2-dev,v1-90,v1-paraphrase-100 --variant engine,engine-planned --label architecture-final --out .git/rag-validation

@@ -326,7 +326,9 @@ export function planFromEvidence(
       kind: 'none',
       reason: evidence.length ? 'low_confidence' : 'no_evidence',
     };
-  const refs = ctx.documents.factRefsAtChunk?.(top.chunk.chunkId) ?? [];
+  const refs =
+    ctx.documents.factRefsAtChunk?.(top.chunk.chunkId, ctx.access.academyId) ??
+    [];
   if (
     top.chunk.documentType === 'student_analysis' ||
     refs.some((ref) => ANALYSIS_FACTS.includes(ref.factType))
@@ -354,7 +356,11 @@ export function planFromEvidence(
       )
       .slice(0, 2)
       .map(
-        (result) => ctx.documents.factRefsAtChunk?.(result.chunk.chunkId) ?? [],
+        (result) =>
+          ctx.documents.factRefsAtChunk?.(
+            result.chunk.chunkId,
+            ctx.access.academyId,
+          ) ?? [],
       )
       .find(
         (list) =>

@@ -27,6 +27,7 @@ function externalOptions(
       baseUrl: 'https://clovastudio.stream.ntruss.com/v1/openai',
       model,
       apiKey: clovaKey,
+      personalDataApproved: env.RAG_CLOVA_ALLOW_PERSONAL_DATA === 'true',
     };
   }
   if (geminiKey && (provider === 'auto' || provider === 'gemini')) {
@@ -36,6 +37,7 @@ function externalOptions(
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
       model,
       apiKey: geminiKey,
+      personalDataApproved: env.RAG_GEMINI_ALLOW_PERSONAL_DATA === 'true',
     };
   }
   if (provider === 'openai-compatible') {
@@ -64,6 +66,13 @@ export function createGenerationProviderFromEnv(
   const dailyCallLimit = env.RAG_GENERATION_DAILY_CALL_LIMIT
     ? Number(env.RAG_GENERATION_DAILY_CALL_LIMIT)
     : undefined;
+  if (
+    dailyCallLimit !== undefined &&
+    (!Number.isSafeInteger(dailyCallLimit) || dailyCallLimit < 0)
+  )
+    throw new Error(
+      'RAG_GENERATION_DAILY_CALL_LIMIT must be a nonnegative integer',
+    );
   if (provider === 'mock')
     return new GuardedGenerationProvider(new MockGenerationProvider('ok'), {
       dailyCallLimit,

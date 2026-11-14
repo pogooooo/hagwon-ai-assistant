@@ -43,6 +43,8 @@ export interface ChunkSearchQuery {
   access: RagAccessScope;
   studentIds: readonly string[];
   asOf: number;
+  /** 조회 시점에 이미 승인된 자료 중 이 미래 적용일에 해당하는 버전만 찾는다. */
+  effectiveAt?: number;
   query: string;
   limit: number;
   /** 승인 시점은 asOf 그대로 두고, 이 시점까지 적용 예정인 공개 문서도 검색한다. */
@@ -108,6 +110,8 @@ export interface RagDocumentsPort {
     approve: boolean;
   }): Promise<IndexRevisionResult>;
   revokeRevision(input: {
+    /** Unscoped calls are only supported for unambiguous legacy document IDs. */
+    academyId?: string;
     documentId: string;
     revision?: number;
     reason: 'deleted' | 'revoked';
@@ -126,7 +130,10 @@ export interface RagDocumentsPort {
     asOf: number;
     term: string;
   }): Promise<boolean>;
-  factRefsAtChunk?(chunkId: string): Array<{
+  factRefsAtChunk?(
+    chunkId: string,
+    academyId?: string,
+  ): Array<{
     factType: FactType;
     subjectType: 'student' | 'class' | 'academy';
     subjectId: string;

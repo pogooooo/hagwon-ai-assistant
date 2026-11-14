@@ -294,6 +294,90 @@ test('개설 여부는 학원의 승인 수강 대상 범위로 확인한다', a
   );
 });
 
+test('학교급 오타가 있어도 대상이 맞는 승인 과정 행으로 수업 여부를 답한다', async () => {
+  const { register, ask } = setup(letterCatalog);
+  await register(
+    'COURSE_OVERVIEW',
+    'academy_info',
+    '학원 과정 안내',
+    [
+      '## 과정 구성',
+      '',
+      '| 과정 | 대상 | 수업 |',
+      '|---|---|---|',
+      '| 고등 실험 과정 | 고1~고2 | 주 2회 |',
+      '| 중등 탐구 과정 | 중1~중3 | 주 1회 |',
+    ].join('\n'),
+  );
+  const { answer } = await ask('중학샹 수업하나요?');
+  assert.equal(answer.status, 'answered', answer.answer);
+  assert.match(answer.answer, /중학생[^\n]*(?:운영|있습니다)|^네[,.]/);
+  assert.match(answer.answer, /중등 탐구 과정/);
+  assert.doesNotMatch(answer.answer, /고등 실험 과정/);
+  assert.deepEqual(
+    answer.citations.map(({ documentId }) => documentId),
+    ['COURSE_OVERVIEW'],
+  );
+  assert.match(answer.citations[0].location ?? '', /표 1 · 2행/);
+  assert.doesNotMatch(answer.citations[0].location ?? '', /표 1 · 1행/);
+});
+
+test('일부 과목표는 개설 여부를 보류하고 승인된 전체 안내는 정규 과정 범위로 답한다', async () => {
+  const { register, ask } = setup({ ...catalog, classes: [] });
+  await register(
+    'ONE_SUBJECT',
+    'academy_info',
+    '수학 수업 안내',
+    [
+      '## 수학 수업 안내',
+      '',
+      '| 과정 | 대상 |',
+      '|---|---|',
+      '| 고등 수학 과정 | 고1~고3 |',
+    ].join('\n'),
+  );
+  await register(
+    'DRAFT_MIDDLE',
+    'academy_info',
+    '미승인 과정 안내',
+    '| 과정 | 대상 |\n|---|---|\n| 중등 신설 과정 | 중1~중3 |',
+    { approve: false },
+  );
+  const question = '중학생 수업하나요?';
+  const unknown = await ask(question);
+  assert.equal(unknown.answer.status, 'abstained', unknown.answer.answer);
+  assert.deepEqual(unknown.answer.citations, []);
+
+  await register(
+    'ACADEMY_SCOPE',
+    'academy_info',
+    '학원 안내',
+    [
+      '## 교육 대상 및 개설 과목',
+      '',
+      '| 구분 | 대상 | 개설 반 |',
+      '|---|---|---|',
+      '| 수학 | 고1~고3 | 고등 수학 과정 |',
+      '| 국어 | 고1~고2 | 고등 국어 과정 |',
+      '| 특강 | 시기별 개설 | 별도 공지 |',
+    ].join('\n'),
+  );
+  const { answer } = await ask(question);
+  assert.equal(answer.status, 'answered', answer.answer);
+  assert.match(answer.answer, /정규\s*(?:과정|수업|반)/);
+  assert.match(
+    answer.answer,
+    /중학생[^\n]*(?:없|운영하지|개설하지)|^아니요[,.]/,
+  );
+  assert.doesNotMatch(answer.answer, /중등 신설 과정/);
+  const locations = answer.citations.map(({ location }) => location).join(' ');
+  assert.match(locations, /표 1 · 1행/);
+  assert.match(locations, /표 1 · 2행/);
+  assert.ok(
+    answer.citations.every(({ documentId }) => documentId === 'ACADEMY_SCOPE'),
+  );
+});
+
 test('대기 불가와 대체 반 잔여석은 같은 모집 공지에서 함께 확인한다', async () => {
   const { register, ask } = setup(letterCatalog);
   const id = 'CLOSED_OPEN';
