@@ -21,6 +21,7 @@ import {
 } from './documents.ts';
 import { homeworkModule } from './homework.ts';
 import { learningModule } from './learning.ts';
+import { briefingModule } from './briefing.ts';
 import { calendarModule } from './calendar.ts';
 import { renderHome } from './home.ts';
 import { preferencesModule, selectedCharacter } from './preferences.ts';
@@ -39,6 +40,7 @@ const modules: OperationModule[] = [
   directoryModule,
   homeworkModule,
   learningModule,
+  briefingModule,
   calendarModule,
   documentsModule,
   consultationModule,
@@ -51,6 +53,7 @@ const menuOrder = [
   '/schedule',
   '/documents',
   '/learning',
+  '/briefing',
   '/homework',
   '/directory',
   '/settings',
@@ -60,6 +63,7 @@ const menuIcons: Record<string, string> = {
   '/schedule': 'calendar',
   '/documents': 'files',
   '/learning': 'chart',
+  '/briefing': 'chart',
   '/homework': 'check',
   '/directory': 'people',
   '/settings': 'settings',
