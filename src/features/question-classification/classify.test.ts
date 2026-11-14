@@ -294,9 +294,9 @@ test('두 판독을 합칠 때 번호·본문이 갈리면 보류하고 그림 �
   assert.equal(merged[0].text, 'a³ − b³');
   assert.ok(merged[1].holdReason);
   assert.ok(merged[3].holdReason);
-  assert.equal(merged[2].figure.dependence, '필수');
+  assert.equal(merged[2].figure?.dependence, '필수');
   assert.deepEqual(
-    merged[2].figure.reads.map((r: { method: string; state: string }) => [
+    merged[2].figure?.reads.map((r: { method: string; state: string }) => [
       r.method,
       r.state,
     ]),
@@ -471,7 +471,11 @@ test('photos 입력을 허용하되 문항과 사진이 모두 비면 거절하�
       },
     ],
   });
-  assert.equal(withFigure.items[0].figure?.dependence, '보조');
+  const figureItem = withFigure.items[0];
+  assert.equal(
+    'figure' in figureItem ? figureItem.figure?.dependence : undefined,
+    '보조',
+  );
 });
 
 test('그림 안내문은 그림 정보가 있을 때만 들어가고 글자 전용 지시는 그대로다', async () => {
