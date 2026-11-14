@@ -1,0 +1,30 @@
+{
+  "assignmentId": "math-demo",
+  "subject": "M",
+  "items": [
+    {
+      "itemId": "math-demo-1",
+      "page": 1,
+      "displayNumber": "1",
+      "text": "단, x ≠ 3일 때 (x² − 9)/(x − 3)을 간단히 하시오."
+    },
+    {
+      "itemId": "math-demo-2",
+      "page": 1,
+      "displayNumber": "2",
+      "text": "f(x) = x² − 9일 때 f(4)를 구하시오."
+    },
+    {
+      "itemId": "math-demo-3",
+      "page": 1,
+      "displayNumber": "3",
+      "text": "함수 f는 모든 실수 x에 대해 f(−x) = f(x)를 만족시킨다. 이 함수의 그래프는 무엇에 대해 대칭인가?"
+    },
+    {
+      "itemId": "math-demo-4",
+      "page": 1,
+      "displayNumber": "4",
+      "text": "미분가능한 함수 f가 모든 실수 x에 대해 f(−x) = f(x)를 만족시킨다. f′(0)의 값을 구하시오."
+    }
+  ]
+}

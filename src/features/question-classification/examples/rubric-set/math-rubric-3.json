@@ -1,0 +1,48 @@
+{
+  "assignmentId": "math-rubric-3",
+  "subject": "M",
+  "items": [
+    {
+      "itemId": "math-ex-19",
+      "page": 1,
+      "displayNumber": "19",
+      "text": "직선 y = 2x + k가 포물선 y = x²에 접할 때 k를 구하시오."
+    },
+    {
+      "itemId": "math-ex-20",
+      "page": 1,
+      "displayNumber": "20",
+      "text": "x² − 2x − k = 0의 판별식이 0이다. k를 구하시오."
+    },
+    {
+      "itemId": "math-ex-21",
+      "page": 1,
+      "displayNumber": "21",
+      "text": "1부터 100까지의 자연수 중 3의 배수도 5의 배수도 아닌 수는 몇 개인가?"
+    },
+    {
+      "itemId": "math-ex-22",
+      "page": 1,
+      "displayNumber": "22",
+      "text": "3의 배수는 33개, 5의 배수는 20개, 공배수는 6개다. 100 − (33 + 20 − 6)을 계산하시오."
+    },
+    {
+      "itemId": "math-ex-23",
+      "page": 1,
+      "displayNumber": "23",
+      "text": "직선 y = 2x + k가 포물선 y = x²에 접한다. 이 직선과 x축, y축으로 둘러싸인 삼각형의 넓이를 구하시오."
+    },
+    {
+      "itemId": "math-ex-24",
+      "page": 1,
+      "displayNumber": "24",
+      "text": "현장학습에 38명이 간다. 12인승 차량은 한 대에 8만 원, 20인승은 12만 원이다. 모두 탈 수 있는 가장 저렴한 대여 방법을 구하시오."
+    },
+    {
+      "itemId": "math-ex-25",
+      "page": 1,
+      "displayNumber": "25",
+      "text": "20인승 차량 두 대를 빌리기로 했다. 대당 12만 원이면 총액은 얼마인가?"
+    }
+  ]
+}

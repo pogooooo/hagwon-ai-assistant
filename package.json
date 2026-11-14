@@ -8,6 +8,7 @@
   },
   "packageManager": "npm@11.17.0",
   "scripts": {
+    "classify": "node --env-file-if-exists=.env.local src/features/question-classification/run.mjs",
     "dev": "npm run academy:dev",
     "build": "next build",
     "start": "sirv out --host 127.0.0.1 --port 3000",
