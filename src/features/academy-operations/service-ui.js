@@ -7,6 +7,18 @@ if (selectedMenu) {
   if (overflow > 0) menu.scrollLeft += overflow + 16;
 }
 
+const allCorrect = document.querySelector('input[name="allCorrect"]');
+if (allCorrect) {
+  const wrong = allCorrect.form.querySelectorAll('input[name="wrong"]');
+  allCorrect.onchange = () => {
+    if (allCorrect.checked) for (const box of wrong) box.checked = false;
+  };
+  for (const box of wrong)
+    box.onchange = () => {
+      if (box.checked) allCorrect.checked = false;
+    };
+}
+
 // Keep an unsent question only in this browser tab and only for this account.
 const account = document.body.dataset.account;
 if (account) {

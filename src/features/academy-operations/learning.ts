@@ -348,6 +348,151 @@ export function learningEvidence(
   return result;
 }
 
+export function classificationSubject(subject: string) {
+  const math = /수학|math/i.test(subject);
+  const english = /영어|english/i.test(subject);
+  if (math && english)
+    throw new OperationError(
+      '혼합 과목 반은 과목별 반으로 구분한 뒤 분류를 등록해 주세요.',
+      422,
+    );
+  if (!math && !english)
+    throw new OperationError(
+      '자동 분류는 수학·영어 반에서 사용할 수 있습니다.',
+      422,
+    );
+  return math ? 'M' : 'E';
+}
+
+/** Caller owns the transaction so a homework and its learning record commit together. */
+export function storeClassification(
+  ctx: PageContext,
+  data: ReturnType<typeof parseClassification>,
+  classId: string,
+  title: string,
+  period: string,
+  revisionText: string,
+) {
+  if (
+    !/^\d{4}-(0[1-9]|1[0-2])$/.test(period) ||
+    Date.parse(data.classifiedAt) > Date.now() + 300000
+  )
+    throw new OperationError('분석 월 또는 분류 시각을 확인해 주세요.', 422);
+  ctx.assertCurrentAccess?.();
+  const klass = accessibleClasses(ctx.db, ctx.actor).find(
+    (c) => c.id === classId,
+  );
+  if (!klass) throw new OperationError('반 관리 권한이 없습니다.', 403);
+  if (data.subject !== classificationSubject(klass.subject))
+    throw new OperationError('반의 과목과 분류 과목이 일치하지 않습니다.', 422);
+  const previous = one<Assignment>(
+    ctx.db,
+    'SELECT * FROM op_learning_assignments WHERE academy_id = ? AND assignment_id = ?',
+    ctx.actor.academyId,
+    data.assignmentId,
+  );
+  if (previous && previous.class_id !== classId)
+    throw new OperationError('같은 숙제 ID의 반을 변경할 수 없습니다.', 409);
+  const normalized = JSON.stringify(data);
+  if (
+    previous?.classification === normalized &&
+    previous.title === title &&
+    previous.period === period
+  )
+    return;
+  if (revisionText !== String(previous?.revision ?? 0))
+    throw new OperationError(
+      '자료가 변경되었습니다. 새로 열고 다시 제출해 주세요.',
+      409,
+    );
+  if (
+    previous &&
+    Date.parse(data.classifiedAt) <= Date.parse(previous.classified_at)
+  )
+    throw new OperationError(
+      '다시 분류한 파일은 기존 분류보다 새 시각이어야 합니다.',
+      409,
+    );
+  if (previous && previous.period !== period)
+    throw new OperationError(
+      '등록된 숙제의 분석 월을 변경할 수 없습니다.',
+      409,
+    );
+  const at = new Date().toISOString();
+  const revision = (previous?.revision ?? 0) + 1;
+  ctx.db
+    .prepare(
+      `INSERT INTO op_learning_assignments VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(academy_id, assignment_id) DO UPDATE SET title=excluded.title, revision=excluded.revision, classification=excluded.classification, classified_at=excluded.classified_at`,
+    )
+    .run(
+      ctx.actor.academyId,
+      data.assignmentId,
+      classId,
+      title,
+      period,
+      revision,
+      normalized,
+      data.classifiedAt,
+    );
+  ctx.db
+    .prepare(
+      'INSERT INTO op_learning_classification_versions VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      ctx.actor.academyId,
+      data.assignmentId,
+      revision,
+      normalized,
+      ctx.actor.id,
+      at,
+    );
+  for (const { student_id } of rows<{ student_id: string }>(
+    ctx.db,
+    'SELECT DISTINCT student_id FROM op_learning_results WHERE academy_id = ? AND assignment_id = ?',
+    ctx.actor.academyId,
+    data.assignmentId,
+  ))
+    publish(ctx.db, ctx.actor.academyId, student_id, classId, period, at);
+}
+
+export const workbookReportReason = '교재 숙제 학생 제출';
+/** Called in the same transaction as the student's immutable submission. */
+export function recordWorkbookReport(
+  ctx: PageContext,
+  id: string,
+  student: string,
+  outcomes: Record<string, Outcome>,
+) {
+  const assignment = assignmentFor(ctx, id);
+  requireStudent(ctx, assignment, student);
+  const data = parseClassification(JSON.parse(assignment.classification));
+  if (
+    data.items.length !== Object.keys(outcomes).length ||
+    data.items.some((i) => !Object.hasOwn(outcomes, i.itemId))
+  )
+    throw new OperationError(
+      '출제 문항과 분류 버전이 달라 제출할 수 없습니다.',
+      409,
+    );
+  const prev = currentResult(ctx.db, ctx.actor.academyId, id, student);
+  if (prev)
+    throw new OperationError('이미 학습 결과가 등록된 숙제입니다.', 409);
+  ctx.db
+    .prepare(
+      "INSERT INTO op_learning_results VALUES (?,?,?,1,?,?,NULL,'draft',?,?,?)",
+    )
+    .run(
+      ctx.actor.academyId,
+      id,
+      student,
+      assignment.revision,
+      JSON.stringify(outcomes),
+      ctx.actor.id,
+      workbookReportReason,
+      new Date().toISOString(),
+    );
+}
+
 async function submit(ctx: PageContext, form: FormData) {
   const action = required(form, 'action', '작업');
   if (action === 'import') {
@@ -370,97 +515,16 @@ async function submit(ctx: PageContext, form: FormData) {
     const title = required(form, 'title', '숙제 제목', 120);
     const classId = required(form, 'classId', '반', 128);
     const period = required(form, 'period', '분석 월', 7);
-    if (
-      !/^\d{4}-(0[1-9]|1[0-2])$/.test(period) ||
-      Date.parse(data.classifiedAt) > Date.now() + 300000
-    )
-      throw new OperationError('분석 월 또는 분류 시각을 확인해 주세요.', 422);
-    transaction(ctx.db, () => {
-      ctx.assertCurrentAccess?.();
-      const klass = accessibleClasses(ctx.db, ctx.actor).find(
-        (c) => c.id === classId,
-      );
-      if (!klass) throw new OperationError('반 관리 권한이 없습니다.', 403);
-      const math = /수학|math/i.test(klass.subject);
-      const english = /영어|english/i.test(klass.subject);
-      if (math && english)
-        throw new OperationError(
-          '혼합 과목 반은 과목별 반으로 구분한 뒤 분류를 등록해 주세요.',
-          422,
-        );
-      if (data.subject === 'M' ? !math : !english)
-        throw new OperationError(
-          '반의 과목과 분류 과목이 일치하지 않습니다.',
-          422,
-        );
-      const previous = one<Assignment>(
-        ctx.db,
-        'SELECT * FROM op_learning_assignments WHERE academy_id = ? AND assignment_id = ?',
-        ctx.actor.academyId,
-        data.assignmentId,
-      );
-      if (previous && previous.class_id !== classId)
-        throw new OperationError(
-          '같은 숙제 ID의 반을 변경할 수 없습니다.',
-          409,
-        );
-      const normalized = JSON.stringify(data);
-      if (
-        previous?.classification === normalized &&
-        previous.title === title &&
-        previous.period === period
-      )
-        return;
-      expectedRevision(form, previous?.revision ?? 0);
-      if (
-        previous &&
-        Date.parse(data.classifiedAt) <= Date.parse(previous.classified_at)
-      )
-        throw new OperationError(
-          '다시 분류한 파일은 기존 분류보다 새 시각이어야 합니다.',
-          409,
-        );
-      if (previous && previous.period !== period)
-        throw new OperationError(
-          '등록된 숙제의 분석 월을 변경할 수 없습니다.',
-          409,
-        );
-      const at = new Date().toISOString();
-      const revision = (previous?.revision ?? 0) + 1;
-      ctx.db
-        .prepare(
-          `INSERT INTO op_learning_assignments VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(academy_id, assignment_id) DO UPDATE SET title=excluded.title, revision=excluded.revision, classification=excluded.classification, classified_at=excluded.classified_at`,
-        )
-        .run(
-          ctx.actor.academyId,
-          data.assignmentId,
-          classId,
-          title,
-          period,
-          revision,
-          normalized,
-          data.classifiedAt,
-        );
-      ctx.db
-        .prepare(
-          'INSERT INTO op_learning_classification_versions VALUES (?, ?, ?, ?, ?, ?)',
-        )
-        .run(
-          ctx.actor.academyId,
-          data.assignmentId,
-          revision,
-          normalized,
-          ctx.actor.id,
-          at,
-        );
-      for (const { student_id } of rows<{ student_id: string }>(
-        ctx.db,
-        'SELECT DISTINCT student_id FROM op_learning_results WHERE academy_id = ? AND assignment_id = ?',
-        ctx.actor.academyId,
-        data.assignmentId,
-      ))
-        publish(ctx.db, ctx.actor.academyId, student_id, classId, period, at);
-    });
+    transaction(ctx.db, () =>
+      storeClassification(
+        ctx,
+        data,
+        classId,
+        title,
+        period,
+        field(form, 'revision', 12),
+      ),
+    );
     return '/learning?assignment=' + encodeURIComponent(data.assignmentId);
   }
   let gradedInput: unknown;
@@ -494,6 +558,8 @@ async function submit(ctx: PageContext, form: FormData) {
     expectedRevision(form, assignment.revision, 'classificationRevision');
     const at = new Date().toISOString();
     const data = parseClassification(JSON.parse(assignment.classification));
+    if (ctx.actor.role === 'student' && data.items.some((i) => i.book))
+      throw new OperationError('숙제 화면에서 오답을 제출해 주세요.', 403);
     let state: Result['state'];
     let outcomes: Record<string, Outcome>;
     let summary: LearningSummary | null = null;
@@ -705,7 +771,7 @@ function render(ctx: PageContext) {
     <details><summary>쪽수·문항별 결과와 분류 확인 (${data.items.length}문항)</summary><div class="table-wrap"><table><thead><tr><th>쪽수</th><th>번호</th><th>결과</th><th>채택 유형</th></tr></thead><tbody>${data.items
       .map(
         (i) =>
-          `<tr><td>${i.page}</td><td>${h(i.displayNumber)}</td><td>${{ correct: '정답', incorrect: '오답', unknown: '미확인' }[outcomes[i.itemId] ?? 'unknown']}</td><td>${
+          `<tr><td>${h([i.book, i.segment, i.page].filter(Boolean).join(' · '))}</td><td>${h(i.displayNumber)}${i.book ? '<small>#' + h(i.itemId) + '</small>' : ''}</td><td>${{ correct: '정답', incorrect: '오답', unknown: '미확인' }[outcomes[i.itemId] ?? 'unknown']}</td><td>${
             i.itemStatus === 'classified'
               ? i.tags
                   .filter((t) => t.status === 'adopted')
@@ -726,12 +792,15 @@ function render(ctx: PageContext) {
     ${
       staff(ctx) ||
       (ctx.actor.role === 'student' &&
+        !data.items.some((i) => i.book) &&
         students.some(
           (s) => s.id === selected && s.classIds.includes(assignment.class_id),
         ))
         ? `<details class="result-entry" ${result ? '' : 'open'}><summary>전달받은 결과 등록·수정</summary>${staff(ctx) ? `<form method="post" enctype="multipart/form-data">${hidden}<input type="hidden" name="action" value="results-import"><label>팀 채점 결과 JSON<input type="file" name="resultsFile" accept=".json,application/json" required></label><label>등록 사유<input name="reason" required maxlength="500" value="팀 채점 결과 수신"></label><p class="muted">채점을 수행하지 않습니다. 전달된 정오답을 저장하며 빠진 문항은 미확인으로 둡니다. 검수 후 분석에 반영됩니다.</p><button>결과 가져오기</button></form>` : ''}<form method="post">${hidden}<input type="hidden" name="action" value="results"><label>오답 쪽수 | 번호 (한 줄에 하나)<textarea name="wrongItems" rows="5" placeholder="42 | 1&#10;43 | 1">${data.items
             .filter((i) => outcomes[i.itemId] === 'incorrect')
-            .map((i) => h(i.page + ' | ' + i.displayNumber))
+            .map((i) =>
+              h(i.book ? '#' + i.itemId : i.page + ' | ' + i.displayNumber),
+            )
             .join(
               '\n',
             )}</textarea></label><label class="check-label"><input type="checkbox" name="complete" value="yes">전체 문항 결과를 확인했습니다. 적지 않은 나머지 문항은 모두 정답입니다.</label><p class="muted">체크하지 않으면 적지 않은 문항은 미확인으로 남습니다.</p><label>등록·수정 사유<input name="reason" required maxlength="500"></label><button>검수 대기로 저장</button></form></details>`

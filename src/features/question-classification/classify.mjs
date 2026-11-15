@@ -1,10 +1,16 @@
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import catalog from './rubrics/tags.json' with { type: 'json' };
 import { z } from 'zod';
 import { figureSchema } from './read-page.mjs';
 
 const readAsset = (name) =>
-  readFile(new URL('./rubrics/' + name, import.meta.url), 'utf8');
-const catalog = JSON.parse(await readAsset('tags.json'));
+  readFile(
+    process.env.CLASSIFICATION_RUBRICS_DIR
+      ? path.join(process.env.CLASSIFICATION_RUBRICS_DIR, name)
+      : new URL('./rubrics/' + name, import.meta.url),
+    'utf8',
+  );
 const nonempty = z.string().trim().min(1);
 const itemFields = {
   itemId: nonempty,

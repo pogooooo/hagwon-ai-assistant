@@ -1,4 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import { saveWorkbook } from './homework-classifier.ts';
+import { renderWorkbookForm } from './workbook-form.ts';
+import { recordWorkbookReport } from './learning.ts';
+
+interface QuestionInput {
+  prompt: string;
+  answer: string;
+  points: number;
+  type: string;
+}
 
 import {
   accessibleClasses,
@@ -24,13 +34,7 @@ interface Assignment {
   class_name: string;
   title: string;
   due_date: string;
-}
-
-interface QuestionInput {
-  prompt: string;
-  answer: string;
-  points: number;
-  type: string;
+  submission_mode: string;
 }
 
 interface Question {
@@ -50,6 +54,7 @@ interface Submission {
   student_name: string;
   class_id: string;
   assignment_title: string;
+  submission_mode: string;
   confirmed_at: string | null;
   review_version: number;
   score: number;
@@ -63,7 +68,7 @@ interface MarkedAnswer extends Question {
 }
 
 const assignmentsSql = `
-  SELECT a.id, a.class_id, c.name AS class_name, a.title, a.due_date
+  SELECT a.id, a.class_id, c.name AS class_name, a.title, a.due_date,a.submission_mode
   FROM homework_assignments a
   JOIN classes c ON c.id = a.class_id AND c.academy_id = a.academy_id
   WHERE a.academy_id = ?
@@ -71,7 +76,7 @@ const assignmentsSql = `
 
 const submissionsSql = `
   SELECT s.id, s.assignment_id, s.student_id, st.name AS student_name,
-    a.class_id, a.title AS assignment_title, s.confirmed_at, s.review_version,
+    a.class_id, a.title AS assignment_title,a.submission_mode, s.confirmed_at, s.review_version,
     COALESCE(SUM(m.awarded_points), 0) AS score, COALESCE(SUM(q.points), 0) AS total
   FROM homework_submissions s
   JOIN homework_assignments a ON a.id = s.assignment_id
@@ -188,7 +193,7 @@ function parseQuestions(value: string): QuestionInput[] {
   });
 }
 
-function createAssignment(ctx: PageContext, form: FormData): void {
+function createAssignment(ctx: PageContext, form: FormData) {
   if (!isStaff(ctx.actor.role)) {
     throw new OperationError('숙제 등록 권한이 없습니다.', 403);
   }
@@ -203,7 +208,12 @@ function createAssignment(ctx: PageContext, form: FormData): void {
   ) {
     throw new OperationError('제출 마감일을 확인해 주세요.');
   }
-  const questions = parseQuestions(required(form, 'questions', '문항', 40_000));
+  const classroom = accessibleClasses(ctx.db, ctx.actor).find(
+    (c) => c.id === classId,
+  );
+  if (!classroom)
+    throw new OperationError('숙제를 배정할 수 있는 반을 선택해 주세요.', 403);
+  const questions = parseQuestions(required(form, 'questions', '문항', 40000));
   const id = randomUUID();
   transaction(ctx.db, () => {
     ctx.assertCurrentAccess?.();
@@ -252,7 +262,10 @@ function submitAnswers(ctx: PageContext, form: FormData): void {
   transaction(ctx.db, () => {
     ctx.assertCurrentAccess?.();
     const assignment = studentAssignment(ctx, assignmentId);
-    if (isLate(assignment.due_date)) {
+    if (
+      assignment.submission_mode !== 'workbook' &&
+      isLate(assignment.due_date)
+    ) {
       throw new OperationError('제출 마감일이 지났습니다.');
     }
     if (
@@ -265,6 +278,22 @@ function submitAnswers(ctx: PageContext, form: FormData): void {
     ) {
       throw new OperationError('이미 제출한 숙제입니다.', 409);
     }
+    const workbook = assignment.submission_mode === 'workbook';
+    const questions = questionsFor(ctx, assignment.id);
+    const wrong = new Set(form.getAll('wrong'));
+    if (
+      workbook &&
+      (field(form, 'action') !== 'report' ||
+        (wrong.size === 0) !== (field(form, 'allCorrect') === 'yes') ||
+        wrong.size !== form.getAll('wrong').length ||
+        [...wrong].some((i) => !questions.some((q) => q.id === i)))
+    )
+      throw new OperationError(
+        '틀린 문항을 선택하거나 모두 맞음을 체크해 주세요.',
+        422,
+      );
+    if (!workbook && field(form, 'action') !== 'submit')
+      throw new OperationError('제출 방식을 확인해 주세요.');
     const submissionId = randomUUID();
     ctx.db
       .prepare(
@@ -277,7 +306,28 @@ function submitAnswers(ctx: PageContext, form: FormData): void {
        (submission_id, question_id, response, automatic_points, awarded_points)
        VALUES (?, ?, ?, ?, ?)`,
     );
-    for (const question of questionsFor(ctx, assignment.id)) {
+    if (workbook) {
+      const outcomes: Record<string, 'correct' | 'incorrect'> = {};
+      for (const q of questions) {
+        const incorrect = wrong.has(q.id);
+        outcomes[q.id] = incorrect ? 'incorrect' : 'correct';
+        insert.run(
+          submissionId,
+          q.id,
+          incorrect ? '오답' : '정답',
+          incorrect ? 0 : 1,
+          incorrect ? 0 : 1,
+        );
+      }
+      recordWorkbookReport(ctx, assignment.id, studentId, outcomes);
+      ctx.db
+        .prepare(
+          'UPDATE homework_submissions SET confirmed_at=submitted_at WHERE id=?',
+        )
+        .run(submissionId);
+      return;
+    }
+    for (const question of questions) {
       const response = field(form, 'answer-' + question.id, 500);
       const score =
         normalize(response) === normalize(question.answer_key)
@@ -307,6 +357,8 @@ function reviewScores(ctx: PageContext, form: FormData): void {
   transaction(ctx.db, () => {
     ctx.assertCurrentAccess?.();
     const submission = submissionFor(ctx, id);
+    if (submission.submission_mode === 'workbook')
+      throw new OperationError('학생이 제출한 오답 기록입니다.', 409);
     if (submission.review_version !== version) {
       throw new OperationError(
         '다른 검수가 저장되었습니다. 화면을 새로고침해 주세요.',
@@ -393,35 +445,6 @@ function reviewScores(ctx: PageContext, form: FormData): void {
   });
 }
 
-function renderAssignmentForm(ctx: PageContext): string {
-  const classrooms = accessibleClasses(ctx.db, ctx.actor);
-  if (!classrooms.length) {
-    return '<section class="panel" id="homework-create"><h2>숙제 등록</h2><p>배정할 반을 먼저 등록하거나 연결해 주세요.</p></section>';
-  }
-  return `<section class="panel" id="homework-create">
-    <h2>숙제 등록</h2>
-    <form method="post" action="/homework">
-      <input type="hidden" name="action" value="create">
-      <div class="fields">
-        <label>숙제 제목<input name="title" maxlength="120" required></label>
-        <label>배정할 반<select name="classId" required>${classrooms
-          .map(
-            ({ id, name }) =>
-              `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`,
-          )
-          .join('')}</select></label>
-        <label>제출 마감일<input type="date" name="dueDate" required></label>
-      </div>
-      <label>문항
-        <textarea name="questions" rows="5" maxlength="40000" required
-          aria-describedby="homework-format" placeholder="3 × 4는 얼마인가요? | 12 | 5 | 곱셈"></textarea>
-      </label>
-      <p id="homework-format">한 줄에 문제 | 정답 | 배점 | 유형을 입력하세요. 배점은 1~100점이고 유형은 생략할 수 있습니다. 탭으로 나눈 교재 목록도 붙여넣을 수 있습니다.</p>
-      <div class="actions"><button type="submit">숙제 배정</button></div>
-    </form>
-  </section>`;
-}
-
 function renderAssignments(
   assignments: Assignment[],
   submissions: Submission[],
@@ -431,7 +454,7 @@ function renderAssignments(
     ${
       assignments.length
         ? `<div class="table-wrap"><table>
-        <thead><tr><th>숙제</th><th>반</th><th>마감일</th><th>${staff ? '제출' : '상태'}</th></tr></thead>
+        <thead><tr><th>숙제</th><th>반</th><th>숙제 날짜 / 마감일</th><th>${staff ? '제출' : '상태'}</th></tr></thead>
         <tbody>${assignments
           .map((assignment) => {
             const submitted = submissions.filter(
@@ -441,9 +464,10 @@ function renderAssignments(
               ? submitted.length + '건'
               : submitted.length
                 ? '제출 완료'
-                : isLate(assignment.due_date)
+                : assignment.submission_mode !== 'workbook' &&
+                    isLate(assignment.due_date)
                   ? '마감'
-                  : `<a href="/homework?assignment=${encodeURIComponent(assignment.id)}">답안 제출</a>`;
+                  : `<a href="/homework?assignment=${encodeURIComponent(assignment.id)}">${assignment.submission_mode === 'workbook' ? '오답 선택' : '답안 제출'}</a>`;
             return `<tr><td>${escapeHtml(assignment.title)}</td><td>${escapeHtml(assignment.class_name)}</td>
               <td>${escapeHtml(assignment.due_date)}</td><td>${state}</td></tr>`;
           })
@@ -460,7 +484,12 @@ function renderSubmissions(submissions: Submission[], staff: boolean): string {
         <thead><tr><th>숙제</th><th>학생</th><th>점수</th><th>상태</th><th>보기</th></tr></thead>
         <tbody>${submissions
           .map((submission) => {
-            const status = submission.confirmed_at ? '확정' : '검수 대기';
+            const status =
+              submission.submission_mode === 'workbook'
+                ? '학생 제출'
+                : submission.confirmed_at
+                  ? '확정'
+                  : '검수 대기';
             const action =
               staff || submission.confirmed_at
                 ? `<a href="/homework?submission=${encodeURIComponent(submission.id)}">${staff && !submission.confirmed_at ? '검수' : '결과'}</a>`
@@ -477,10 +506,48 @@ function renderSubmissions(submissions: Submission[], staff: boolean): string {
     }</section>`;
 }
 
+export function homeworkPhoto(ctx: PageContext) {
+  const id = ctx.url.searchParams.get('assignment') ?? '';
+  const assignment = one<Assignment>(
+    ctx.db,
+    assignmentsSql + ' AND a.id = ?',
+    ctx.actor.academyId,
+    id,
+  );
+  if (
+    !assignment ||
+    !['teacher', 'admin', 'student'].includes(ctx.actor.role) ||
+    !accessibleClasses(ctx.db, ctx.actor).some(
+      (c) => c.id === assignment.class_id,
+    )
+  )
+    throw new OperationError('사진을 찾을 수 없습니다.', 404);
+  const photo = one<{ mime: string; bytes: Uint8Array }>(
+    ctx.db,
+    'SELECT mime, bytes FROM homework_photos WHERE assignment_id = ?',
+    id,
+  );
+  if (!photo) throw new OperationError('사진을 찾을 수 없습니다.', 404);
+  return photo;
+}
+
+function renderPhoto(ctx: PageContext, id: string) {
+  return one(
+    ctx.db,
+    'SELECT 1 FROM homework_photos WHERE assignment_id = ?',
+    id,
+  )
+    ? '<img class="homework-photo" alt="숙제 문제 원본 사진" src="/homework/photo?assignment=' +
+        encodeURIComponent(id) +
+        '">'
+    : '';
+}
+
 function renderStudentForm(ctx: PageContext, id: string): string {
   const assignment = studentAssignment(ctx, id);
   if (
-    isLate(assignment.due_date) ||
+    (assignment.submission_mode !== 'workbook' &&
+      isLate(assignment.due_date)) ||
     one(
       ctx.db,
       'SELECT id FROM homework_submissions WHERE assignment_id = ? AND student_id = ?',
@@ -493,8 +560,18 @@ function renderStudentForm(ctx: PageContext, id: string): string {
       409,
     );
   }
+  if (assignment.submission_mode === 'workbook')
+    return `<section class="panel"><h2>${escapeHtml(assignment.title)}</h2><p>${escapeHtml(assignment.class_name)} · ${escapeHtml(assignment.due_date)}</p>
+    <form method="post" action="/homework"><input type="hidden" name="action" value="report"><input type="hidden" name="assignmentId" value="${escapeHtml(id)}">
+    <fieldset><legend>틀린 문항을 선택하세요</legend>${questionsFor(ctx, id)
+      .map(
+        (q) =>
+          `<label class="check-label"><input type="checkbox" name="wrong" value="${escapeHtml(q.id)}"> ${escapeHtml(q.prompt)}</label>`,
+      )
+      .join('')}
+    <label class="check-label"><input type="checkbox" name="allCorrect" value="yes"> 모두 맞았어요</label></fieldset><button>결과 제출</button></form></section>`;
   return `<section class="panel">
-    <h2>${escapeHtml(assignment.title)}</h2>
+    <h2>${escapeHtml(assignment.title)}</h2>${renderPhoto(ctx, id)}
     <p>${escapeHtml(assignment.class_name)} · ${escapeHtml(assignment.due_date)}까지</p>
     <form method="post" action="/homework">
       <input type="hidden" name="action" value="submit">
@@ -563,6 +640,8 @@ function renderSubmission(ctx: PageContext, id: string): string {
     return '<section class="panel"><h2>채점 검수 대기</h2><p>강사가 결과를 확정하면 확인할 수 있습니다.</p><a href="/homework">목록</a></section>';
   }
   const marks = markedAnswers(ctx, id);
+  if (submission.submission_mode === 'workbook')
+    return `<section class="panel"><h2>${escapeHtml(submission.assignment_title)}</h2><p>${escapeHtml(submission.student_name)} · 학생 제출 · ${submission.total}문항 중 ${submission.score}문항 정답</p><ul>${marks.map((q) => `<li>${escapeHtml(q.prompt)} · ${escapeHtml(q.response)}</li>`).join('')}</ul><a href="/homework">숙제 목록</a></section>`;
   const revisions =
     staff && submission.confirmed_at
       ? rows<{ version: number; finalized_at: string; reason: string | null }>(
@@ -587,6 +666,7 @@ function renderSubmission(ctx: PageContext, id: string): string {
       )
       .join('')}</tbody></table></div>`;
   return `<section class="panel"><h2>${escapeHtml(submission.assignment_title)}</h2>
+    ${staff ? renderPhoto(ctx, submission.assignment_id) : ''}
     <p>${escapeHtml(submission.student_name)} · ${submission.score}/${submission.total}점</p>
     ${
       staff
@@ -652,7 +732,11 @@ export function homeworkOverview(ctx: PageContext) {
   return {
     review: staff ? submissions : [],
     due: assignments
-      .filter(({ id, due_date }) => !submitted.has(id) && !isLate(due_date))
+      .filter(
+        ({ id, due_date, submission_mode }) =>
+          !submitted.has(id) &&
+          (submission_mode === 'workbook' || !isLate(due_date)),
+      )
       .sort(
         (a, b) =>
           a.due_date.localeCompare(b.due_date) ||
@@ -679,6 +763,13 @@ export const homeworkModule: OperationModule = {
       );
       CREATE INDEX IF NOT EXISTS homework_assignments_academy
         ON homework_assignments(academy_id, class_id);
+      CREATE TABLE IF NOT EXISTS homework_analysis_drafts (
+        id TEXT PRIMARY KEY, academy_id TEXT NOT NULL,teacher_id TEXT NOT NULL,subject TEXT NOT NULL,result TEXT NOT NULL,expires_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS homework_photos (
+        assignment_id TEXT PRIMARY KEY REFERENCES homework_assignments(id),
+        mime TEXT NOT NULL, bytes BLOB NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS homework_questions (
         id TEXT PRIMARY KEY,
         assignment_id TEXT NOT NULL REFERENCES homework_assignments(id),
@@ -722,6 +813,15 @@ export const homeworkModule: OperationModule = {
     if (
       !rows<{ name: string }>(
         db,
+        'PRAGMA table_info(homework_assignments)',
+      ).some((c) => c.name === 'submission_mode')
+    )
+      db.exec(
+        "ALTER TABLE homework_assignments ADD COLUMN submission_mode TEXT NOT NULL DEFAULT 'answers'",
+      );
+    if (
+      !rows<{ name: string }>(
+        db,
         'PRAGMA table_info(homework_submissions)',
       ).some(({ name }) => name === 'review_version')
     ) {
@@ -738,6 +838,21 @@ export const homeworkModule: OperationModule = {
     if (assignmentId) return renderStudentForm(ctx, assignmentId);
 
     const staff = isStaff(actor.role);
+    const saved = url.searchParams.get('saved');
+    if (staff && saved) {
+      const a = one<Assignment>(
+        ctx.db,
+        assignmentsSql + ' AND a.id=?',
+        actor.academyId,
+        saved,
+      );
+      if (
+        !a ||
+        !accessibleClasses(ctx.db, actor).some((c) => c.id === a.class_id)
+      )
+        throw new OperationError('숙제를 찾을 수 없습니다.', 404);
+      return `<section class="panel"><h1>숙제 배정 완료</h1><p>${escapeHtml(a.class_name)} · ${escapeHtml(a.title)} · ${questionsFor(ctx, saved).length}문항</p><div class="actions"><a href="/briefing?assignment=${encodeURIComponent(saved)}">이 숙제 브리핑</a><a href="/homework?view=create">새 숙제 등록</a><a href="/homework">숙제 목록</a></div></section>`;
+    }
     const pending = staff && url.searchParams.get('view') === 'review';
     const { assignments, submissions } = visibleHomework(ctx, pending);
     return [
@@ -750,7 +865,7 @@ export const homeworkModule: OperationModule = {
         ? `<nav class="view-tabs page-tabs" aria-label="숙제 보기"><a href="/homework"${!pending ? ' aria-current="page"' : ''}>전체 숙제</a><a href="/homework?view=review"${pending ? ' aria-current="page"' : ''}>검수 대기</a></nav>`
         : '',
       staff && url.searchParams.get('view') === 'create'
-        ? renderAssignmentForm(ctx)
+        ? renderWorkbookForm(ctx)
         : '',
       !pending && (staff || actor.role === 'student')
         ? renderAssignments(assignments, submissions, staff)
@@ -760,8 +875,11 @@ export const homeworkModule: OperationModule = {
   },
   submit(ctx, data) {
     switch (field(data, 'action', 20)) {
+      case 'save-workbook':
+        return saveWorkbook(ctx, data);
       case 'create':
         return createAssignment(ctx, data);
+      case 'report':
       case 'submit':
         return submitAnswers(ctx, data);
       case 'review':

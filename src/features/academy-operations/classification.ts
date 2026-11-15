@@ -27,6 +27,10 @@ const schema = z.object({
         itemId: identifier,
         page: z.number().int().positive().max(100000),
         displayNumber: z.string().trim().min(1).max(80),
+        book: z.string().trim().min(1).max(120).optional(),
+        segment: z.string().trim().max(120).optional(),
+        reviewedType: z.string().trim().max(500).optional(),
+        transcript: z.string().max(60000).optional(),
         itemStatus: z.enum([
           'classified',
           'no_adopted',
@@ -62,7 +66,12 @@ export function parseClassification(input: unknown): Classification {
   const ids = new Set<string>();
   const coordinates = new Set<string>();
   for (const item of data.items) {
-    const key = coordinate(item.page, item.displayNumber);
+    const key = JSON.stringify([
+      item.book ?? '',
+      item.segment ?? '',
+      item.page,
+      item.displayNumber,
+    ]);
     if (ids.has(item.itemId) || coordinates.has(key))
       throw new OperationError(
         '문항 ID 또는 쪽수·번호 조합이 중복됩니다.',
@@ -96,6 +105,16 @@ export function parseClassification(input: unknown): Classification {
 
 export function coordinate(page: number, number: string) {
   return JSON.stringify([page, number.trim()]);
+}
+
+// Older result files identify a question by page and number alone.
+function positions(data: Classification) {
+  const map = new Map<string, string | null>();
+  for (const item of data.items) {
+    const key = coordinate(item.page, item.displayNumber);
+    map.set(key, map.has(key) ? null : item.itemId);
+  }
+  return map;
 }
 export type Outcome = 'correct' | 'incorrect' | 'unknown';
 export interface Counts {
@@ -178,12 +197,7 @@ export function outcomesFromWrongList(
   value: string,
   complete: boolean,
 ): Record<string, Outcome> {
-  const byPosition = new Map(
-    classification.items.map((item) => [
-      coordinate(item.page, item.displayNumber),
-      item.itemId,
-    ]),
-  );
+  const byPosition = positions(classification);
   const result: Record<string, Outcome> = Object.fromEntries(
     classification.items.map((item) => [
       item.itemId,
@@ -193,8 +207,10 @@ export function outcomesFromWrongList(
   const seen = new Set<string>();
   for (const line of value.split(/\r?\n/).filter((line) => line.trim())) {
     const match = /^\s*(\d+)\s*\|\s*(.+?)\s*$/.exec(line);
-    const id = match && byPosition.get(coordinate(Number(match[1]), match[2]));
-    if (!id || seen.has(id))
+    const id = line.trim().startsWith('#')
+      ? line.trim().slice(1)
+      : match && byPosition.get(coordinate(Number(match[1]), match[2]));
+    if (!id || !Object.hasOwn(result, id) || seen.has(id))
       throw new OperationError(
         '오답은 중복 없이 쪽수 | 번호 형식으로 입력해 주세요. 등록된 문항과 일치해야 합니다.',
         422,
@@ -239,9 +255,7 @@ export function parseGradedResults(
       '채점 결과의 형식·숙제·학생·분류 버전을 확인해 주세요.',
       422,
     );
-  const byCoordinate = new Map(
-    data.items.map((i) => [coordinate(i.page, i.displayNumber), i.itemId]),
-  );
+  const byCoordinate = positions(data);
   const outcomes: Record<string, Outcome> = Object.fromEntries(
     data.items.map((i) => [i.itemId, 'unknown']),
   );

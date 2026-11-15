@@ -8,11 +8,17 @@ const assets = join(root, '.local/cloudflare-hosted-assets');
 const modules = join(root, '.local/cloudflare-hosted-modules');
 mkdirSync(assets, { recursive: true });
 mkdirSync(join(modules, 'academies'), { recursive: true });
+cpSync(
+  join(root, 'src/features/question-classification/rubrics'),
+  join(modules, 'rubrics'),
+  { recursive: true },
+);
 
 for (const name of [
   'operations.css',
   'service-design.css',
   'service-ui.js',
+  'workbook-ui.js',
   'assets',
 ]) {
   cpSync(join(source, name), join(assets, name), { recursive: true });

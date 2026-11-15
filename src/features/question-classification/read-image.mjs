@@ -34,17 +34,20 @@ export function compareMathReadings(first, second) {
 
 // 사진 한 장과 지시문을 보내 CLOVA 판독 모델의 응답 본문을 받는다.
 export async function visionChat(filename, prompt, { maxTokens = 800 } = {}) {
-  const mime = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-  }[path.extname(filename ?? '').toLowerCase()];
+  const fromFile = typeof filename === 'string';
+  const mime = fromFile
+    ? {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+      }[path.extname(filename).toLowerCase()]
+    : filename.mime;
   if (!mime) throw Error('PNG 또는 JPEG 문항 이미지 경로를 입력하세요.');
   const key =
     process.env.CLOVA_STUDIO_API_KEY?.trim() ||
     process.env.RAG_CLOVA_API_KEY?.trim();
   if (!key) throw Error('.env.local에 CLOVA_STUDIO_API_KEY를 설정하세요.');
-  const image = await readFile(filename);
+  const image = fromFile ? await readFile(filename) : filename.bytes;
   const response = await fetch(
     'https://clovastudio.stream.ntruss.com/v3/chat-completions/' + model,
     {

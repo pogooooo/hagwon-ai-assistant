@@ -75,6 +75,7 @@ test('브리핑 집계: 확정 결과만 세고 약한 유형과 많이 틀린 �
   ]);
   assert.deepEqual(briefing.stateCounts, {
     confirmed: 2,
+    reported: 0,
     draft: 1,
     stale: 0,
     withdrawn: 0,

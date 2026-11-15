@@ -1,3 +1,4 @@
+import { workbookReportReason } from './learning.ts';
 import { accessibleClasses, accessibleStudents } from './directory.ts';
 import {
   analyze,
@@ -17,7 +18,7 @@ import {
 
 /** 확정: 최신 분류에 맞춰 검수가 끝난 결과. 브리핑 집계에는 확정 결과만 쓴다. */
 export type BriefingState =
-  'confirmed' | 'draft' | 'stale' | 'withdrawn' | 'missing';
+  'confirmed' | 'reported' | 'draft' | 'stale' | 'withdrawn' | 'missing';
 
 export interface BriefingEntry {
   studentId: string;
@@ -60,7 +61,8 @@ export interface Briefing {
 }
 
 const itemLabel = (item: Classification['items'][number]) =>
-  item.itemStatus === 'classified'
+  item.reviewedType ||
+  (item.itemStatus === 'classified'
     ? item.tags
         .filter((t) => t.status === 'adopted')
         .map((t) => tagById.get(t.tagId)!.name)
@@ -69,7 +71,7 @@ const itemLabel = (item: Classification['items'][number]) =>
         no_adopted: '채택 태그 없음',
         unreadable: '읽기 불가',
         out_of_scope: '분류 범위 밖',
-      }[item.itemStatus];
+      }[item.itemStatus]);
 
 // 정답률이 낮은 순, 동률은 태그 ID 순. 오답이 없는 유형은 다시 설명할 대상이 아니다.
 const weakest = (types: TypeRate[]) =>
@@ -88,6 +90,7 @@ export function summarizeBriefing(
 ): Briefing {
   const stateCounts: Briefing['stateCounts'] = {
     confirmed: 0,
+    reported: 0,
     draft: 0,
     stale: 0,
     withdrawn: 0,
@@ -104,7 +107,7 @@ export function summarizeBriefing(
   );
   const students = entries.map(({ outcomes, ...entry }) => {
     stateCounts[entry.state]++;
-    if (entry.state !== 'confirmed')
+    if (entry.state !== 'confirmed' && entry.state !== 'reported')
       return {
         ...entry,
         correct: 0,
@@ -114,8 +117,18 @@ export function summarizeBriefing(
         weakTypes: [],
       };
     const summary = analyze(classification, outcomes);
-    overall.correct += summary.correct;
-    overall.total += summary.assessed;
+    const workbook = classification.items.every((i) => i.book);
+    const correct = workbook
+      ? classification.items.filter((i) => outcomes[i.itemId] === 'correct')
+          .length
+      : summary.correct;
+    const total = workbook
+      ? correct +
+        classification.items.filter((i) => outcomes[i.itemId] === 'incorrect')
+          .length
+      : summary.assessed;
+    overall.correct += correct;
+    overall.total += total;
     for (const area of summary.areas) {
       const row = areas.get(area.name) ?? {
         name: area.name,
@@ -155,14 +168,16 @@ export function summarizeBriefing(
       wrongItems.push({
         itemId: item.itemId,
         page: item.page,
-        displayNumber: item.displayNumber,
+        displayNumber: [item.book, item.segment, item.displayNumber]
+          .filter(Boolean)
+          .join(' · '),
         label: itemLabel(item),
       });
     }
     return {
       ...entry,
-      correct: summary.correct,
-      total: summary.assessed,
+      correct,
+      total,
       unknown: summary.unknown,
       wrongItems,
       weakTypes: weakest(own),
@@ -184,7 +199,9 @@ export function summarizeBriefing(
       .map((item) => ({
         itemId: item.itemId,
         page: item.page,
-        displayNumber: item.displayNumber,
+        displayNumber: [item.book, item.segment, item.displayNumber]
+          .filter(Boolean)
+          .join(' · '),
         label: itemLabel(item),
         ...missed.get(item.itemId)!,
       }))
@@ -209,6 +226,7 @@ interface AssignmentRow {
 }
 interface ResultRow {
   student_id: string;
+  reason: string;
   classification_revision: number;
   outcomes: string;
   state: 'draft' | 'confirmed' | 'withdrawn';
@@ -216,6 +234,7 @@ interface ResultRow {
 
 const stateLabels: Record<BriefingState, string> = {
   confirmed: '확정',
+  reported: '학생 제출',
   draft: '검수 대기',
   stale: '재검수 필요',
   withdrawn: '철회됨',
@@ -253,7 +272,7 @@ function render(ctx: PageContext) {
   if (id && !assignment)
     throw new OperationError('조회 가능한 분류 숙제가 아닙니다.', 404);
   const heading =
-    '<div class="page-heading"><h1>브리핑</h1><p>숙제 한 건의 반 전체 결과를 요약합니다. 검수가 확정된 결과만 집계합니다.</p></div>';
+    '<div class="page-heading"><h1>브리핑</h1><p>숙제 한 건의 반 전체 결과를 요약합니다. 교재 숙제는 학생이 제출한 오답을, 그 밖의 숙제는 검수 확정 결과를 집계합니다.</p></div>';
   if (!assignment)
     return `${heading}<div class="split learning-layout">${list}<section class="panel"><p>숙제를 선택해 반 전체 결과를 확인해 주세요.</p></section></div>`;
 
@@ -265,7 +284,7 @@ function render(ctx: PageContext) {
     .map((s) => {
       const result = one<ResultRow>(
         ctx.db,
-        'SELECT student_id, classification_revision, outcomes, state FROM op_learning_results WHERE academy_id = ? AND assignment_id = ? AND student_id = ? ORDER BY revision DESC LIMIT 1',
+        'SELECT student_id, classification_revision, outcomes, state, reason FROM op_learning_results WHERE academy_id = ? AND assignment_id = ? AND student_id = ? ORDER BY revision DESC LIMIT 1',
         ctx.actor.academyId,
         assignment.assignment_id,
         s.id,
@@ -274,16 +293,24 @@ function render(ctx: PageContext) {
         ? 'missing'
         : result.classification_revision !== assignment.revision
           ? 'stale'
-          : result.state;
+          : result.state === 'draft' &&
+              result.reason === workbookReportReason &&
+              classification.items.every((i) => i.book)
+            ? 'reported'
+            : result.state;
       return {
         studentId: s.id,
         name: s.name,
         state,
-        outcomes: state === 'confirmed' ? JSON.parse(result!.outcomes) : {},
+        outcomes:
+          state === 'confirmed' || state === 'reported'
+            ? JSON.parse(result!.outcomes)
+            : {},
       };
     });
   const briefing = summarizeBriefing(classification, entries);
-  const confirmed = briefing.stateCounts.confirmed;
+  const counted =
+    briefing.stateCounts.confirmed + briefing.stateCounts.reported;
   const waiting = (['draft', 'stale', 'withdrawn', 'missing'] as const)
     .filter((state) => briefing.stateCounts[state])
     .map((state) => `${stateLabels[state]} ${briefing.stateCounts[state]}명`)
@@ -291,8 +318,10 @@ function render(ctx: PageContext) {
   const learningLink = (studentId: string) =>
     `/learning?assignment=${encodeURIComponent(assignment.assignment_id)}&amp;student=${encodeURIComponent(studentId)}`;
 
-  const summary = confirmed
-    ? `<div class="learning-metrics">${metric('반 평균 정답률', briefing.overall, `확정 ${confirmed}명 · ${briefing.overall.total}건 중 ${briefing.overall.correct}건 정답`)}${briefing.areas.map((a) => metric(a.name, a)).join('')}</div>
+  const workbook = classification.items.every((i) => i.book);
+  const countLabel = workbook ? '집계' : '확정';
+  const summary = counted
+    ? `<div class="learning-metrics">${metric('반 평균 정답률', briefing.overall, `${countLabel} ${counted}명 · ${briefing.overall.total}건 중 ${briefing.overall.correct}건 정답`)}${briefing.areas.map((a) => metric(a.name, a)).join('')}</div>
       <h3>한 번 더 설명할 유형</h3>${
         briefing.reteach.length
           ? `<div class="learning-metrics">${briefing.reteach.map((t) => metric(t.name + (t.referenceOnly ? ' (참고용)' : ''), t, `${h(t.area)} · ${t.total}건 중 ${t.correct}건 정답`)).join('')}</div>`
@@ -301,19 +330,19 @@ function render(ctx: PageContext) {
       <h3>많이 틀린 문항</h3>${
         briefing.missedItems.length
           ? `<div class="table-wrap"><table><thead><tr><th>쪽수</th><th>번호</th><th>오답 / 확인 학생</th><th>유형</th></tr></thead><tbody>${briefing.missedItems.map((i) => `<tr><td>${i.page}</td><td>${h(i.displayNumber)}</td><td>${i.incorrect} / ${i.checked}</td><td>${h(i.label)}</td></tr>`).join('')}</tbody></table></div>`
-          : '<p class="muted">확정된 결과에 오답이 없습니다.</p>'
+          : '<p class="muted">집계한 결과에 오답이 없습니다.</p>'
       }
       ${
         briefing.types.length
           ? `<details><summary>유형별 결과 전체 (${briefing.types.length}개)</summary><div class="table-wrap"><table><thead><tr><th>유형</th><th>영역</th><th>정답 / 확인</th><th>정답률</th></tr></thead><tbody>${briefing.types.map((t) => `<tr><td>${h(t.name)}${reference(t)}</td><td>${h(t.area)}</td><td>${t.correct} / ${t.total}</td><td>${percent(t)}</td></tr>`).join('')}</tbody></table></div></details>`
           : ''
       }`
-    : '<p class="notice">아직 검수가 확정된 결과가 없습니다. 학습 기록에서 결과를 등록하고 확정하면 여기에 요약됩니다.</p>';
+    : `<p class="notice">${workbook ? '아직 학생이 제출한 결과가 없습니다.' : '아직 검수가 확정된 결과가 없습니다.'}</p>`;
 
   const cards = briefing.students
     .map((s) => {
       const body =
-        s.state !== 'confirmed'
+        s.state !== 'confirmed' && s.state !== 'reported'
           ? `<strong>—</strong><p>${stateLabels[s.state]}</p>`
           : `<strong>${percent(s)}</strong><p>${s.total}문항 중 ${s.correct}문항 정답${s.unknown ? ` · 미확인 ${s.unknown}문항` : ''}</p><progress value="${s.correct}" max="${s.total || 1}"></progress>${
               s.weakTypes.length
@@ -330,11 +359,11 @@ function render(ctx: PageContext) {
 
   return `${heading}<div class="split learning-layout">${list}
     <section class="panel"><div class="panel-heading"><h2>${h(assignment.title)}</h2><span class="pill">${h(className(assignment.class_id))} · ${h(assignment.period)}</span></div>
-    <p class="muted">등록 ${classification.items.length}문항 · 분류 제외 ${briefing.unclassified}문항 · 대상 ${entries.length}명 중 확정 ${confirmed}명${waiting ? ' · ' + waiting : ''}</p>
+    <p class="muted">등록 ${classification.items.length}문항 · 분류 제외 ${briefing.unclassified}문항 · 대상 ${entries.length}명 중 집계 ${counted}명${waiting ? ' · ' + waiting : ''}</p>
     ${summary}
     <h3>학생별 결과</h3>${cards ? `<div class="learning-metrics">${cards}</div>` : '<p class="muted">이 반에 조회할 수 있는 원생이 없습니다.</p>'}
     </section></div>
-    <p class="learning-caution">정답률은 분류 가능한 문항 중 결과가 확인된 문항을 기준으로 계산합니다. 참고·보류 태그와 분류 제외 문항은 유형 집계에서 빠지며, 많이 틀린 문항에는 분류 제외 문항도 포함합니다. 수학 세부 유형은 참고용입니다. 이 요약만으로 실력·태도·원인을 단정하지 않습니다.</p>`;
+    <p class="learning-caution">교재 숙제의 전체 정답률은 학생이 보고한 전체 문항을 기준으로 계산합니다. 유형별 정답률은 AI가 채택한 태그를 기준으로 계산합니다. 참고·보류 태그와 분류 제외 문항은 유형 집계에서 빠지며, 많이 틀린 문항에는 분류 제외 문항도 포함합니다. 수학 세부 유형은 참고용입니다. 이 요약만으로 실력·태도·원인을 단정하지 않습니다.</p>`;
 }
 
 export const briefingModule: OperationModule = {

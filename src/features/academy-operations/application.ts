@@ -19,7 +19,8 @@ import {
   documentsModule,
   maxDocumentBytes as defaultMaxDocumentBytes,
 } from './documents.ts';
-import { homeworkModule } from './homework.ts';
+import { analyzeHomeworkPhoto } from './homework-classifier.ts';
+import { homeworkModule, homeworkPhoto } from './homework.ts';
 import { learningModule } from './learning.ts';
 import { briefingModule } from './briefing.ts';
 import { calendarModule } from './calendar.ts';
@@ -110,6 +111,7 @@ export function createOperationsServer({
       'operations.css',
       'service-design.css',
       'service-ui.js',
+      'workbook-ui.js',
       'assets/walnut.png',
       'assets/water.png',
       'assets/owl.png',
@@ -360,7 +362,7 @@ export function createOperationsServer({
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader(
       'Content-Security-Policy',
-      "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' blob:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     );
     const host = request.headers.host;
     const localPort = request.socket.localPort;
@@ -436,6 +438,12 @@ export function createOperationsServer({
         sendPage(response, 200, renderHome({ db, actor, url }), actor, '/');
         return;
       }
+      if (url.pathname === '/homework/photo' && request.method === 'GET') {
+        const photo = homeworkPhoto({ db, actor, url });
+        response.writeHead(200, { 'Content-Type': photo.mime });
+        response.end(Buffer.from(photo.bytes));
+        return;
+      }
       if (url.pathname === '/documents/download' && request.method === 'GET') {
         const file = documentDownload({ db, actor, url });
         response.writeHead(200, {
@@ -477,6 +485,19 @@ export function createOperationsServer({
         assertCurrentAccess,
         maxDocumentBytes,
       };
+      if (
+        form &&
+        operation === homeworkModule &&
+        url.searchParams.get('analyze') === '1'
+      ) {
+        const items = await analyzeHomeworkPhoto(ctx, form);
+        assertCurrentAccess();
+        response.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+        });
+        response.end(JSON.stringify(items));
+        return;
+      }
       if (form) {
         const target = await operation.submit(ctx, form);
         redirect(response, target ?? url.pathname + url.search);

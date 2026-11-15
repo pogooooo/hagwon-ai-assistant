@@ -324,3 +324,8 @@ caption {
     padding: 8px 10px;
   }
 }
+
+.homework-photo {
+  max-width: 100%;
+  height: auto;
+}
