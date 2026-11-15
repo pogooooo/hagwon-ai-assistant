@@ -168,6 +168,10 @@ h3 {
   text-align: center;
 }
 
+#homework-create [hidden] {
+  display: none;
+}
+
 form:not(.actions) {
   display: grid;
   gap: 12px;

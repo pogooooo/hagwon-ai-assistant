@@ -1,12 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import {
   parseClassification,
   tagById,
   type Classification,
 } from './classification.ts';
 import { accessibleClasses } from './directory.ts';
-import { classificationSubject, storeClassification } from './learning.ts';
 import {
   OperationError,
   required,
@@ -29,9 +27,20 @@ function requireTeacher(ctx: PageContext) {
 
 type Subject = 'M' | 'E';
 type ClassifiedItem = Classification['items'][number];
-export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
+type Review = { reason: string; candidates: string[] };
+interface ReadingDraft {
+  item: ClassifiedItem;
+  text: string;
+  printedPage?: number;
+  review?: Review;
+  figure?: unknown;
+}
+
+function requireSubject(
+  ctx: PageContext,
+  subject: string,
+): asserts subject is Subject {
   requireTeacher(ctx);
-  const subject = field(form, 'subject');
   if (subject !== 'M' && subject !== 'E')
     throw new OperationError('과목을 선택해 주세요.');
   if (
@@ -40,7 +49,70 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
     )
   )
     throw new OperationError('이 과목의 담당 반이 없습니다.', 403);
-  const page = Number(field(form, 'page', 6));
+}
+
+function storeDraft(
+  ctx: PageContext,
+  subject: Subject,
+  draft: ReadingDraft,
+  expiresAt: number,
+) {
+  const sourceId = randomUUID();
+  ctx.db
+    .prepare(
+      'INSERT INTO homework_analysis_drafts (id, academy_id, teacher_id, subject, result, expires_at) VALUES (?,?,?,?,?,?)',
+    )
+    .run(
+      sourceId,
+      ctx.actor.academyId,
+      ctx.actor.id,
+      subject,
+      JSON.stringify(draft),
+      expiresAt,
+    );
+  return {
+    sourceId,
+    number: draft.item.displayNumber,
+    page: draft.printedPage,
+    tagIds: draft.item.tags
+      .filter((t) => t.status === 'adopted')
+      .map((t) => t.tagId),
+    text: draft.text,
+    status: draft.item.itemStatus,
+    review: draft.review,
+    type: draft.item.tags
+      .filter((t) => t.status === 'adopted')
+      .map((t) => tagById.get(t.tagId)!.name)
+      .join(', '),
+  };
+}
+
+function loadDraft(ctx: PageContext, subject: Subject, sourceId: string) {
+  const row = one<{ result: string; expires_at: number }>(
+    ctx.db,
+    'SELECT result, expires_at FROM homework_analysis_drafts WHERE id=? AND academy_id=? AND teacher_id=? AND subject=? AND expires_at>?',
+    sourceId,
+    ctx.actor.academyId,
+    ctx.actor.id,
+    subject,
+    Date.now(),
+  );
+  if (!row)
+    throw new OperationError(
+      '분석 문항이 만료되었거나 접근할 수 없습니다. 사진을 다시 분석해 주세요.',
+      422,
+    );
+  return {
+    draft: JSON.parse(row.result) as ReadingDraft,
+    expiresAt: row.expires_at,
+  };
+}
+
+export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
+  const subject = field(form, 'subject');
+  requireSubject(ctx, subject);
+  const manualPage = field(form, 'page', 6);
+  const page = Number(manualPage || 1);
   if (!Number.isInteger(page) || page < 1 || page > 100000)
     throw new OperationError('쪽수를 확인해 주세요.');
   const file = form.get('photo');
@@ -64,15 +136,57 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
     throw new OperationError('서버에 CLOVA API 키를 설정해 주세요.', 503);
   const pageId = randomUUID();
   let classification: Classification;
-  let texts: Map<string, string>;
+  const readings = new Map<string, Omit<ReadingDraft, 'item'>>();
   try {
-    const { detected } = await readSheet({ bytes, mime }, subject);
+    const { detected, readingPasses } = await readSheet(
+      { bytes, mime },
+      subject,
+    );
     const items = itemsFromPhoto(pageId, page, detected).map((i) => ({
       ...i,
       text: i.holdReason ? '' : i.text,
     }));
     if (!items.length) throw Error('empty');
-    texts = new Map(items.map((i) => [i.itemId, i.text]));
+    for (const i of items) {
+      const candidates = [
+        ...new Set<string>(
+          readingPasses
+            .flat()
+            .filter(
+              (reading: { displayNumber: string }) =>
+                reading.displayNumber === i.displayNumber,
+            )
+            .map((reading: { text: string }) => reading.text.trim())
+            .filter(Boolean),
+        ),
+      ];
+      const readPages = new Set<number>(
+        readingPasses
+          .flat()
+          .filter(
+            (r: { displayNumber: string }) =>
+              r.displayNumber === i.displayNumber,
+          )
+          .map((r: { printedPage?: number }) => r.printedPage)
+          .filter((p: number | undefined): p is number => !!p),
+      );
+      readings.set(i.itemId, {
+        printedPage: manualPage
+          ? page
+          : readPages.size === 1
+            ? [...readPages][0]
+            : undefined,
+        text: i.text,
+        figure: i.figure,
+        review:
+          i.holdReason || !i.text.trim()
+            ? {
+                reason: i.holdReason || '판독된 원문이 비어 있습니다.',
+                candidates,
+              }
+            : undefined,
+      });
+    }
     const { record } = await classifyAssignment({
       assignmentId: pageId,
       subject,
@@ -86,154 +200,52 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
     );
   }
   return transaction(ctx.db, () => {
-    requireTeacher(ctx);
+    requireSubject(ctx, subject);
     const now = Date.now();
     ctx.db
       .prepare('DELETE FROM homework_analysis_drafts WHERE expires_at <= ?')
       .run(now);
-    const insert = ctx.db.prepare(
-      'INSERT INTO homework_analysis_drafts (id, academy_id, teacher_id, subject, result, expires_at) VALUES (?,?,?,?,?,?)',
-    );
     return classification.items.map((item) => {
-      const sourceId = randomUUID();
-      const text = texts.get(item.itemId) ?? '';
-      insert.run(
-        sourceId,
-        ctx.actor.academyId,
-        ctx.actor.id,
-        subject,
-        JSON.stringify({ item, text }),
-        now + 24 * 3600000,
-      );
-      return {
-        sourceId,
-        number: item.displayNumber,
-        text,
-        status: item.itemStatus,
-        type: item.tags
-          .filter((t) => t.status === 'adopted')
-          .map((t) => tagById.get(t.tagId)!.name)
-          .join(', '),
-      };
+      const reading = readings.get(item.itemId)!;
+      if (!reading.review && item.itemStatus === 'unreadable')
+        reading.review = {
+          reason: '분류 모델이 원문을 읽기 불가로 판단했습니다.',
+          candidates: [reading.text],
+        };
+      return storeDraft(ctx, subject, { item, ...reading }, now + 24 * 3600000);
     });
   });
 }
 
-const draftSchema = z
-  .array(
-    z.object({
-      book: z.string().trim().min(1).max(120),
-      page: z.number().int().min(1).max(100000),
-      segment: z.string().trim().max(120),
-      number: z.string().trim().min(1).max(80),
-      type: z.string().trim().max(500),
-      sourceId: z.uuid().nullable(),
-    }),
-  )
-  .min(1)
-  .max(300);
-
-export function saveWorkbook(ctx: PageContext, form: FormData) {
-  requireTeacher(ctx);
-  if (field(form, 'reviewed') !== 'yes')
-    throw new OperationError('선택한 문항을 확인해 주세요.');
-  const classId = required(form, 'classId', '반', 128),
-    title = required(form, 'title', '숙제 제목', 120);
-  const date = z.iso.date().safeParse(field(form, 'date', 10));
-  if (!date.success) throw new OperationError('숙제 날짜를 확인해 주세요.');
-  const id = z.uuid().safeParse(field(form, 'assignmentId', 36));
-  if (!id.success)
-    throw new OperationError('숙제 등록 화면을 다시 열어 주세요.');
-  let raw: unknown;
+export async function reviewHomeworkReading(ctx: PageContext, form: FormData) {
+  const subject = field(form, 'subject');
+  requireSubject(ctx, subject);
+  const sourceId = required(form, 'sourceId', '문항', 36);
+  const text = required(form, 'text', '확인한 원문', 60000);
+  if (text.includes('[불명]'))
+    throw new OperationError('[불명] 표시를 사진에서 확인해 수정해 주세요.');
+  const { draft, expiresAt } = loadDraft(ctx, subject, sourceId);
+  if (!draft.review) throw new OperationError('판독 검수 대상이 아닙니다.');
+  let item: ClassifiedItem;
   try {
-    raw = JSON.parse(required(form, 'items', '출제 문항', 600000));
+    const { record } = await classifyAssignment({
+      assignmentId: sourceId,
+      subject,
+      items: [{ ...draft.item, text, figure: draft.figure }],
+    });
+    [item] = parseClassification(record).items;
   } catch {
-    throw new OperationError('출제 문항을 확인해 주세요.');
-  }
-  const input = draftSchema.safeParse(raw);
-  if (!input.success)
     throw new OperationError(
-      '교재·쪽·문항 번호를 입력하고 1~300문항을 선택해 주세요.',
+      '원문을 분류하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+      502,
+    );
+  }
+  if (item.itemStatus === 'unreadable')
+    throw new OperationError(
+      '수정한 원문도 읽기 불가로 분류됐습니다. 식과 공통 조건을 확인해 주세요.',
       422,
     );
-  transaction(ctx.db, () => {
-    const classroom = accessibleClasses(ctx.db, ctx.actor).find(
-      (c) => c.id === classId,
-    );
-    if (!classroom) throw new OperationError('반 관리 권한이 없습니다.', 403);
-    const subject: Subject = classificationSubject(classroom.subject);
-    if (field(form, 'subject') !== subject)
-      throw new OperationError(
-        '분석 과목과 같은 과목의 반을 선택해 주세요.',
-        422,
-      );
-    if (one(ctx.db, 'SELECT id FROM homework_assignments WHERE id=?', id.data))
-      throw new OperationError('이미 등록한 숙제입니다.', 409);
-    ctx.db
-      .prepare(
-        "INSERT INTO homework_assignments (id,academy_id,class_id,title,due_date,submission_mode) VALUES (?,?,?,?,?,'workbook')",
-      )
-      .run(id.data, ctx.actor.academyId, classId, title, date.data);
-    const insert = ctx.db.prepare(
-      "INSERT INTO homework_questions (id,assignment_id,position,prompt,answer_key,points,problem_type,type_key) VALUES (?,?,?,?,'',1,?,?)",
-    );
-    const seen = new Set<string>();
-    const items = input.data.map((q, index) => {
-      let original: ClassifiedItem | undefined;
-      let transcript = '';
-      if (q.sourceId) {
-        const row = one<{ result: string }>(
-          ctx.db,
-          'SELECT result FROM homework_analysis_drafts WHERE id=? AND academy_id=? AND teacher_id=? AND subject=? AND expires_at>?',
-          q.sourceId,
-          ctx.actor.academyId,
-          ctx.actor.id,
-          subject,
-          Date.now(),
-        );
-        if (!row || seen.has(q.sourceId))
-          throw new OperationError(
-            '분석 문항이 중복되었거나 만료되었습니다. 사진을 다시 분석해 주세요.',
-            422,
-          );
-        seen.add(q.sourceId);
-        const stored = JSON.parse(row.result);
-        original = stored.item;
-        transcript = stored.text;
-      }
-      const itemId = randomUUID();
-      const label = [q.book, q.page + '쪽', q.segment, q.number + '번']
-        .filter(Boolean)
-        .join(' · ');
-      insert.run(
-        itemId,
-        id.data,
-        index + 1,
-        label,
-        q.type,
-        q.type.normalize('NFKC').toLowerCase(),
-      );
-      return {
-        itemId,
-        page: q.page,
-        displayNumber: q.number,
-        book: q.book,
-        segment: q.segment,
-        reviewedType: q.type,
-        transcript,
-        itemStatus: original?.itemStatus ?? 'no_adopted',
-        tags: original?.tags ?? [],
-      };
-    });
-    const data = parseClassification({
-      formatVersion: '1.0',
-      rubricVersion: '1.0',
-      subject,
-      assignmentId: id.data,
-      classifiedAt: new Date().toISOString(),
-      items,
-    });
-    storeClassification(ctx, data, classId, title, date.data.slice(0, 7), '0');
-  });
-  return '/homework?saved=' + id.data;
+  requireSubject(ctx, subject);
+  loadDraft(ctx, subject, sourceId);
+  return storeDraft(ctx, subject, { item, text }, expiresAt);
 }

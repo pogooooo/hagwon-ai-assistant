@@ -3,12 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { analyzeHomeworkPhoto, saveWorkbook } from './homework-classifier.ts';
+import {
+  analyzeHomeworkPhoto,
+  reviewHomeworkReading,
+} from './homework-classifier.ts';
 import { getActor, initializeIdentity } from './directory.ts';
 import { homeworkModule } from './homework.ts';
 import { briefingModule } from './briefing.ts';
 import { setupLearning } from './learning.ts';
-import { parseClassification } from './classification.ts';
+import { assignedQuestions } from './workbook-results.ts';
 
 test('두 쪽의 분석 결과와 수기 문항 검수·배정, 학생 오답 제출과 브리핑', async (t) => {
   const db = new DatabaseSync(':memory:');
@@ -31,6 +34,7 @@ test('두 쪽의 분석 결과와 수기 문항 검수·배정, 학생 오답 �
     else process.env.CLOVA_STUDIO_API_KEY = originalKey;
   });
   const text = '식을 간단히 하시오.';
+  let rejectClassification = false;
   t.mock.method(
     globalThis,
     'fetch',
@@ -42,9 +46,21 @@ test('두 쪽의 분석 결과와 수기 문항 검수·배정, 학생 오답 �
         items = ['01', '02'].map((displayNumber) =>
           cross
             ? { displayNumber, verdict: '일치', note: '' }
-            : { displayNumber, text },
+            : {
+                displayNumber,
+                printedPage: 42,
+                text:
+                  displayNumber === '01'
+                    ? text
+                    : body.messages[0].content[1].text.includes(
+                          '작은 글자 검수',
+                        )
+                      ? 'a³'
+                      : 'a²',
+              },
         );
       } else {
+        if (rejectClassification) return new Response('', { status: 503 });
         items = JSON.parse(body.messages[1].content).map(
           (i: { itemId: string }) => ({
             itemId: i.itemId,
@@ -72,7 +88,7 @@ test('두 쪽의 분석 결과와 수기 문항 검수·배정, 학생 오답 �
     for (const [k, v] of Object.entries(data)) f.set(k, v);
     return f;
   };
-  const photo = form({ subject: 'M', page: '42' });
+  const photo = form({ subject: 'M' });
   photo.set(
     'photo',
     new File(
@@ -91,93 +107,218 @@ test('두 쪽의 분석 결과와 수기 문항 검수·배정, 학생 오답 �
   const first = await analyzeHomeworkPhoto(teacher, photo);
   photo.set('page', '43');
   const second = await analyzeHomeworkPhoto(teacher, photo);
-  const id = randomUUID();
-  const q = {
-    book: '중등 수학',
-    segment: '기본',
-    type: '식 정리',
-    number: '01',
-  };
-  const reviewed = [
-    { ...q, page: 42, sourceId: first[0].sourceId },
-    {
-      ...q,
-      page: 43,
-      number: '03',
-      type: '교사 수정',
-      sourceId: second[1].sourceId,
-    },
-    { ...q, segment: '심화', page: 42, sourceId: null },
-  ];
+  const held = second[1];
+  assert.equal(held.text, '');
+  assert.deepEqual(held.review?.candidates, ['a²', 'a³']);
+  assert.match(held.review!.reason, /일치하지 않음/);
+  const correction = form({
+    subject: 'M',
+    sourceId: held.sourceId,
+    text: 'a²를 간단히 하시오.',
+  });
+  await assert.rejects(reviewHomeworkReading(student, correction), /권한/);
+  rejectClassification = true;
+  await assert.rejects(reviewHomeworkReading(teacher, correction), /다시 시도/);
+  rejectClassification = false;
+  const corrected = await reviewHomeworkReading(teacher, correction);
+  assert.equal(corrected.status, 'classified');
+  assert.equal(corrected.text, correction.get('text'));
+  assert.equal(first[0].page, 42);
+  assert.deepEqual(corrected.tagIds, ['math-01']);
+  const id = randomUUID(),
+    reviewed = [
+      { page: 42, number: '01', tagIds: first[0].tagIds },
+      { page: 43, number: '03', tagIds: ['math-02', 'math-01'] },
+    ];
   const save = form({
+    action: 'assign-workbook',
     assignmentId: id,
     subject: 'M',
-    action: 'save-workbook',
-    reviewed: 'yes',
+    book: '중등 수학',
+    grade: '중1',
+    targetKind: 'class',
     classId: 'TA_E_MATH',
-    date: '2026-01-10',
+    date: '2020-01-10',
     title: '교재 숙제',
     items: JSON.stringify([reviewed[0], reviewed[0]]),
   });
-  assert.throws(() => saveWorkbook(teacher, save), /중복/);
-  assert.equal(
-    db.prepare('SELECT count(*) n FROM homework_assignments').get()?.n,
-    0,
-  );
+  assert.throws(() => homeworkModule.submit(teacher, save), /중복/);
+  save.set('items', JSON.stringify([{ ...reviewed[0], tagIds: ['eng-01'] }]));
+  assert.throws(() => homeworkModule.submit(teacher, save), /과목/);
+  assert.equal(db.prepare('SELECT count(*) n FROM books').get()?.n, 0);
   save.set('items', JSON.stringify(reviewed));
-  assert.equal(saveWorkbook(teacher, save), '/homework?saved=' + id);
-  const data = parseClassification(
-    JSON.parse(
-      String(
-        db.prepare('SELECT classification FROM op_learning_assignments').get()
-          ?.classification,
-      ),
-    ),
+  assert.equal(homeworkModule.submit(teacher, save), '/homework?detail=' + id);
+  assert.throws(() => homeworkModule.submit(teacher, save), /이미 등록/);
+  const questions = assignedQuestions(teacher, id);
+  const view = (user: string, path: string) =>
+    String(homeworkModule.render(ctx(user, path)));
+  assert.match(
+    view('TA_STUDENT_001', '/homework?assignment=' + id),
+    /모두 맞았어요/,
   );
-  assert.deepEqual(
-    data.items.map((i) => [
-      i.page,
-      i.displayNumber,
-      i.reviewedType,
-      i.tags[0]?.tagId,
-    ]),
-    [
-      [42, '01', '식 정리', 'math-01'],
-      [43, '03', '교사 수정', 'math-01'],
-      [42, '01', '식 정리', undefined],
-    ],
-  );
-  assert.equal(
-    db.prepare('SELECT count(*) n FROM homework_photos').get()?.n,
-    0,
-  );
-  const html = await homeworkModule.render(
-    ctx('TA_STUDENT_001', '/homework?assignment=' + id),
-  );
-  assert.match(html, /심화/);
-  assert.match(html, /모두 맞았어요/);
   const report = form({
     assignmentId: id,
     action: 'report',
-    wrong: data.items[2].itemId,
+    wrong: questions[1].id,
     allCorrect: 'yes',
   });
   assert.throws(() => homeworkModule.submit(student, report), /체크/);
   report.delete('allCorrect');
   homeworkModule.submit(student, report);
   assert.throws(() => homeworkModule.submit(student, report), /이미 제출/);
-  const briefing = await briefingModule.render(
-    ctx('TA_TEACHER', '/briefing?assignment=' + id),
+  const brief = () =>
+    String(
+      briefingModule.render(
+        ctx('TA_TEACHER', '/briefing?workbook=' + id + '&class=TA_E_MATH'),
+      ),
+    );
+  assert.match(brief(), /확인한 제출물이 없습니다/);
+  const detail = view('TA_TEACHER', '/homework?detail=' + id);
+  assert.match(detail, /지각 제출/);
+  assert.match(detail, />제출 내용 확인 완료<\/button>/);
+  assert.match(detail, />선택한 제출물 확인 완료<\/button>/);
+  assert.match(
+    view('TA_STUDENT_001', '/homework?assignment=' + id),
+    /지각 제출 · 선생님 확인 대기/,
   );
-  assert.match(briefing, /66.7%/);
-  assert.match(briefing, /학생 제출/);
-  assert.match(briefing, /심화/);
+  const sub = String(
+    db.prepare('SELECT id FROM homework_submissions').get()?.id,
+  );
+  const approval = form({
+    action: 'approve-workbook',
+    assignmentId: id,
+    selected: sub,
+    ['version-' + sub]: '0',
+    ['wrong-' + sub]: questions[0].id,
+  });
+  assert.throws(() => homeworkModule.submit(student, approval), /교사/);
+  approval.append('selected', 'unknown');
+  assert.throws(
+    () => homeworkModule.submit(teacher, approval),
+    /찾을 수 없습니다/,
+  );
   assert.equal(
-    db.prepare('SELECT state FROM op_learning_results').get()?.state,
-    'draft',
+    db.prepare('SELECT confirmed_at FROM homework_submissions').get()
+      ?.confirmed_at,
+    null,
+  );
+  approval.delete('selected');
+  approval.append('selected', sub);
+  homeworkModule.submit(teacher, approval);
+  assert.match(brief(), /50\.0%/);
+  assert.match(
+    view('TA_STUDENT_001', '/homework?assignment=' + id),
+    /지각 제출 · 선생님 확인 완료/,
+  );
+  assert.match(
+    view('TA_TEACHER', '/homework?view=analysis'),
+    /계산 · 정답 1\/2/,
+  );
+  assert.throws(() => homeworkModule.submit(teacher, approval), /다른 교사/);
+  const points = db
+    .prepare(
+      'SELECT automatic_points,awarded_points FROM homework_marks WHERE question_id=?',
+    )
+    .get(questions[0].id);
+  assert.deepEqual([points?.automatic_points, points?.awarded_points], [1, 0]);
+  db.prepare(
+    'INSERT INTO students(id,academy_id,class_id,name) VALUES(?,?,?,?)',
+  ).run('new-student', teacher.actor.academyId, 'TA_E_MATH', '추가 학생');
+  db.prepare(
+    "INSERT INTO accounts(id,academy_id,username,name,role,student_id,password_hash) VALUES(?,?,?,?,'student',?,'test')",
+  ).run(
+    'TA_STUDENT_002',
+    teacher.actor.academyId,
+    'TA_STUDENT_002',
+    '추가 학생',
+    'new-student',
+  );
+  const next = randomUUID();
+  save.set('assignmentId', next);
+  save.set(
+    'items',
+    JSON.stringify([
+      { page: 42, number: '01', tagIds: ['math-03'], version: 1 },
+    ]),
+  );
+  save.set('targetKind', 'student');
+  save.set('recipient', 'TA_E_MATH|TA_STU_001');
+  homeworkModule.submit(teacher, save);
+  assert.equal(assignedQuestions(teacher, id)[0].tag_ids, '["math-01"]');
+  assert.equal(assignedQuestions(teacher, next)[0].tag_ids, '["math-03"]');
+  assert.doesNotMatch(view('TA_STUDENT_002', '/homework'), new RegExp(next));
+  assert.throws(
+    () =>
+      homeworkModule.submit(
+        ctx('TA_STUDENT_002'),
+        form({ assignmentId: next, action: 'report', allCorrect: 'yes' }),
+      ),
+    /찾을 수 없습니다/,
+  );
+  assert.throws(
+    () => view('TA_STUDENT_001', '/homework?view=analysis'),
+    /교사/,
+  );
+  assert.equal(
+    db.prepare('SELECT count(*) n FROM homework_photos').get()?.n,
+    0,
   );
   assert.equal(
     db.prepare('SELECT count(*) n FROM op_learning_publications').get()?.n,
     0,
   );
+
+  const extraClass = 'extra-math';
+  db.prepare(
+    'INSERT INTO classes(id,academy_id,name,subject) VALUES(?,?,?,?)',
+  ).run(extraClass, teacher.actor.academyId, '추가 반', '수학');
+  db.prepare(
+    'INSERT INTO teacher_classes(teacher_id,class_id) VALUES(?,?)',
+  ).run(teacher.actor.id, extraClass);
+  db.prepare(
+    'INSERT INTO student_class_memberships(student_id,class_id,academy_id) VALUES(?,?,?)',
+  ).run(student.actor.studentId, extraClass, teacher.actor.academyId);
+  const shared = randomUUID();
+  save.set('assignmentId', shared);
+  save.set('date', '2026-12-15');
+  save.set('time', '17:30');
+  save.set('targetKind', 'class');
+  save.append('classId', extraClass);
+  homeworkModule.submit(teacher, save);
+  for (const username of ['TA_STUDENT_001', 'TA_STUDENT_002'])
+    homeworkModule.submit(
+      ctx(username),
+      form({ action: 'report', assignmentId: shared, allCorrect: 'yes' }),
+    );
+  const bulk = form({ action: 'approve-workbook', assignmentId: shared });
+  for (const s of db
+    .prepare('SELECT id FROM homework_submissions WHERE assignment_id=?')
+    .all(shared)) {
+    bulk.append('selected', String(s.id));
+    bulk.set('version-' + s.id, '0');
+  }
+  homeworkModule.submit(teacher, bulk);
+  const period = (classId: string) =>
+    String(
+      briefingModule.render(
+        ctx(
+          'TA_TEACHER',
+          '/briefing?class=' + classId + '&from=2026-12-01&to=2026-12-31',
+        ),
+      ),
+    );
+  assert.match(period('TA_E_MATH'), /확인 완료 2건 · 정답 2\/2/);
+  assert.match(period(extraClass), /확인 완료 1건 · 정답 1\/1/);
+  assert.match(
+    view(
+      'TA_TEACHER',
+      '/homework?view=analysis&student=TA_STU_001&from=2026-12-01',
+    ),
+    /확인 완료 1건/,
+  );
+  assert.match(
+    view('TA_TEACHER', '/homework?view=analysis&subject=E'),
+    /확인한 제출물이 없습니다/,
+  );
+  assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
 });

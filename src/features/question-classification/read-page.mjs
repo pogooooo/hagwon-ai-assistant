@@ -20,6 +20,13 @@ const rawReadingSchema = z.object({
     .array(
       z.object({
         displayNumber: nonempty,
+        printedPage: z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(100000)
+          .catch(0)
+          .optional(),
         text: z.string(),
         figureDependence: z.string().optional(),
         figureReads: z.array(z.string()).optional(),
@@ -112,16 +119,21 @@ const parseWith =
   };
 export const parsePageReading = parseWith(
   rawReadingSchema,
-  ({ displayNumber, text, figureDependence, figureReads }) => {
+  ({ displayNumber, printedPage, text, figureDependence, figureReads }) => {
     const figure = toFigure(figureDependence, figureReads);
-    return { displayNumber, text, ...(figure ? { figure } : {}) };
+    return {
+      displayNumber,
+      text,
+      ...(printedPage ? { printedPage } : {}),
+      ...(figure ? { figure } : {}),
+    };
   },
 );
 export const parseCrossCheck = parseWith(crossCheckSchema);
 
 const formatRule =
   '사진에 인쇄된 문항을 빠짐없이 찾아 JSON 하나로만 출력하세요. 최상위는 {"items":[...]} 하나입니다. 각 문항은 다음 네 칸을 가집니다: ' +
-  '{"displayNumber":"인쇄된 문항 번호 그대로","text":"문항 원문 전사","figureDependence":"필수|보조|없음","figureReads":["내용 | 읽은 방식 | 상태"]}. 다른 칸이나 중첩 객체는 쓰지 마세요. 모든 문자열의 따옴표를 닫으세요.';
+  '{"displayNumber":"인쇄된 문항 번호 그대로","text":"문항 원문 전사","figureDependence":"필수|보조|없음","figureReads":["내용 | 읽은 방식 | 상태"]}. 문항이 있는 면의 인쇄 쪽수가 보이면 printedPage에 정수로 추가하세요. 보이지 않으면 생략하세요. 모든 문자열의 따옴표를 닫으세요.';
 const figureRule =
   '그림 규칙: 문항에 그림·표·그래프가 없으면 figureDependence는 "없음", figureReads는 []입니다. 있으면 풀이에 필요한 정보를 figureReads에 한 항목씩 "내용 | 읽은 방식 | 상태" 문자열로 적습니다. 읽은 방식은 숫자가 적혀 있으면 "적힌 값", 축·눈금에서 읽으면 "눈금에서 읽음", 모양만 보고 추정하면 "모양에서 추정"입니다. 상태는 또렷하면 "선명", 작거나 번지면 "불명"입니다. 예: "점 (1, 2)를 지남 | 적힌 값 | 선명", "직선의 기울기 양수 | 모양에서 추정 | 선명". 그림 없이 글만으로 풀 수 있으면 figureDependence는 "보조", 그림을 봐야만 풀 수 있으면 "필수"입니다.';
 const prompts = {
@@ -223,6 +235,17 @@ export function mergeMathPage(first, second) {
   return numbers.map((displayNumber) => {
     const x = a.get(displayNumber);
     const y = b.get(displayNumber);
+    if (
+      [first, second].some(
+        (pass) =>
+          pass.filter((i) => i.displayNumber === displayNumber).length > 1,
+      )
+    )
+      return {
+        displayNumber,
+        text: '',
+        holdReason: '같은 문항 번호가 사진에서 여러 번 감지됨',
+      };
     if (!x || !y)
       return {
         displayNumber,

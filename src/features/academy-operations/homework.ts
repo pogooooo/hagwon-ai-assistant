@@ -1,6 +1,19 @@
 import { randomUUID } from 'node:crypto';
-import { saveWorkbook } from './homework-classifier.ts';
-import { renderWorkbookForm } from './workbook-form.ts';
+import {
+  assignWorkbook,
+  registerBook,
+  setupWorkbookCatalog,
+} from './workbook-catalog.ts';
+import {
+  workbookRecipients,
+  renderWorkbookDetail,
+  renderCatalogList,
+  workbookAnalytics,
+  approvedReview,
+  groupHomework,
+  late,
+} from './workbook-results.ts';
+import { renderWorkbookForm, renderBookList } from './workbook-form.ts';
 import { recordWorkbookReport } from './learning.ts';
 
 interface QuestionInput {
@@ -71,7 +84,7 @@ const assignmentsSql = `
   SELECT a.id, a.class_id, c.name AS class_name, a.title, a.due_date,a.submission_mode
   FROM homework_assignments a
   JOIN classes c ON c.id = a.class_id AND c.academy_id = a.academy_id
-  WHERE a.academy_id = ?
+  WHERE a.academy_id = ? AND a.submission_mode <> 'catalog'
 `;
 
 const submissionsSql = `
@@ -83,7 +96,7 @@ const submissionsSql = `
   JOIN students st ON st.id = s.student_id AND st.academy_id = a.academy_id
   LEFT JOIN homework_marks m ON m.submission_id = s.id
   LEFT JOIN homework_questions q ON q.id = m.question_id
-  WHERE a.academy_id = ?
+  WHERE a.academy_id = ? AND a.submission_mode <> 'catalog'
 `;
 
 const submissionsOrder = 'GROUP BY s.id ORDER BY s.submitted_at DESC, s.id';
@@ -140,6 +153,10 @@ function submissionFor(ctx: PageContext, id: string): Submission {
 }
 
 function studentAssignment(ctx: PageContext, id: string): Assignment {
+  if (ctx.actor.role === 'student') {
+    const entry = workbookRecipients(ctx, id)[0];
+    if (entry) return { ...entry, submission_mode: 'catalog' };
+  }
   const student = accessibleStudents(ctx.db, ctx.actor).find(
     (entry) => entry.id === ctx.actor.studentId,
   );
@@ -263,7 +280,7 @@ function submitAnswers(ctx: PageContext, form: FormData): void {
     ctx.assertCurrentAccess?.();
     const assignment = studentAssignment(ctx, assignmentId);
     if (
-      assignment.submission_mode !== 'workbook' &&
+      assignment.submission_mode === 'answers' &&
       isLate(assignment.due_date)
     ) {
       throw new OperationError('제출 마감일이 지났습니다.');
@@ -278,7 +295,9 @@ function submitAnswers(ctx: PageContext, form: FormData): void {
     ) {
       throw new OperationError('이미 제출한 숙제입니다.', 409);
     }
-    const workbook = assignment.submission_mode === 'workbook';
+    const workbook = ['workbook', 'catalog'].includes(
+      assignment.submission_mode,
+    );
     const questions = questionsFor(ctx, assignment.id);
     const wrong = new Set(form.getAll('wrong'));
     if (
@@ -319,6 +338,7 @@ function submitAnswers(ctx: PageContext, form: FormData): void {
           incorrect ? 0 : 1,
         );
       }
+      if (assignment.submission_mode === 'catalog') return;
       recordWorkbookReport(ctx, assignment.id, studentId, outcomes);
       ctx.db
         .prepare(
@@ -477,7 +497,7 @@ function renderAssignments(
 }
 
 function renderSubmissions(submissions: Submission[], staff: boolean): string {
-  return `<section class="panel"><h2>${staff ? '제출 및 채점 검수' : '제출 결과'}</h2>
+  return `<section class="panel"><h2>${staff ? '제출물 확인' : '제출 결과'}</h2>
     ${
       submissions.length
         ? `<div class="table-wrap"><table>
@@ -545,9 +565,16 @@ function renderPhoto(ctx: PageContext, id: string) {
 
 function renderStudentForm(ctx: PageContext, id: string): string {
   const assignment = studentAssignment(ctx, id);
+  const catalog =
+    assignment.submission_mode === 'catalog'
+      ? workbookRecipients(ctx, id)[0]
+      : undefined;
+  if (catalog?.submission_id) {
+    const marks = markedAnswers(ctx, catalog.submission_id);
+    return `<section class="panel"><a href="/homework">숙제 목록</a><h2>${escapeHtml(assignment.title)}</h2><p>${late(catalog) ? '지각 제출' : '제출 완료'} · ${catalog.confirmed_at ? '선생님 확인 완료' : '선생님 확인 대기'}</p><ul>${marks.map((m) => `<li>${escapeHtml(m.prompt)} · ${m.awarded_points ? '정답' : '오답'}</li>`).join('')}</ul></section>`;
+  }
   if (
-    (assignment.submission_mode !== 'workbook' &&
-      isLate(assignment.due_date)) ||
+    (assignment.submission_mode === 'answers' && isLate(assignment.due_date)) ||
     one(
       ctx.db,
       'SELECT id FROM homework_submissions WHERE assignment_id = ? AND student_id = ?',
@@ -560,8 +587,8 @@ function renderStudentForm(ctx: PageContext, id: string): string {
       409,
     );
   }
-  if (assignment.submission_mode === 'workbook')
-    return `<section class="panel"><h2>${escapeHtml(assignment.title)}</h2><p>${escapeHtml(assignment.class_name)} · ${escapeHtml(assignment.due_date)}</p>
+  if (assignment.submission_mode === 'workbook' || catalog)
+    return `<section class="panel"><h2>${escapeHtml(assignment.title)}</h2><p>${escapeHtml(assignment.class_name)} · ${escapeHtml(assignment.due_date)} ${escapeHtml(catalog?.due_time)} 마감</p>
     <form method="post" action="/homework"><input type="hidden" name="action" value="report"><input type="hidden" name="assignmentId" value="${escapeHtml(id)}">
     <fieldset><legend>틀린 문항을 선택하세요</legend>${questionsFor(ctx, id)
       .map(
@@ -606,7 +633,7 @@ function renderWrongAnswers(
                    FROM homework_submissions s
                    JOIN homework_assignments a ON a.id = s.assignment_id
                    JOIN homework_questions q ON q.assignment_id = a.id
-                   WHERE a.academy_id = ? AND s.student_id = ? AND s.confirmed_at IS NOT NULL
+                   WHERE a.academy_id = ? AND a.submission_mode <> 'catalog' AND s.student_id = ? AND s.confirmed_at IS NOT NULL
                      AND q.type_key = ? AND q.prompt <> ?
                    ORDER BY q.prompt LIMIT 3`,
                     ctx.actor.academyId,
@@ -729,13 +756,35 @@ export function homeworkOverview(ctx: PageContext) {
   const submitted = new Set(
     submissions.map(({ assignment_id }) => assignment_id),
   );
+  const catalog = workbookRecipients(ctx);
+  const pending = new Map(
+    catalog
+      .filter((r) => r.submission_id && !r.confirmed_at)
+      .map((r) => [r.submission_id!, r]),
+  );
   return {
-    review: staff ? submissions : [],
-    due: assignments
+    review: staff
+      ? [
+          ...submissions,
+          ...[...pending.values()].map((r) => ({
+            id: r.submission_id!,
+            assignment_id: r.id,
+            assignment_title: r.title,
+            student_name: r.student_name!,
+            submission_mode: 'catalog',
+          })),
+        ]
+      : [],
+    due: [
+      ...assignments,
+      ...[
+        ...groupHomework(catalog.filter((r) => !r.submitted_at)).values(),
+      ].map(([r]) => ({ ...r, submission_mode: 'catalog' })),
+    ]
       .filter(
         ({ id, due_date, submission_mode }) =>
           !submitted.has(id) &&
-          (submission_mode === 'workbook' || !isLate(due_date)),
+          (submission_mode !== 'answers' || !isLate(due_date)),
       )
       .sort(
         (a, b) =>
@@ -750,7 +799,7 @@ export function homeworkOverview(ctx: PageContext) {
 
 export const homeworkModule: OperationModule = {
   path: '/homework',
-  label: '숙제·채점',
+  label: '숙제',
   roles: ['admin', 'teacher', 'student', 'guardian'],
   setup(db) {
     db.exec(`
@@ -829,9 +878,16 @@ export const homeworkModule: OperationModule = {
         'ALTER TABLE homework_submissions ADD COLUMN review_version INTEGER NOT NULL DEFAULT 0',
       );
     }
+    setupWorkbookCatalog(db);
   },
   render(ctx) {
     const { actor, url } = ctx;
+    const view = url.searchParams.get('view'),
+      detail = url.searchParams.get('detail');
+    if (detail) return renderWorkbookDetail(ctx, detail);
+    if (view === 'analysis') return workbookAnalytics(ctx, true);
+    if (view === 'books') return renderBookList(ctx);
+    if (view === 'create') return renderWorkbookForm(ctx);
     const submissionId = url.searchParams.get('submission');
     if (submissionId) return renderSubmission(ctx, submissionId);
     const assignmentId = url.searchParams.get('assignment');
@@ -855,28 +911,46 @@ export const homeworkModule: OperationModule = {
     }
     const pending = staff && url.searchParams.get('view') === 'review';
     const { assignments, submissions } = visibleHomework(ctx, pending);
+    const catalog = workbookRecipients(ctx);
+    const needsReview = new Set(
+      catalog
+        .filter((r) => r.submission_id && !r.confirmed_at)
+        .map((r) => r.id),
+    );
     return [
-      '<div class="workspace-heading"><h1>숙제·채점</h1>' +
+      '<div class="workspace-heading"><h1>숙제</h1>' +
         (staff
           ? '<a class="button-link" href="/homework?view=create#homework-create">숙제 등록</a>'
           : '') +
         '</div>',
       staff
-        ? `<nav class="view-tabs page-tabs" aria-label="숙제 보기"><a href="/homework"${!pending ? ' aria-current="page"' : ''}>전체 숙제</a><a href="/homework?view=review"${pending ? ' aria-current="page"' : ''}>검수 대기</a></nav>`
+        ? `<nav class="view-tabs page-tabs" aria-label="숙제 보기"><a href="/homework"${!pending ? ' aria-current="page"' : ''}>전체 숙제</a><a href="/homework?view=review"${pending ? ' aria-current="page"' : ''}>확인할 제출물</a></nav>`
         : '',
-      staff && url.searchParams.get('view') === 'create'
-        ? renderWorkbookForm(ctx)
+      staff
+        ? '<nav class="actions"><a href="/homework?view=books">교재 목록</a><a href="/homework?view=analysis">학생별 분석</a><a href="/briefing">반 브리핑</a></nav>'
         : '',
-      !pending && (staff || actor.role === 'student')
+      staff || actor.role === 'student'
+        ? renderCatalogList(
+            pending ? catalog.filter((r) => needsReview.has(r.id)) : catalog,
+            staff,
+          )
+        : '',
+      !pending && assignments.length > 0 && (staff || actor.role === 'student')
         ? renderAssignments(assignments, submissions, staff)
         : '',
-      renderSubmissions(submissions, staff),
+      submissions.length || actor.role === 'guardian'
+        ? renderSubmissions(submissions, staff)
+        : '',
     ].join('');
   },
   submit(ctx, data) {
     switch (field(data, 'action', 20)) {
-      case 'save-workbook':
-        return saveWorkbook(ctx, data);
+      case 'register-book':
+        return registerBook(ctx, data);
+      case 'assign-workbook':
+        return assignWorkbook(ctx, data);
+      case 'approve-workbook':
+        return approvedReview(ctx, data);
       case 'create':
         return createAssignment(ctx, data);
       case 'report':

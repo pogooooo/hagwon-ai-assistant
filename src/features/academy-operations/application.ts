@@ -19,7 +19,10 @@ import {
   documentsModule,
   maxDocumentBytes as defaultMaxDocumentBytes,
 } from './documents.ts';
-import { analyzeHomeworkPhoto } from './homework-classifier.ts';
+import {
+  analyzeHomeworkPhoto,
+  reviewHomeworkReading,
+} from './homework-classifier.ts';
 import { homeworkModule, homeworkPhoto } from './homework.ts';
 import { learningModule } from './learning.ts';
 import { briefingModule } from './briefing.ts';
@@ -488,14 +491,18 @@ export function createOperationsServer({
       if (
         form &&
         operation === homeworkModule &&
-        url.searchParams.get('analyze') === '1'
+        (url.searchParams.get('analyze') === '1' ||
+          url.searchParams.get('review') === '1')
       ) {
-        const items = await analyzeHomeworkPhoto(ctx, form);
+        const result =
+          url.searchParams.get('review') === '1'
+            ? await reviewHomeworkReading(ctx, form)
+            : await analyzeHomeworkPhoto(ctx, form);
         assertCurrentAccess();
         response.writeHead(200, {
           'Content-Type': 'application/json; charset=utf-8',
         });
-        response.end(JSON.stringify(items));
+        response.end(JSON.stringify(result));
         return;
       }
       if (form) {

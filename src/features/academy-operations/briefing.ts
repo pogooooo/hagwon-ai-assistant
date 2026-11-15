@@ -1,3 +1,4 @@
+import { workbookAnalytics } from './workbook-results.ts';
 import { workbookReportReason } from './learning.ts';
 import { accessibleClasses, accessibleStudents } from './directory.ts';
 import {
@@ -248,6 +249,20 @@ const reference = (type: { referenceOnly: boolean }) =>
   type.referenceOnly ? ' <span class="pill">참고용</span>' : '';
 
 function render(ctx: PageContext) {
+  if (
+    !ctx.url.searchParams.has('assignment') &&
+    !ctx.url.searchParams.has('legacy') &&
+    ctx.db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='homework_workbooks'",
+      )
+      .get()
+  ) {
+    return (
+      workbookAnalytics(ctx, false) +
+      '<p><a href="/briefing?legacy=1">기존 학습 기록 브리핑</a></p>'
+    );
+  }
   const classes = accessibleClasses(ctx.db, ctx.actor);
   const assignments = rows<AssignmentRow>(
     ctx.db,

@@ -125,7 +125,7 @@ export function renderHome(ctx: PageContext) {
         <h2 id="work-queue-title">처리할 업무</h2>
         <div class="queue-grid">
           <a href="/consultation?view=inbox"><span>처리 중인 상담</span><strong>${pending.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
-          <a href="/homework?view=review"><span>숙제 채점 검수</span><strong>${homework.review.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
+          <a href="/homework?view=review"><span>확인할 제출물</span><strong>${homework.review.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
         </div>
       </section>
       <div class="dashboard-grid">
@@ -139,16 +139,27 @@ export function renderHome(ctx: PageContext) {
           })),
           '현재 처리할 상담이 없습니다.',
         )}${panel(
-          '검수 대기 숙제',
+          '확인할 숙제 제출물',
           '/homework?view=review',
           homework.review
             .slice(0, 4)
-            .map(({ id, assignment_title, student_name }) => ({
-              href: '/homework?submission=' + encodeURIComponent(id),
-              title: assignment_title,
-              meta: student_name,
-            })),
-          '검수할 제출물이 없습니다.',
+            .map(
+              ({
+                id,
+                assignment_id,
+                submission_mode,
+                assignment_title,
+                student_name,
+              }) => ({
+                href:
+                  submission_mode === 'catalog'
+                    ? '/homework?detail=' + encodeURIComponent(assignment_id)
+                    : '/homework?submission=' + encodeURIComponent(id),
+                title: assignment_title,
+                meta: student_name,
+              }),
+            ),
+          '확인할 제출물이 없습니다.',
         )}</div>
         <div>${agenda}${documentList()}</div>
       </div>`;

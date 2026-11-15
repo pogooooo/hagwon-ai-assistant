@@ -19,10 +19,12 @@ import {
 export async function readSheet(filename, subject) {
   const first = await readPage(filename, { subject: subject });
   const reads = [first];
+  const readingPasses = [first.items];
   let detected = first.items;
   if (subject === 'M') {
     const check = await readPage(filename, { subject: 'M', pass: 'check' });
     reads.push(check);
+    readingPasses.push(check.items);
     detected = mergeMathPage(first.items, check.items);
     const sound = detected.filter((m) => !m.holdReason && m.text.trim());
     if (sound.length) {
@@ -33,6 +35,7 @@ export async function readSheet(filename, subject) {
   }
   return {
     detected,
+    readingPasses,
     reads: reads.map(({ model, text, usage }) => ({ model, text, usage })),
   };
 }
