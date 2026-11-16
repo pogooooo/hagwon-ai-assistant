@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto';
+import {
+  isWorkbookPublication,
+  renderWorkbookSource,
+} from './workbook-publication.ts';
 import type { OperationsDatabase } from './database.ts';
 import type {
   ApprovedFactInput,
@@ -332,7 +336,7 @@ export function learningEvidence(
   const publications = rows<Publication>(
     db,
     `SELECT p.* FROM op_learning_publications p JOIN students s ON s.id = p.student_id AND s.academy_id = p.academy_id
-    WHERE p.academy_id = ? AND p.revision = (SELECT MAX(x.revision) FROM op_learning_publications x WHERE x.id = p.id) ORDER BY p.id`,
+    WHERE p.academy_id = ? AND p.id NOT LIKE 'workbook-%' AND p.revision = (SELECT MAX(x.revision) FROM op_learning_publications x WHERE x.id = p.id) ORDER BY p.id`,
     academy,
   );
   const result: {
@@ -655,7 +659,7 @@ export function recentLearningReports(ctx: PageContext) {
   return rows<Pick<Publication, 'id' | 'student_id' | 'class_id' | 'period'>>(
     ctx.db,
     `SELECT p.id, p.student_id, p.class_id, p.period
-      FROM op_learning_publications p WHERE p.academy_id = ? AND p.payload IS NOT NULL
+      FROM op_learning_publications p WHERE p.academy_id = ? AND p.payload IS NOT NULL AND p.id NOT LIKE 'workbook-%'
       AND p.revision = (SELECT MAX(x.revision) FROM op_learning_publications x WHERE x.id = p.id)
       ORDER BY p.period DESC, p.id`,
     ctx.actor.academyId,
@@ -671,6 +675,8 @@ export function recentLearningReports(ctx: PageContext) {
 
 function render(ctx: PageContext) {
   const publicationId = ctx.url.searchParams.get('publication');
+  if (publicationId && isWorkbookPublication(publicationId))
+    return renderWorkbookSource(ctx, publicationId);
   if (publicationId) {
     const publication = one<Publication>(
       ctx.db,

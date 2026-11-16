@@ -109,11 +109,17 @@ export const calendarModule: OperationModule = {
   async render(ctx) {
     const search = ctx.url.searchParams;
     const view =
-      search.get('view') ??
+      (ctx.submittedForm
+        ? teamActions.has(field(ctx.submittedForm, 'action'))
+          ? 'makeup'
+          : 'bookings'
+        : search.get('view')) ??
       (bookingEditFields.some((field) => search.has(field))
         ? 'bookings'
         : 'calendar');
     return `<div class="page-heading"><h1>일정·예약</h1></div>
+      ${ctx.formError ? `<p class="notice" role="alert">${h(ctx.formError)}</p><div hidden data-restore-schedule="${h(JSON.stringify([...ctx.submittedForm!.entries()].filter(([, v]) => typeof v === 'string')))}"></div>` : ''}
+      ${search.get('saved') ? '<p class="notice" role="status">저장했습니다.</p>' : ''}
       <nav class="view-tabs page-tabs" aria-label="일정 보기">
         <a href="/schedule"${view !== 'makeup' && view !== 'bookings' ? ' aria-current="page"' : ''}>월간 달력</a>
         <a href="/schedule?view=makeup"${view === 'makeup' ? ' aria-current="page"' : ''}>휴·보강</a>
@@ -132,6 +138,7 @@ export const calendarModule: OperationModule = {
     else await scheduleModule.submit(ctx, form);
     const target = new URL(ctx.url);
     target.searchParams.set('view', makeup ? 'makeup' : 'bookings');
+    target.searchParams.set('saved', field(form, 'action'));
     return '/schedule' + target.search;
   },
 };

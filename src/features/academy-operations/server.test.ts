@@ -95,6 +95,125 @@ async function startOperations(t: TestContext, publicOrigin = '') {
   return { origin, send, login, readDatabase, filename };
 }
 
+test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 기존 근거 차단', async (t) => {
+  const s = await startOperations(t);
+  const teacher = await s.login('TA_TEACHER'),
+    student = await s.login('TA_STUDENT_001'),
+    parent = await s.login('TA_GUARDIAN_E_MATH'),
+    other = await s.login('TA_GUARDIAN_M2');
+  const id = randomUUID();
+  assert.equal(
+    (
+      await s.send('/homework', teacher, {
+        action: 'assign-workbook',
+        assignmentId: id,
+        subject: 'M',
+        book: 'HTTP 검증 교재',
+        title: 'HTTP 숙제',
+        date: '2026-11-15',
+        targetKind: 'class',
+        classId: 'TA_E_MATH',
+        items: JSON.stringify([
+          { page: 11, number: '1', tagIds: ['math-01'] },
+          { page: 12, number: '1', tagIds: [] },
+        ]),
+      })
+    ).status,
+    303,
+  );
+  const questions = s.readDatabase((db) =>
+    db
+      .prepare(
+        'SELECT id FROM homework_questions WHERE assignment_id=? ORDER BY position',
+      )
+      .all(id),
+  );
+  assert.equal(
+    (
+      await s.send('/homework', student, {
+        action: 'report',
+        assignmentId: id,
+        wrong: String(questions[0].id),
+      })
+    ).status,
+    303,
+  );
+  const sub = String(
+    s.readDatabase(
+      (db) =>
+        db
+          .prepare('SELECT id FROM homework_submissions WHERE assignment_id=?')
+          .get(id)!.id,
+    ),
+  );
+  assert.equal(
+    (
+      await s.send('/homework', teacher, {
+        action: 'approve-workbook',
+        assignmentId: id,
+        single: sub,
+        ['version-' + sub]: '0',
+        ['wrong-' + sub]: String(questions[0].id),
+      })
+    ).status,
+    303,
+  );
+  const view = await s.send(
+    '/homework?view=analysis&student=TA_STU_001',
+    teacher,
+  );
+  assert.match(view.text, /정답 1\/2문항/);
+  const fields = {
+    action: 'publish-analysis',
+    studentId: 'TA_STU_001',
+    classId: 'TA_E_MATH',
+    period: '2026-11',
+    publicationRevision: '0',
+    fingerprint: /name="fingerprint" value="([a-f0-9]+)"/.exec(view.text)![1],
+  };
+  assert.equal((await s.send('/homework', parent, fields)).status, 403);
+  assert.equal((await s.send('/homework', teacher, fields)).status, 303);
+  const conversationId = randomUUID();
+  assert.equal(
+    (
+      await s.send('/consultation', parent, {
+        action: 'ask',
+        conversationId,
+        question: '11월 수학 전체 정답률 알려줘',
+        studentId: 'TA_STU_001',
+      })
+    ).status,
+    303,
+  );
+  const answer = await s.send('/consultation?id=' + conversationId, parent);
+  assert.match(answer.text, /2문항 중 1문항/);
+  const publicationId =
+    /\/homework\?view=source&amp;publication=(workbook-[a-f0-9]+)/.exec(
+      answer.text,
+    )![1];
+  const source = '/homework?view=source&publication=' + publicationId;
+  assert.equal((await s.send(source, parent)).status, 200);
+  assert.equal((await s.send(source, other)).status, 404);
+  assert.equal(
+    (
+      await s.send('/homework', teacher, {
+        action: 'approve-workbook',
+        assignmentId: id,
+        single: sub,
+        ['version-' + sub]: '1',
+        ['reason-' + sub]: '교사 재확인',
+      })
+    ).status,
+    303,
+  );
+  assert.equal((await s.send(source, parent)).status, 404);
+  assert.match(
+    (await s.send('/consultation?id=' + conversationId, parent)).text,
+    /답변을 표시할 수 없습니다/,
+  );
+  assert.equal((await s.send('/homework', teacher, fields)).status, 409);
+});
+
 test('HTTPS 프록시 접속은 등록된 호스트와 같은 출처의 요청만 허용한다', async (t) => {
   const publicOrigin = 'https://academy.example';
   const { origin } = await startOperations(t, publicOrigin);
@@ -818,7 +937,8 @@ test('운영 홈과 상담 목록은 열람 범위와 처리 상태를 따른다
     303,
   );
   assert.match((await s.send('/', parent)).text, new RegExp(title));
-  assert.doesNotMatch((await s.send('/', admin)).text, new RegExp(title));
+  // A question without evidence is now automatically added to the staff inbox.
+  assert.match((await s.send('/', admin)).text, new RegExp(title));
   assert.equal((await s.send(path, other)).status, 404);
   assert.equal(
     (await s.send(path, parent, { action: 'handoff', id })).status,

@@ -1,4 +1,5 @@
 import type { OperationsDatabase } from './database.ts';
+import type { SourceDocumentInput } from '../rag-consultation/server/types.ts';
 import { assertUnifiedSchedule } from './schedule-conflicts.ts';
 import { z } from 'zod';
 import {
@@ -95,6 +96,17 @@ export function setupTeamSchedule(db: OperationsDatabase) {
     CREATE TABLE IF NOT EXISTS op_team_schedule_history (academy_id TEXT NOT NULL, version INTEGER NOT NULL, actor_id TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(academy_id, version));`);
 }
 function stored(db: OperationsDatabase, academy: string): Stored {
+  if (
+    !one(
+      db,
+      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='op_team_schedule'",
+    )
+  )
+    return {
+      version: 0,
+      config: JSON.stringify(initial),
+      state: JSON.stringify(emptyState()),
+    };
   return (
     one<Stored>(
       db,
@@ -161,6 +173,43 @@ function visible(ctx: PageContext, event: ScheduleEvent) {
 function dateTime(date: string, time: string) {
   return Date.parse(`${date}T${time}:00+09:00`);
 }
+/** The same persisted periods used by the calendar, including effective-date history. */
+export function regularScheduleDocuments(
+  db: OperationsDatabase,
+  academyId: string,
+): SourceDocumentInput[] {
+  const record = stored(db, academyId);
+  if (!record.version) return [];
+  const academy = academyConfig(db, academyId, JSON.parse(record.config));
+  const approvedAt = one<{ created_at: string }>(
+    db,
+    'SELECT created_at FROM op_team_schedule_history WHERE academy_id=? AND version=?',
+    academyId,
+    record.version,
+  )?.created_at;
+  if (!approvedAt) return [];
+  const cell = (value: string) => value.replace(/[|\r\n]/g, ' ');
+  return academy.classes.flatMap((c) =>
+    [...(c.history ?? []), c].map((period, index) => ({
+      academyId,
+      documentId: `timetable-${academyId}-${c.classId}-${index}`,
+      revision: record.version,
+      documentType: 'schedule' as const,
+      title: `${c.name} 정규 시간표`,
+      text: `# ${cell(c.name)} 정규 시간표\n\n| 반 | 요일 | 수업 시간 | 교실 | 강사 |\n| --- | --- | --- | --- | --- |\n| ${cell(c.name)} | ${period.days.map((d) => '일월화수목금토'[d] + '요일').join('·')} | ${period.start}~${period.end} | ${cell(period.room)} | ${cell(one<{ name: string }>(db, 'SELECT name FROM accounts WHERE academy_id=? AND id=?', academyId, period.teacher)?.name ?? '담당 강사')} |`,
+      visibility: 'class_members' as const,
+      classId: c.classId,
+      validFrom: period.effectiveFrom
+        ? period.effectiveFrom + 'T00:00:00+09:00'
+        : '2000-01-01T00:00:00+09:00',
+      validTo: period.effectiveUntil
+        ? period.effectiveUntil + 'T00:00:00+09:00'
+        : null,
+      approvedAt,
+      sourceUpdatedAt: approvedAt,
+    })),
+  );
+}
 export function teamScheduleEvidence(
   db: OperationsDatabase,
   academyId: string,
@@ -210,7 +259,24 @@ export function teamScheduleEvidence(
   });
 }
 
-function submit(ctx: PageContext, form: FormData) {
+function friendlyIssue(ctx: PageContext, message: string) {
+  const accounts = rows<{ id: string; name: string }>(
+    ctx.db,
+    'SELECT id, name FROM accounts WHERE academy_id=?',
+    ctx.actor.academyId,
+  );
+  return accounts
+    .sort((a, b) => b.id.length - a.id.length)
+    .reduce((text, a) => text.replaceAll(a.id, a.name), message);
+}
+
+export function previewTeamSchedule(ctx: PageContext, form: FormData) {
+  if (!['create', 'change', 'class-config'].includes(field(form, 'action')))
+    throw new OperationError('미리 확인할 수 없는 작업입니다.', 400);
+  submit(ctx, form, true);
+}
+
+function submit(ctx: PageContext, form: FormData, preview = false) {
   transaction(ctx.db, () => {
     ctx.assertCurrentAccess?.();
     const old = stored(ctx.db, ctx.actor.academyId);
@@ -361,7 +427,10 @@ function submit(ctx: PageContext, form: FormData) {
           (issue) => !before.has(issue),
         );
         if (added.length)
-          throw new OperationError(date + ' ' + added.join(' / '), 409);
+          throw new OperationError(
+            friendlyIssue(ctx, date + ' ' + added.join(' / ')),
+            409,
+          );
       }
       // Existing consultation slots also constrain new regular lessons.
       const slots = rows<{
@@ -511,7 +580,10 @@ function submit(ctx: PageContext, form: FormData) {
       else throw new OperationError('지원하지 않는 작업입니다.');
       if (!result.ok)
         throw new OperationError(
-          [result.error, ...result.issues.map((i) => i.message)].join(' '),
+          friendlyIssue(
+            ctx,
+            [result.error, ...result.issues.map((i) => i.message)].join(' '),
+          ),
           422,
         );
       state = result.state;
@@ -523,6 +595,7 @@ function submit(ctx: PageContext, form: FormData) {
         state,
         academyConfig(ctx.db, ctx.actor.academyId, config),
       );
+    if (preview) return;
     ctx.db
       .prepare(
         'INSERT INTO op_team_schedule VALUES (?, ?, ?, ?) ON CONFLICT(academy_id) DO UPDATE SET version=excluded.version, config=excluded.config, state=excluded.state',
@@ -559,7 +632,7 @@ function render(ctx: PageContext) {
       .join('');
   const eventCard = (
     event: ScheduleEvent,
-  ) => `<article class="panel"><div class="panel-heading"><h2>${h(academy.classes.find((c) => c.classId === event.classId)?.name)} ${event.scope === 'student' ? h(students.find((s) => s.id === event.studentId)?.name) + ' 결석' : '휴강'}</h2><span class="pill">${{ draft: '임시 저장', confirmed: '확정', withdrawn: '취소' }[event.status]}</span></div><p>${h(event.date)} · ${event.makeup ? `${h(event.makeup.date)} ${h(event.makeup.start)}~${h(event.makeup.end)} ${h(event.makeup.room)} 보강` : '보강 미정'}</p>
+  ) => `<article class="panel" id="event-${h(event.eventId)}"><div class="panel-heading"><h2>${h(academy.classes.find((c) => c.classId === event.classId)?.name)} ${event.scope === 'student' ? h(students.find((s) => s.id === event.studentId)?.name) + ' 결석' : '휴강'}</h2><span class="pill">${{ draft: '임시 저장', confirmed: '확정', withdrawn: '취소' }[event.status]}</span></div><p>${h(event.date)} · ${event.makeup ? `${h(event.makeup.date)} ${h(event.makeup.start)}~${h(event.makeup.end)} ${h(event.makeup.room)} 보강` : '보강 미정'}</p>
     ${staff(ctx) && event.status !== 'withdrawn' && (ctx.actor.role === 'admin' || event.status === 'draft') ? `<form method="post">${hidden}<input type="hidden" name="eventId" value="${h(event.eventId)}"><div class="fields"><label>새 보강일<input type="date" name="makeupDate"></label><label>시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((r) => `<option>${h(r)}</option>`).join('')}</select></label></div><div class="actions"><button name="action" value="change">보강 지정·변경</button>${event.status === 'draft' && ctx.actor.role === 'admin' ? '<button name="action" value="confirm">일정 확정</button>' : ''}${event.makeup ? '<button class="secondary" name="action" value="clear">보강 취소</button>' : ''}<button class="secondary" name="action" value="withdraw">휴강·결석 취소</button></div></form>` : ''}</article>`;
   const today = new Date(Date.now() + 32400000).toISOString().slice(0, 10);
   const monthEnd = new Date(Date.now() + 31 * 86400000 + 32400000)
@@ -584,7 +657,7 @@ function render(ctx: PageContext) {
             )
               .map(
                 (x) =>
-                  `<li>${h(x.date)} · ${h(x.start)}~${h(x.end)} ${h(x.className)} <span class="pill">${{ regular: '정규 수업', canceled: '휴강', absent: '결석', makeup: '보강' }[x.kind]}</span></li>`,
+                  `<li>${h(x.date)} · ${h(x.start)}~${h(x.end)} ${h(x.className)} <span class="pill">${{ regular: '정규 수업', canceled: '휴강', absent: '결석', makeup: '보강' }[x.kind]}</span>${x.kind === 'makeup' ? `<a href="/schedule?view=makeup#event-${h(x.eventId)}">${h(state.events.find((e) => e.eventId === x.eventId)?.date)} 휴강·결석의 보강</a>` : ''}</li>`,
               )
               .join('')}</ul></section>`,
         )
@@ -595,15 +668,15 @@ function render(ctx: PageContext) {
     ctx.actor.academyId,
   );
   return `<div class="page-heading"><h2>휴·보강 일정</h2><p class="muted">원장이 확정한 일정이 상담에 반영됩니다.</p></div>
-    ${ctx.actor.role === 'admin' ? `<details class="panel" ${config.classes.length ? '' : 'open'}><summary>정규 시간표 설정 · ${config.classes.length}개 반 등록</summary><p class="muted">모든 반의 정규 수업을 등록하면 강사·교실·원생의 시간 겹침을 함께 확인할 수 있습니다.</p><ul>${academy.classes.map((c) => `<li>${h(c.name)} · ${c.days.map((d) => '일월화수목금토'[d]).join('·')} · ${h(c.start)}~${h(c.end)} · ${h(c.room)}</li>`).join('')}</ul><form method="post">${hidden}<input type="hidden" name="action" value="class-config"><div class="fields"><label>반<select name="classId">${options(classes)}</select></label><label>담당 강사<select name="teacher">${options(teachers)}</select></label><label>교실<input name="room" maxlength="60" required value="1강의실"></label><label>시작<input name="start" type="time" required></label><label>종료<input name="end" type="time" required></label><label>학원 동시 수용 인원<input name="capacity" type="number" min="1" max="1000" value="${config.capacity}" required></label><label>학원 수업 종료 한도<input name="closeTime" type="time" value="${h(config.closeTime)}" required></label></div><fieldset><legend>정규 수업 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><button>시간표 저장</button></form></details>` : ''}
-    ${staff(ctx) ? `<details class="panel"><summary>휴강·결석 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="create"><div class="fields"><label>반<select name="classId" required>${options(classes.filter((c) => academy.classes.some((x) => x.classId === c.id)))}</select></label><label>대상<select name="scope"><option value="class">반 전체 휴강</option><option value="student">학생 결석</option></select></label><label>결석 학생<select name="studentId"><option value="">반 휴강은 선택하지 않음</option>${options(students)}</select></label><label>휴강·결석일<input type="date" name="date" required></label><label>보강일 (미정이면 비움)<input type="date" name="makeupDate"></label><label>보강 시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((r) => `<option>${h(r)}</option>`).join('')}</select></label></div><label>사유<input name="reason" maxlength="500"></label>${ctx.actor.role === 'admin' ? '<label class="check-label"><input type="checkbox" name="confirm" value="yes">일정 확정</label>' : ''}<button>일정 저장</button></form></details>` : ''}
+    ${ctx.actor.role === 'admin' ? `<details class="panel" ${config.classes.length ? '' : 'open'}><summary>정규 시간표 설정 · ${config.classes.length}개 반 등록</summary><p class="muted">모든 반의 정규 수업을 등록하면 강사·교실·원생의 시간 겹침을 함께 확인할 수 있습니다.</p><ul>${academy.classes.map((c) => `<li>${h(c.name)} · ${c.days.map((d) => '일월화수목금토'[d]).join('·')} · ${h(c.start)}~${h(c.end)} · ${h(c.room)}</li>`).join('')}</ul><form method="post">${hidden}<input type="hidden" name="action" value="class-config"><div class="fields"><label>반<select name="classId">${options(classes)}</select></label><label>담당 강사<select name="teacher">${options(teachers)}</select></label><label>교실<input name="room" maxlength="60" required value="1강의실"></label><label>시작<input name="start" type="time" required></label><label>적용일<input name="effectiveFrom" type="date"></label><label>종료<input name="end" type="time" required></label><label>학원 동시 수용 인원<input name="capacity" type="number" min="1" max="1000" value="${config.capacity}" required></label><label>학원 수업 종료 한도<input name="closeTime" type="time" value="${h(config.closeTime)}" required></label></div><fieldset><legend>정규 수업 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><button>시간표 저장</button></form></details>` : ''}
+    ${staff(ctx) ? `<details class="panel"><summary>휴강·결석 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="create"><div class="fields"><label>반<select name="classId" required>${options(classes.filter((c) => academy.classes.some((x) => x.classId === c.id)))}</select></label><label>대상<select name="scope"><option value="class">반 전체 휴강</option><option value="student">학생 결석</option></select></label><label>결석 학생<select name="studentId"><option value="">반 휴강은 선택하지 않음</option>${students.map((s) => `<option value="${h(s.id)}" data-class-ids="${h(JSON.stringify(s.classIds))}">${h(s.name)}</option>`).join('')}</select></label><label>휴강·결석일<input type="date" name="date" required></label><label>보강일 (미정이면 비움)<input type="date" name="makeupDate"></label><label>보강 시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((r) => `<option>${h(r)}</option>`).join('')}</select></label></div><label>사유<input name="reason" maxlength="500"></label>${ctx.actor.role === 'admin' ? '<label class="check-label"><input type="checkbox" name="confirm" value="yes">일정 확정</label>' : ''}<button>일정 저장</button></form></details>` : ''}
     ${sessions}<div class="module-grid">${
       state.events
         .filter((e) => visible(ctx, e))
         .map(eventCard)
         .join('') || '<p class="empty">등록된 일정이 없습니다.</p>'
     }</div>
-    ${configuredStudents.length ? `<details class="panel"><summary>보강 가능 시간 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="availability"><label>학생<select name="studentId">${options(configuredStudents)}</select></label><fieldset><legend>가능 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><div class="fields"><label>시작<input name="start" type="time"></label><label>종료<input name="end" type="time"></label></div><p class="muted">저장하면 기존 가능 시간을 선택한 요일·시간으로 바꿉니다.</p><div class="actions"><button>가능 시간 저장</button><button class="secondary" name="clearAvailability" value="yes">가능 시간 초기화</button></div></form><ul>${configuredStudents.map((s) => `<li>${h(s.name)} · ${h(formatWindows(state.availability?.[s.id] ?? [])) || '미등록'}</li>`).join('')}</ul></details>` : ''}
+    ${configuredStudents.length ? `<details class="panel" ${ctx.url.searchParams.get('saved') === 'availability' ? 'open' : ''}><summary>보강 가능 시간 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="availability"><label>학생<select name="studentId">${options(configuredStudents)}</select></label><fieldset><legend>가능 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><div class="fields"><label>시작<input name="start" type="time"></label><label>종료<input name="end" type="time"></label></div><p class="muted">저장하면 기존 가능 시간을 선택한 요일·시간으로 바꿉니다.</p><div class="actions"><button>가능 시간 저장</button><button class="secondary" name="clearAvailability" value="yes">가능 시간 초기화</button></div></form><ul>${configuredStudents.map((s) => `<li>${h(s.name)} · ${h(formatWindows(state.availability?.[s.id] ?? [])) || '미등록'}</li>`).join('')}</ul></details>` : ''}
     ${
       staff(ctx)
         ? `<details class="panel"><summary>안내문 발송 대기</summary><p class="muted">안내문은 저장되어 있으며 외부 메시지는 발송하지 않습니다.</p>${state.outbox
@@ -627,6 +700,55 @@ export const teamScheduleModule: OperationModule = {
   render,
   submit,
 };
+
+export function renderTeamNotices(ctx: PageContext) {
+  const record = stored(ctx.db, ctx.actor.academyId);
+  const state = JSON.parse(record.state) as ScheduleState;
+  const academy = academyConfig(
+    ctx.db,
+    ctx.actor.academyId,
+    JSON.parse(record.config),
+  );
+  return state.events
+    .filter((e) => e.status === 'confirmed' && visible(ctx, e))
+    .map(
+      (e) =>
+        `<article class="message"><a href="/schedule?view=makeup#event-${h(e.eventId)}">${h(academy.classes.find((c) => c.classId === e.classId)?.name)} · ${h(e.date)} ${e.scope === 'student' ? '결석' : '휴강'}</a><p>${e.makeup ? `${h(e.makeup.date)} ${h(e.makeup.start)}~${h(e.makeup.end)} 보강` : '보강 일정 미정'}</p></article>`,
+    )
+    .join('');
+}
+
+export function visibleScheduleDocuments(ctx: PageContext) {
+  const record = stored(ctx.db, ctx.actor.academyId);
+  const state = JSON.parse(record.state) as ScheduleState;
+  const allowed = new Set(
+    accessibleClasses(ctx.db, ctx.actor).map((c) => c.id),
+  );
+  const inputs = teamScheduleEvidence(ctx.db, ctx.actor.academyId);
+  const docs = state.events
+    .filter((e) => visible(ctx, e))
+    .flatMap((e) => {
+      const academy = academyConfig(
+        ctx.db,
+        ctx.actor.academyId,
+        JSON.parse(record.config),
+      );
+      const ids = new Set(
+        scheduleEventToIndexInputs(academy, e).map(
+          (i) => i.document.documentId,
+        ),
+      );
+      return inputs
+        .filter((i) => ids.has(i.document.documentId))
+        .map((i) => i.document);
+    });
+  return [
+    ...docs,
+    ...regularScheduleDocuments(ctx.db, ctx.actor.academyId).filter((d) =>
+      allowed.has(d.classId!),
+    ),
+  ];
+}
 
 export function calendarSessions(ctx: PageContext, from: string, to: string) {
   const record = stored(ctx.db, ctx.actor.academyId);

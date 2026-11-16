@@ -17,6 +17,8 @@ export interface PageContext {
   url: URL;
   maxDocumentBytes?: number;
   assertCurrentAccess?: () => void;
+  submittedForm?: FormData;
+  formError?: string;
 }
 
 export interface OperationModule {

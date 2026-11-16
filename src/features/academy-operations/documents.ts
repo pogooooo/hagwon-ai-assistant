@@ -1,4 +1,5 @@
 import { previewDocument } from './document-preview.ts';
+import { visibleScheduleDocuments } from './team-schedule.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { OperationsDatabase } from './database.ts';
 import { fileURLToPath } from 'node:url';
@@ -549,8 +550,10 @@ async function renderDocuments(ctx: PageContext) {
   );
   const search = (ctx.url.searchParams.get('q') ?? '').slice(0, 200).trim();
   const category = ctx.url.searchParams.get('category') ?? '';
+  const includeWithdrawn = ctx.url.searchParams.get('withdrawn') === '1';
   const filtered = versions.filter(
-    ({ input }) =>
+    ({ input, state }) =>
+      (state !== 'withdrawn' || includeWithdrawn) &&
       (!category || input.documentType === category) &&
       (!search ||
         (input.title + ' ' + input.text)
@@ -582,8 +585,17 @@ async function renderDocuments(ctx: PageContext) {
     })
     .join('');
   const create = admin && ctx.url.searchParams.get('view') === 'create';
+  const scheduleDocs = visibleScheduleDocuments(ctx).filter(
+    (input) =>
+      (!category || input.documentType === category) &&
+      (!search ||
+        (input.title + ' ' + input.text)
+          .toLocaleLowerCase()
+          .includes(search.toLocaleLowerCase())),
+  );
   return `<div class="workspace-heading"><h1>학원 자료</h1>${admin ? '<a class="button-link" href="/documents?view=create#document-edit">자료 등록</a>' : ''}</div>
     ${create ? revisionForm(ctx) : ''}
+    ${scheduleDocs.length ? `<section class="panel"><h2>일정에서 자동 반영된 자료</h2><p class="muted">원본 일정에서 관리합니다. 수업 시간·휴강·보강 상담은 이 자료를 기준으로 답합니다.</p>${scheduleDocs.map((d) => `<details><summary>${h(d.title)} · v${d.revision}</summary><pre class="preview">${h(d.text)}</pre><a href="/schedule?view=makeup">원본 일정 보기</a></details>`).join('')}</section>` : ''}
     <section class="panel">
       <h2>자료 목록</h2><form class="document-filters" method="get"><label>자료 검색<input name="q" value="${h(search)}" maxlength="200" placeholder="제목 또는 본문"></label><label>분류<select name="category"><option value="">전체 분류</option>${Object.entries(
         documentTypes,
@@ -592,7 +604,9 @@ async function renderDocuments(ctx: PageContext) {
           ([id, label]) =>
             `<option value="${id}"${category === id ? ' selected' : ''}>${label}</option>`,
         )
-        .join('')}</select></label><button>검색</button></form>
+        .join(
+          '',
+        )}</select></label><label class="check-label"><input type="checkbox" name="withdrawn" value="1"${includeWithdrawn ? ' checked' : ''}>철회 이력 포함</label><button>검색</button></form>
       ${list ? `<div class="table-wrap"><table><thead><tr><th>제목</th><th>개정</th><th>공개 범위</th><th>상태</th></tr></thead><tbody>${list}</tbody></table></div>` : '<p class="muted">열람할 수 있는 자료가 없습니다.</p>'}
     </section>
     ${

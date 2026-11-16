@@ -141,6 +141,10 @@ export interface RagConsultationDeps {
   config?: Partial<RagConfig>;
   createRequestId?: () => string;
   engine?: 'legacy' | 'planned';
+  /** Server-owned source policy, applied separately to each resolved subquestion. */
+  selectEvidence?: (
+    frame: Readonly<QueryFrame>,
+  ) => { facts: ApprovedFactsPort; documents: RagDocumentsPort } | undefined;
 }
 
 export type FrameRefinement = Pick<QueryFrame, 'classIds' | 'topics'>;
@@ -218,6 +222,11 @@ export function createRagConsultationService(
     ctx: AnswerContext,
     studentIdHint: string | undefined,
   ): Promise<AnswerDraft> {
+    const selectedEvidence = deps.selectEvidence?.(ctx.frame);
+    if (selectedEvidence) {
+      ctx.facts = selectedEvidence.facts;
+      ctx.documents = selectedEvidence.documents;
+    }
     const { frame, access, state, trace } = ctx;
     const flags = frame.flags;
 
@@ -794,12 +803,15 @@ export function createRagConsultationService(
         },
       };
       ctx.trace.intent = `evidence>${plan.topics.map((t) => t.id).join('+')}`;
-      const draft = await answerInfo(sub);
+      const selected = deps.selectEvidence?.(sub.frame);
+      const draft = await answerInfo({ ...sub, ...selected });
       if (
         (draft.status === 'answered' || draft.status === 'partial') &&
         satisfiesAnswerTypes(draft.text, types)
       )
         return draft;
+      // Do not fall back to evidence from a different authority after intent resolution.
+      if (selected) return draft;
     }
     if (plan.kind === 'none') {
       return {

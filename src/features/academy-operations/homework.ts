@@ -15,6 +15,10 @@ import {
 } from './workbook-results.ts';
 import { renderWorkbookForm, renderBookList } from './workbook-form.ts';
 import { recordWorkbookReport } from './learning.ts';
+import {
+  publishWorkbookAnalysis,
+  renderWorkbookSource,
+} from './workbook-publication.ts';
 
 interface QuestionInput {
   prompt: string;
@@ -884,6 +888,11 @@ export const homeworkModule: OperationModule = {
     const { actor, url } = ctx;
     const view = url.searchParams.get('view'),
       detail = url.searchParams.get('detail');
+    if (view === 'source')
+      return renderWorkbookSource(
+        ctx,
+        url.searchParams.get('publication') ?? '',
+      );
     if (detail) return renderWorkbookDetail(ctx, detail);
     if (view === 'analysis') return workbookAnalytics(ctx, true);
     if (view === 'books') return renderBookList(ctx);
@@ -945,6 +954,10 @@ export const homeworkModule: OperationModule = {
   },
   submit(ctx, data) {
     switch (field(data, 'action', 20)) {
+      case 'publish-analysis':
+        return publishWorkbookAnalysis(ctx, data);
+      case 'withdraw-analysis':
+        return publishWorkbookAnalysis(ctx, data, true);
       case 'register-book':
         return registerBook(ctx, data);
       case 'assign-workbook':

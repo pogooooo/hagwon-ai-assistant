@@ -9,6 +9,7 @@ import { documentsModule } from './documents.ts';
 import { scheduleModule } from './schedule.ts';
 import { consultationModule } from './consultation.ts';
 import { teamScheduleModule, teamScheduleEvidence } from './team-schedule.ts';
+import { visibleCalendarEntries, calendarModule } from './calendar.ts';
 
 function setup(t: TestContext) {
   const db = new DatabaseSync(':memory:');
@@ -86,6 +87,142 @@ function setup(t: TestContext) {
   };
   return { db, ctx, submit, config, ask, version };
 }
+
+test('QA: 날짜·상대일 질문은 업로드 안내문 대신 달력 DB를 인용한다', async (t) => {
+  t.mock.timers.enable({
+    apis: ['Date'],
+    now: new Date('2026-11-15T12:00:00+09:00'),
+  });
+  const s = setup(t);
+  await s.config();
+  for (const who of ['TA_GUARDIAN_E_MATH', 'TA_DIRECTOR']) {
+    for (const q of [
+      '초등 수학반 11월 16일 수업 있나요?',
+      '초등 수학반 내일 수업 있나요?',
+      '초등 수학반 시간표 알려주세요',
+    ]) {
+      const answer = await s.ask(q, who);
+      assert.equal(answer.status, 'answered', JSON.stringify(answer));
+      assert.match(answer.answer, /16:00/);
+      assert.match(answer.answer, /17:00/);
+      assert.doesNotMatch(answer.answer, /17:20|14:20|휴강입니다|11월 21일/);
+      assert.ok(
+        answer.citations.every((c: { documentId: string }) =>
+          c.documentId.startsWith('timetable-'),
+        ),
+      );
+    }
+    assert.ok(
+      visibleCalendarEntries(s.ctx(who), '2026-11-16', '2026-11-16').some(
+        (x) => x.kind === 'regular',
+      ),
+    );
+  }
+  await s.submit({
+    action: 'create',
+    scope: 'class',
+    classId: 'TA_E_MATH',
+    date: '2026-11-25',
+    makeupDate: '2026-11-28',
+    makeupStart: '14:00',
+    room: '1강의실',
+    confirm: 'yes',
+  });
+  const answer = await s.ask('초등 수학반 11월 25일 휴강 보강 언제예요?');
+  assert.equal(answer.status, 'answered', answer.answer);
+  assert.match(answer.answer, /11월 28일/);
+  assert.match(answer.answer, /14:00.*15:00/);
+  assert.ok(
+    visibleCalendarEntries(
+      s.ctx('TA_GUARDIAN_E_MATH'),
+      '2026-11-28',
+      '2026-11-28',
+    ).some((x) => x.kind === 'makeup'),
+  );
+  const notice = await scheduleModule.render(s.ctx('TA_GUARDIAN_E_MATH'));
+  assert.match(notice, /2026-11-25/);
+  assert.match(notice, /2026-11-28 14:00~15:00/);
+  const docs = await documentsModule.render(s.ctx('TA_GUARDIAN_E_MATH'));
+  assert.match(docs, /일정에서 자동 반영된 자료/);
+  for (const q of [
+    '중3반 11월 19일 수업 있나요?',
+    '가상학생B 성적과 보강 알려주세요',
+  ]) {
+    const denied = await s.ask(q);
+    assert.notEqual(denied.status, 'answered');
+    assert.equal(denied.citations.length, 0);
+  }
+});
+
+test('QA: 근거 부족은 최신 질문·요청자·학생과 함께 담당자 목록에 자동 수집한다', async (t) => {
+  const s = setup(t);
+  await s.config();
+  await s.ask('초등 수학반 시간표 알려주세요');
+  const thread = s.db
+    .prepare(
+      'SELECT id FROM op_consultation_threads ORDER BY updated_at DESC LIMIT 1',
+    )
+    .get()!;
+  const f = new FormData();
+  for (const [k, v] of Object.entries({
+    action: 'ask',
+    id: String(thread.id),
+    question: '주차 가능한가요?',
+    studentId: 'TA_STU_001',
+  }))
+    f.set(k, v);
+  await consultationModule.submit(s.ctx('TA_GUARDIAN_E_MATH'), f);
+  assert.equal(
+    s.db
+      .prepare('SELECT status FROM op_consultation_threads WHERE id=?')
+      .get(thread.id)!.status,
+    'requested',
+  );
+  const ctx = s.ctx('TA_DIRECTOR');
+  ctx.url = new URL('http://localhost/consultation?view=inbox');
+  const html = await consultationModule.render(ctx);
+  assert.match(html, /주차 가능한가요/);
+  assert.match(html, /가상학생A/);
+  assert.match(html, /보호자/);
+  const other = s.ctx('TA_GUARDIAN_M2');
+  other.url = new URL('http://localhost/consultation?id=' + thread.id);
+  await assert.rejects(
+    async () => consultationModule.render(other),
+    /찾을 수 없습니다/,
+  );
+});
+
+test('QA: 일정 오류는 입력 복원 정보를 제공하고 가능 시간 저장 상태를 유지한다', async (t) => {
+  const s = setup(t);
+  await s.config();
+  const form = new FormData();
+  for (const [k, v] of Object.entries({
+    action: 'create',
+    scope: 'class',
+    classId: 'TA_E_MATH',
+    date: '2026-11-23',
+    reason: '입력 유지 <검증>',
+    version: s.version(),
+  }))
+    form.set(k, v);
+  const ctx = {
+    ...s.ctx('TA_DIRECTOR'),
+    submittedForm: form,
+    formError: '시간 충돌',
+  };
+  const html = await calendarModule.render(ctx);
+  assert.match(html, /data-restore-schedule=/);
+  assert.match(html, /입력 유지 &lt;검증&gt;/);
+  assert.match(html, /data-class-ids/);
+  const parent = s.ctx('TA_GUARDIAN_E_MATH');
+  parent.url = new URL(
+    'http://localhost/schedule?view=makeup&saved=availability',
+  );
+  assert.match(
+    await calendarModule.render(parent),
+    /<details class="panel" open><summary>보강 가능 시간 등록/,
+  );
+});
 test('팀 일정은 DB에 저장하며 임시·확정·변경·취소가 운영 상담에 반영된다', async (t) => {
   const s = setup(t);
   await s.config();

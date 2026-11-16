@@ -27,6 +27,7 @@ import { homeworkModule, homeworkPhoto } from './homework.ts';
 import { learningModule } from './learning.ts';
 import { briefingModule } from './briefing.ts';
 import { calendarModule } from './calendar.ts';
+import { previewTeamSchedule } from './team-schedule.ts';
 import { renderHome } from './home.ts';
 import { preferencesModule, selectedCharacter } from './preferences.ts';
 import {
@@ -506,8 +507,48 @@ export function createOperationsServer({
         return;
       }
       if (form) {
-        const target = await operation.submit(ctx, form);
-        redirect(response, target ?? url.pathname + url.search);
+        try {
+          if (
+            operation === calendarModule &&
+            url.searchParams.get('preview') === '1'
+          ) {
+            previewTeamSchedule(ctx, form);
+            response.writeHead(200, {
+              'Content-Type': 'application/json; charset=utf-8',
+            });
+            response.end(
+              JSON.stringify({
+                ok: true,
+                message:
+                  '현재 등록 내용과 충돌하지 않습니다. 저장할 때 다시 확인합니다.',
+              }),
+            );
+            return;
+          }
+          const target = await operation.submit(ctx, form);
+          redirect(response, target ?? url.pathname + url.search);
+        } catch (error) {
+          if (
+            operation !== calendarModule ||
+            !(error instanceof OperationError) ||
+            ![400, 409, 422].includes(error.status)
+          )
+            throw error;
+          assertCurrentAccess();
+          if (url.searchParams.get('preview') === '1') {
+            response.writeHead(error.status, {
+              'Content-Type': 'application/json; charset=utf-8',
+            });
+            response.end(JSON.stringify({ ok: false, message: error.message }));
+            return;
+          }
+          const content = await operation.render({
+            ...ctx,
+            submittedForm: form,
+            formError: error.message,
+          });
+          sendPage(response, error.status, content, actor, operation.path);
+        }
       } else {
         const content = await operation.render(ctx);
         assertCurrentAccess();

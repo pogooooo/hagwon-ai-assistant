@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { renderTeamNotices } from './team-schedule.ts';
 import {
   checkNoticeAgainstTeam,
   assertTeacherFree,
@@ -516,7 +517,8 @@ function renderNotices(ctx: PageContext): string {
     .join('');
   return String.raw`
     <section class="panel"><h2>휴강·보강 공지</h2>
-    ${isStaff(ctx.actor) ? renderNoticeForm(ctx, editing) : ''}
+    ${editing ? renderNoticeForm(ctx, editing) : isStaff(ctx.actor) ? '<p><a href="/schedule?view=makeup">휴·보강 일정 등록</a></p>' : ''}
+    ${renderTeamNotices(ctx)}
     ${
       notices.length
         ? String.raw`<div class="table-wrap"><table>

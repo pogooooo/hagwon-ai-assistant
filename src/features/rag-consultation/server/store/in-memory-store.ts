@@ -742,7 +742,8 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
         : null;
       if (
         input.locate?.value.kind === 'accuracy' &&
-        input.locate.value.basis === 'classified_assessed' &&
+        (input.locate.value.basis === 'classified_assessed' ||
+          input.locate.value.basis === 'approved_homework') &&
         !located
       )
         return null;
@@ -859,7 +860,8 @@ export class InMemoryRagStore implements ApprovedFactsPort, RagDocumentsPort {
       .filter((chunk): chunk is RagChunk => Boolean(chunk));
     if (
       fact.value.kind === 'accuracy' &&
-      fact.value.basis === 'classified_assessed'
+      (fact.value.basis === 'classified_assessed' ||
+        fact.value.basis === 'approved_homework')
     ) {
       const value = fact.value;
       const expected = compactText(

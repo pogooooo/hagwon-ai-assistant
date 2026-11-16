@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { operationsGeneration } from './runtime-generation.ts';
+import { workbookEvidence } from './workbook-publication.ts';
 import { selectedCharacter } from './preferences.ts';
 import {
   learningEvidence,
@@ -7,7 +8,12 @@ import {
   learningTypes,
   setupLearning,
 } from './learning.ts';
-import { teamScheduleEvidence, setupTeamSchedule } from './team-schedule.ts';
+import {
+  teamScheduleEvidence,
+  setupTeamSchedule,
+  regularScheduleDocuments,
+} from './team-schedule.ts';
+import { scheduleAuthority } from './schedule-authority.ts';
 import type { OperationsDatabase } from './database.ts';
 
 import type {
@@ -178,16 +184,76 @@ export function consultationOverview(ctx: PageContext) {
   return {
     pending: threads
       .filter((thread) => needsStaffAttention(ctx.actor, thread))
-      .map(toOverviewItem),
+      .map((thread) => toOverviewItem(ctx, thread)),
     recent: threads
       .filter((thread) => thread.owner_id === ctx.actor.id)
       .slice(0, 4)
-      .map(toOverviewItem),
+      .map((thread) => toOverviewItem(ctx, thread)),
   };
 }
 
-function toOverviewItem({ id, title, status }: Thread) {
-  return { id, title, label: threadLabels[status] };
+function threadDetail(ctx: PageContext, thread: Thread) {
+  const messages = rows<Message>(
+    ctx.db,
+    'SELECT kind, text, response, created_at FROM op_consultation_messages WHERE thread_id=? ORDER BY id',
+    thread.id,
+  );
+  let question = thread.title;
+  let latestQuestion = question;
+  let unresolved:
+    (RagAnswer & { operations?: { studentIds: string[] } }) | undefined;
+  let lastAnswer: typeof unresolved;
+  for (const message of messages) {
+    if (message.kind === 'question') latestQuestion = message.text;
+    if (!message.response) continue;
+    const answer = JSON.parse(message.response) as NonNullable<
+      typeof unresolved
+    >;
+    lastAnswer = answer;
+    if (['abstained', 'partial', 'handoff'].includes(answer.status)) {
+      question = latestQuestion;
+      unresolved = answer;
+    }
+  }
+  const owner =
+    one<{ name: string }>(
+      ctx.db,
+      'SELECT name FROM accounts WHERE academy_id=? AND id=?',
+      ctx.actor.academyId,
+      thread.owner_id,
+    )?.name ?? '탈퇴 계정';
+  if (!unresolved) question = latestQuestion;
+  const targets = (
+    (unresolved ?? lastAnswer)?.operations?.studentIds ?? []
+  ).flatMap((id) => {
+    const student = one<{ name: string }>(
+      ctx.db,
+      'SELECT name FROM students WHERE academy_id=? AND id=?',
+      ctx.actor.academyId,
+      id,
+    );
+    return student ? [student.name] : [];
+  });
+  return {
+    question,
+    owner,
+    target: targets.join(', ') || '학생 미지정',
+    summary: unresolved
+      ? [
+          answerLabels[unresolved.status],
+          ...(unresolved.missingFields ?? []),
+        ].join(' · ')
+      : '담당자 상담 요청',
+  };
+}
+
+function toOverviewItem(ctx: PageContext, thread: Thread) {
+  const detail = threadDetail(ctx, thread);
+  return {
+    id: thread.id,
+    title: thread.status === 'open' ? thread.title : detail.question,
+    label: `${threadLabels[thread.status]} · ${detail.owner} · ${detail.target}`,
+  };
 }
 
 function addMessage(
@@ -268,17 +334,21 @@ function consultationAccess({ db, actor }: PageContext): RagAccessScope {
 
 function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
   const learning = learningEvidence(db, academyId);
+  const workbook = workbookEvidence(db, academyId);
   const team = teamScheduleEvidence(db, academyId);
   return {
     documents: [
       ...scheduleDocuments(db, academyId),
       ...team.map((x) => x.document),
+      ...regularScheduleDocuments(db, academyId),
       ...learning.documents,
+      ...workbook.documents,
     ],
     facts: [
       ...scheduleFacts(db, academyId),
       ...team.flatMap((x) => x.facts),
       ...learning.facts,
+      ...workbook.facts,
     ],
   };
 }
@@ -328,6 +398,17 @@ async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
   const service = createRagConsultationService({
     facts: store,
     documents: store,
+    selectEvidence: await scheduleAuthority(
+      [
+        ...scheduleDocuments(db, actor.academyId),
+        ...teamScheduleEvidence(db, actor.academyId).map((x) => x.document),
+        ...regularScheduleDocuments(db, actor.academyId),
+      ],
+      [
+        ...scheduleFacts(db, actor.academyId),
+        ...teamScheduleEvidence(db, actor.academyId).flatMap((x) => x.facts),
+      ],
+    ),
     catalog: { getAcademyCatalog: async () => catalog },
     generation: operationsGeneration(),
     handoff: new InMemoryHandoffStore(),
@@ -340,7 +421,7 @@ async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
     clock: new SystemClock(),
     engine: 'planned',
   });
-  const { answer } = await service.query({
+  const { answer, trace } = await service.query({
     question,
     conversationId,
     studentIdHint: studentId || undefined,
@@ -421,8 +502,28 @@ async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
           409,
         );
     }
+    const needsFollowUp = ['abstained', 'partial', 'handoff'].includes(
+      answer.status,
+    );
+    if (needsFollowUp)
+      db.prepare(
+        "UPDATE op_consultation_threads SET status=CASE WHEN status='open' THEN 'requested' ELSE status END, title=? WHERE id=?",
+      ).run(question.slice(0, 65), conversationId);
+    const targets = trace.targetStudentIds.length
+      ? trace.targetStudentIds
+      : studentId
+        ? [studentId]
+        : currentStudentIds.length === 1
+          ? currentStudentIds
+          : [];
+    const storedAnswer = {
+      ...answer,
+      operations: {
+        studentIds: targets.filter((id) => currentStudentIds.includes(id)),
+      },
+    };
     addMessage(db, conversationId, 'question', question, at);
-    addMessage(db, conversationId, 'answer', answer.answer, at, answer);
+    addMessage(db, conversationId, 'answer', answer.answer, at, storedAnswer);
   });
   return conversationId;
 }
@@ -473,6 +574,12 @@ function submitThreadAction(
 ) {
   const { db, actor } = ctx;
   const now = new Date().toISOString();
+  if (
+    action === 'handoff' &&
+    thread.owner_id === actor.id &&
+    thread.status === 'requested'
+  )
+    return;
   if (
     action === 'handoff' &&
     thread.owner_id === actor.id &&
@@ -573,10 +680,14 @@ function renderMessage(
     ${
       answer?.citations.length
         ? `<ul class="citations">${answer.citations
-            .map(
-              (citation) =>
-                `<li>${citation.documentId.startsWith('learning-') ? `<a href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${citation.location ? ' · ' + h(citation.location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`,
-            )
+            .map((citation) => {
+              const location = citation.location?.startsWith(citation.title)
+                ? citation.location
+                    .slice(citation.title.length)
+                    .replace(/^[\s·:>/—-]+/, '')
+                : citation.location;
+              return `<li>${citation.documentId.startsWith('workbook-') ? `<a href="/homework?view=source&amp;publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : citation.documentId.startsWith('learning-') ? `<a href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${location ? ' · ' + h(location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`;
+            })
             .join('')}</ul>`
         : ''
     }
@@ -633,10 +744,10 @@ function renderConsultation(ctx: PageContext) {
         ${
           threads.length
             ? `<ul class="item-list">${threads
-                .map(
-                  (row) =>
-                    `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.title)}</span><small>${h(threadLabels[row.status])}</small></a></li>`,
-                )
+                .map((row) => {
+                  const detail = threadDetail(ctx, row);
+                  return `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.status === 'open' ? row.title : detail.question)}</span><small>${h(threadLabels[row.status])} · ${h(detail.owner)} · ${h(detail.target)}</small>${queue ? `<small>${h(detail.summary)}</small>` : ''}</a></li>`;
+                })
                 .join('')}</ul>`
             : `<p class="muted">${inbox ? '처리할 상담이 없습니다.' : archive ? '완료된 상담이 없습니다.' : '저장된 상담이 없습니다.'}</p>`
         }
@@ -657,6 +768,7 @@ function renderConsultation(ctx: PageContext) {
           ${students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
           <label>질문 <textarea name="question" rows="3" maxlength="500" required placeholder="예: 중2 내신반 휴강일과 보강 시간을 알려주세요."></textarea></label>
           <button name="action" value="ask">질문하기</button>
+          <p class="muted">답변에 필요한 자료가 부족하면 이 상담을 학원 담당자의 확인 목록에 등록합니다.</p>
         </form>`
             : ''
         }

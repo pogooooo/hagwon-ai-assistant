@@ -232,7 +232,7 @@ export type FactValue =
       dimension?: AccuracyDimension;
       /** True when the rubric supports reference use only. */
       referenceOnly?: boolean;
-      basis?: 'classified_assessed';
+      basis?: 'classified_assessed' | 'approved_homework';
     }
   | { kind: 'weak_area'; unit: string; text: string };
 

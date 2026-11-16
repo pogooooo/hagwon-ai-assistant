@@ -41,7 +41,7 @@ type AccuracyFact = ApprovedFact & {
     unit: string;
     dimension?: AccuracyDimension;
     referenceOnly?: boolean;
-    basis?: 'classified_assessed';
+    basis?: 'classified_assessed' | 'approved_homework';
   };
 };
 type WeakAreaFact = ApprovedFact & {
@@ -179,7 +179,7 @@ function line(ctx: AnswerContext, fact: AccuracyFact): string {
   const name = studentLabel(ctx.access, fact.subjectId);
   const revision =
     fact.revision > 1
-      ? ` (${fact.value.basis === 'classified_assessed' ? '분석 갱신본' : '채점 수정 반영본'} r${fact.revision})`
+      ? ` (${fact.value.basis ? '분석 갱신본' : '채점 수정 반영본'} r${fact.revision})`
       : '';
   return `${name} 학생 ${formatPeriod(fact.period ?? '')} ${subjectTag(ctx, fact)}${labelOf(fact)}${fact.value.referenceOnly ? ' (참고용)' : ''}: ${fact.value.total}문항 중 ${fact.value.correct}문항 정답(정답률 ${percent(fact)}%)${revision}.`;
 }
@@ -226,6 +226,10 @@ function notes(ctx: AnswerContext, facts: AccuracyFact[]): string[] {
   if (facts.some((fact) => fact.value.basis === 'classified_assessed'))
     result.push(
       '분류 가능한 문항 중 결과가 확인된 문항 기준입니다. 미분류·결과 미확인 문항은 제외했습니다.',
+    );
+  if (facts.some((fact) => fact.value.basis === 'approved_homework'))
+    result.push(
+      '교사가 승인한 숙제의 최종 결과 기준입니다. 전체 정답률에는 유형 미지정 문항도 포함하고, 유형별 집계에서만 제외했습니다.',
     );
   for (const asked of ctx.frame.percents) {
     if (facts.length > 0 && !facts.some((fact) => percent(fact) === asked)) {
@@ -1110,12 +1114,18 @@ async function answerLearningReport(
   const periods = resolvePeriods(ctx, compareUnits);
   const assessment =
     ctx.engine === 'planned' && reportAssessmentRequest(frame.normalized);
-  const loaded = await ctx.facts.queryApprovedFacts({
-    access: ctx.access,
-    studentIds: targets,
-    factTypes: assessment ? ['accuracy'] : ['accuracy', 'weak_area'],
-    asOf: ctx.asOf,
-  });
+  const loaded = (
+    await ctx.facts.queryApprovedFacts({
+      access: ctx.access,
+      studentIds: targets,
+      factTypes: assessment ? ['accuracy'] : ['accuracy', 'weak_area'],
+      asOf: ctx.asOf,
+    })
+  ).filter(
+    (fact) =>
+      !frame.classIds.length ||
+      (fact.classId !== null && frame.classIds.includes(fact.classId)),
+  );
   recordFacts(ctx.trace, loaded);
   markMultiSubjectStudents(ctx, loaded);
   const matchesSubject = (fact: ApprovedFact) =>
@@ -1126,6 +1136,44 @@ async function answerLearningReport(
     .filter(isAccuracy)
     .filter((fact) => targets.includes(fact.subjectId))
     .filter(matchesSubject);
+  // A submission can belong to several class reports. Without one class scope,
+  // those monthly reports cannot be added or substituted for one another.
+  const workbookScopes = new Map<string, Set<string>>();
+  for (const fact of allAccuracy.filter(
+    (f) => f.value.basis === 'approved_homework',
+  )) {
+    const relevantPeriods = periods.length
+      ? periods
+      : allAccuracy
+          .filter(
+            (f) =>
+              f.subjectId === fact.subjectId &&
+              subjectOf(ctx.catalog, f.classId) ===
+                subjectOf(ctx.catalog, fact.classId),
+          )
+          .map((f) => f.period ?? '')
+          .sort(comparePeriods)
+          .slice(-1);
+    if (!relevantPeriods.includes(fact.period ?? '') || !fact.classId) continue;
+    const key = JSON.stringify([
+      fact.subjectId,
+      subjectOf(ctx.catalog, fact.classId),
+      fact.period,
+    ]);
+    const scopes = workbookScopes.get(key) ?? new Set<string>();
+    scopes.add(fact.classId);
+    workbookScopes.set(key, scopes);
+  }
+  if ([...workbookScopes.values()].some((s) => s.size > 1)) {
+    ctx.trace.intent = 'workbook_class_scope';
+    return {
+      ...abstain(
+        '같은 과목·기간에 여러 반의 숙제 분석이 있습니다. 중복 배정된 숙제가 있을 수 있으니 어느 반의 결과인지 지정해 주세요.',
+        'AMBIGUOUS_SUBJECT',
+      ),
+      status: 'clarify',
+    };
+  }
   if (assessment)
     return answerReportAssessment(
       ctx,
