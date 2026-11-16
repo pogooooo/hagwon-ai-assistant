@@ -12,6 +12,7 @@ export const SYSTEM_RULES = [
   '다른 학생·다른 학원에 대한 정보는 언급하지 않는다.',
   '반드시 JSON 한 개만 출력한다: {"status":"answered"|"partial"|"unknown","answer":string,"cited_source_ids":string[],"missing_fields":string[]}',
   'cited_source_ids 에는 아래에 주어진 source_id 만 넣는다.',
+  '학습 방향 질문에서 자료에 복습 방법이 명시되어 있으면 그 방법과 확인된 기록을 요약한다. 정답률로 학습 원인을 진단하거나 자료에 없는 학습 방법을 만들지 않는다.',
 ].join('\n');
 
 export function buildUserPrompt(input: GenerationInput): string {

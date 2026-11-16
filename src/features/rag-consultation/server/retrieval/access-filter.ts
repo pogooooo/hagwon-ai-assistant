@@ -22,12 +22,10 @@ export function canReadRecord(
 ): boolean {
   if (record.academyId !== access.academyId) return false;
 
-  if (record.studentId !== null) {
-    return (
-      access.allowedStudentIds.includes(record.studentId) &&
-      targetStudentIds.includes(record.studentId)
-    );
-  }
+  // Old or external adapters can return inconsistent metadata. Never allow a
+  // student binding to bypass the visibility policy.
+  if (record.studentId != null && record.visibility !== 'student_private')
+    return false;
 
   switch (record.visibility) {
     case 'academy_public':
@@ -38,10 +36,27 @@ export function canReadRecord(
         access.allowedClassIds.includes(record.classId)
       );
     case 'staff_only':
-      return access.role === 'teacher' || access.role === 'admin';
+      return (
+        (access.role === 'teacher' || access.role === 'admin') &&
+        (record.classId == null ||
+          access.allowedClassIds.includes(record.classId))
+      );
     case 'student_private':
-      // 대상 학생이 없는 개인 문서는 해석할 수 없으므로 거부(fail-closed)
-      return false;
+      return (
+        access.role !== 'visitor' &&
+        record.studentId != null &&
+        access.allowedStudentIds.includes(record.studentId) &&
+        targetStudentIds.includes(record.studentId) &&
+        (access.role !== 'teacher' ||
+          record.classId == null ||
+          (access.allowedClassIds.includes(record.classId) &&
+            access.studentRefs.some(
+              (s) =>
+                s.studentId === record.studentId &&
+                (s.classIds === undefined ||
+                  s.classIds.includes(record.classId!)),
+            )))
+      );
     default:
       return false;
   }

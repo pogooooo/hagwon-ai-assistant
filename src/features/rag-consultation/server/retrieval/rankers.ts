@@ -53,7 +53,7 @@ export interface TextTokenizer {
 /** BM25. 토크나이저를 주지 않으면 색인 시 만든 기본 토큰(chunk.tokens)을 그대로 쓴다. */
 export class Bm25Ranker implements ChunkRanker {
   readonly id: string;
-  private readonly cache = new Map<string, string[]>();
+  private readonly cache = new WeakMap<RagChunk, string[]>();
   private readonly tokenizer: TextTokenizer | undefined;
 
   constructor(tokenizer?: TextTokenizer) {
@@ -63,10 +63,10 @@ export class Bm25Ranker implements ChunkRanker {
 
   private tokensOf(chunk: RagChunk): readonly string[] {
     if (!this.tokenizer) return chunk.tokens;
-    let tokens = this.cache.get(chunk.chunkId);
+    let tokens = this.cache.get(chunk);
     if (!tokens) {
       tokens = this.tokenizer.tokenize(chunk.contextualText);
-      this.cache.set(chunk.chunkId, tokens);
+      this.cache.set(chunk, tokens);
     }
     return tokens;
   }
@@ -101,10 +101,10 @@ function dot(a: Float32Array, b: Float32Array): number {
   return sum;
 }
 
-/** 임베딩 코사인 유사도(벡터는 정규화되어 있다고 가정). 청크 임베딩은 chunkId 로 한 번만 계산한다. */
+/** 임베딩 코사인 유사도(벡터는 정규화되어 있다고 가정). 청크 객체별로 임베딩을 재사용한다. */
 export class DenseRanker implements ChunkRanker {
   readonly id: string;
-  private readonly cache = new Map<string, Float32Array>();
+  private readonly cache = new WeakMap<RagChunk, Float32Array>();
   private readonly embedder: TextEmbedder;
 
   constructor(embedder: TextEmbedder) {
@@ -118,16 +118,12 @@ export class DenseRanker implements ChunkRanker {
     context?: RankContext,
   ): Promise<RankedChunk[]> {
     if (candidates.length === 0) return [];
-    const missing = candidates.filter(
-      (chunk) => !this.cache.has(chunk.chunkId),
-    );
+    const missing = candidates.filter((chunk) => !this.cache.has(chunk));
     if (missing.length > 0) {
       const vectors = await this.embedder.embedPassages(
         missing.map((chunk) => chunk.contextualText),
       );
-      missing.forEach((chunk, index) =>
-        this.cache.set(chunk.chunkId, vectors[index]),
-      );
+      missing.forEach((chunk, index) => this.cache.set(chunk, vectors[index]));
     }
     const queryVector = await this.embedder.embedQuery(
       context?.question ?? query,
@@ -135,7 +131,7 @@ export class DenseRanker implements ChunkRanker {
     return candidates
       .map((chunk) => ({
         chunk,
-        score: dot(queryVector, this.cache.get(chunk.chunkId) as Float32Array),
+        score: dot(queryVector, this.cache.get(chunk) as Float32Array),
       }))
       .sort(
         (a, b) =>

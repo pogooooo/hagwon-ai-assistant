@@ -77,6 +77,15 @@ const factValueSchema = z.discriminatedUnion('kind', [
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     time: z.string().max(40).nullable(),
     text: z.string().max(500),
+    event: z
+      .object({
+        id: idString,
+        startsAt: z.number().int(),
+        endsAt: z.number().int(),
+        makeupStatus: z.enum(['pending', 'scheduled', 'none']).optional(),
+      })
+      .refine(({ startsAt, endsAt }) => startsAt < endsAt)
+      .optional(),
   }),
   z.object({
     kind: z.literal('enrollment'),

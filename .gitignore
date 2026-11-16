@@ -10,6 +10,9 @@ next-env.d.ts
 Thumbs.db
 *.log
 .vercel/
+/.local/
+/deploy/cloudflare/.local/
+/deploy/cloudflare/.wrangler/
 
 # Native source folders should be committed after cap add.
 android/.gradle/

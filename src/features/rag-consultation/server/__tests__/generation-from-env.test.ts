@@ -144,3 +144,51 @@ test('CLOVA와 Gemini는 범용 승인 플래그가 있어도 개인 데이터�
     assert.equal(calls, 0);
   }
 });
+
+test('공급자별 명시적 데이터 허용 설정과 호출 예산을 함께 적용한다', async () => {
+  for (const name of ['gemini', 'clova']) {
+    let calls = 0;
+    const provider = createGenerationProviderFromEnv(
+      {
+        RAG_GENERATION_PROVIDER: name,
+        RAG_GEMINI_API_KEY: 'test-gemini',
+        RAG_CLOVA_API_KEY: 'test-clova',
+        [name === 'gemini'
+          ? 'RAG_GEMINI_ALLOW_PERSONAL_DATA'
+          : 'RAG_CLOVA_ALLOW_PERSONAL_DATA']: 'true',
+        RAG_GENERATION_DAILY_CALL_LIMIT: '1',
+      },
+      async () => {
+        calls++;
+        return Response.json({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  answer: '가상 안내',
+                  usedFactIds: [],
+                  usedSourceIds: [],
+                }),
+              },
+            },
+          ],
+        });
+      },
+    );
+    assert.equal(provider.personalDataApproved, true);
+    assert.equal(
+      (
+        await provider.generateGroundedAnswer(
+          { ...input, containsPersonalData: true },
+          callOptions,
+        )
+      ).ok,
+      true,
+    );
+    assert.equal(
+      (await provider.generateGroundedAnswer(input, callOptions)).ok,
+      false,
+    );
+    assert.equal(calls, 1);
+  }
+});

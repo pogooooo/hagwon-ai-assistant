@@ -9,6 +9,9 @@ export default defineConfig([
   prettier,
   globalIgnores([
     '.next/**',
+    '.local/**',
+    'deploy/cloudflare/.local/**',
+    'deploy/cloudflare/.wrangler/**',
     'out/**',
     'android/**',
     'ios/**',

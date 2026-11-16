@@ -202,6 +202,15 @@ export class GuardedGenerationProvider implements GenerationPort {
     options: { timeoutMs: number; now: number },
   ): Promise<GenerationResult> {
     const { now } = options;
+    const availability = this.availability(now);
+    if (availability !== 'available')
+      return {
+        ok: false,
+        error:
+          availability === 'quota_exhausted' || availability === 'rate_limited'
+            ? availability
+            : 'server_error',
+      };
     const day = new Date(now).toISOString().slice(0, 10);
     if (day !== this.callDay) {
       this.callDay = day;

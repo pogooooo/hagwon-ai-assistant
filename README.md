@@ -1,6 +1,6 @@
 # hagwon-ai-assistant
 
-Next.js App Router + TypeScript + Capacitor 기본 프로젝트입니다. 홈은 아무 콘텐츠도 렌더링하지 않는 흰 화면이며, 기능·예제 UI·샘플 데이터는 없습니다.
+학원 운영 서비스(Node.js·SQLite·RAG)와 Next.js·Capacitor 프로토타입을 포함합니다. 기본 실행은 통합 운영 서비스입니다.
 
 ## 시작
 
@@ -11,7 +11,11 @@ npm ci
 npm run dev
 ```
 
-[http://localhost:3000](http://localhost:3000)에서 확인합니다. 환경 변수 없이 실행되며, 나중에 필요하면 `.env.example`을 `.env.local`로 복사합니다.
+[http://127.0.0.1:8791](http://127.0.0.1:8791)에서 확인합니다. 가상 계정 `TA_DIRECTOR` / `axr-demo`를 사용합니다. `.env.example`을 `.env.local`로 복사해 Gemini 키·모델·포트를 설정할 수 있습니다. `.env.local`은 Git에서 제외됩니다.
+
+운영 경로·팀 결과 수신·AI 변경 방법·검증 결과는 [운영 서비스 안내](src/features/academy-operations/README.md)를 참조합니다. Next 프로토타입은 `npm run dev:prototype`으로 3000번 포트에서 실행합니다. `build`/`start`/Capacitor는 그 프로토타입 전용이며 운영 서버·DB를 정적 파일에 포함하지 않습니다.
+
+학원 운영 화면은 `npm run academy:dev`로 실행합니다. 접속 주소와 가상 계정은 [학원 운영 실행 안내](src/features/academy-operations/README.md)를 참고하세요.
 
 ## 준비한 라이브러리
 
@@ -52,7 +56,7 @@ public/         # 정적 파일
 
 | 명령어                     | 역할                                         |
 | -------------------------- | -------------------------------------------- |
-| `npm run dev`              | 개발 서버                                    |
+| `npm run dev`              | 통합 운영 서비스(기본 8791)                  |
 | `npm run build`            | `out/`에 정적 웹 빌드                        |
 | `npm start`                | 빌드한 `out/` 미리보기                       |
 | `npm run check`            | ESLint + 타입 + 포맷 검사                    |

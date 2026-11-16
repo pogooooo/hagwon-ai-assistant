@@ -1,0 +1,54 @@
+{
+  "assignmentId": "math-rubric-1",
+  "subject": "M",
+  "items": [
+    {
+      "itemId": "math-ex-01",
+      "page": 1,
+      "displayNumber": "1",
+      "text": "단, x ≠ 3일 때 (x² − 9)/(x − 3)을 간단히 하시오."
+    },
+    {
+      "itemId": "math-ex-02",
+      "page": 1,
+      "displayNumber": "2",
+      "text": "f(x) = x² − 9일 때 f(4)를 구하시오."
+    },
+    {
+      "itemId": "math-ex-03",
+      "page": 1,
+      "displayNumber": "3",
+      "text": "f(x) = 3x² − 2x일 때 f′(2)를 구하시오."
+    },
+    {
+      "itemId": "math-ex-04",
+      "page": 1,
+      "displayNumber": "4",
+      "text": "극한 lim(h→0) [f(2+h) − f(2)]/h가 미분가능한 함수 f의 어떤 값을 뜻하는지 기호로 쓰시오."
+    },
+    {
+      "itemId": "math-ex-05",
+      "page": 1,
+      "displayNumber": "5",
+      "text": "함수 y = f(x)의 그래프에 점 (2, 5)가 표시되어 있다. f(2)는 얼마인가?"
+    },
+    {
+      "itemId": "math-ex-06",
+      "page": 1,
+      "displayNumber": "6",
+      "text": "그래프에 표시된 (0, 1), (2, 5)를 지나는 직선의 식을 쓰시오."
+    },
+    {
+      "itemId": "math-ex-07",
+      "page": 1,
+      "displayNumber": "7",
+      "text": "f는 2에서 미분가능하다. lim(h→0) [f(2+h) − f(2)]/h를 f의 도함수 기호로 나타내시오."
+    },
+    {
+      "itemId": "math-ex-08",
+      "page": 1,
+      "displayNumber": "8",
+      "text": "f(x) = x²일 때 f′(2)를 계산하시오."
+    }
+  ]
+}

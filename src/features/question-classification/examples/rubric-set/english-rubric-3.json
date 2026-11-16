@@ -1,0 +1,66 @@
+{
+  "assignmentId": "english-rubric-3",
+  "subject": "E",
+  "items": [
+    {
+      "itemId": "english-ex-21",
+      "page": 1,
+      "displayNumber": "21",
+      "text": "① Bees carry pollen between flowers. ② My uncle collects stamps. ③ This helps plants produce seeds. 전체 흐름과 관계 없는 문장을 고르시오."
+    },
+    {
+      "itemId": "english-ex-22",
+      "page": 1,
+      "displayNumber": "22",
+      "text": "① Bees carry pollen between flowers. ② My uncle collects stamps. ③ This helps plants produce seeds. 벌이 꽃 사이로 옮기는 것은 무엇인가?"
+    },
+    {
+      "itemId": "english-ex-23",
+      "page": 1,
+      "displayNumber": "23",
+      "text": "Shoppers used fewer bags when stores charged for them. 윗글의 내용을 한 문장으로 요약할 때 빈칸에 들어갈 말을 고르시오. 요약문: A bag ___ reduced bag ___."
+    },
+    {
+      "itemId": "english-ex-24",
+      "page": 1,
+      "displayNumber": "24",
+      "text": "Shoppers used fewer bags when stores charged for them. 윗글의 제목으로 가장 적절한 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-25",
+      "page": 1,
+      "displayNumber": "25",
+      "text": "The box of pencils [is / are] on the desk. 괄호 안에서 알맞은 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-26",
+      "page": 1,
+      "displayNumber": "26",
+      "text": "The box is [empty / full]. There is nothing inside. 괄호 안에서 알맞은 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-27",
+      "page": 1,
+      "displayNumber": "27",
+      "text": "The path was narrow, so the hikers walked in single file. ‘narrow’와 뜻이 가장 가까운 말을 고르시오."
+    },
+    {
+      "itemId": "english-ex-28",
+      "page": 1,
+      "displayNumber": "28",
+      "text": "The path was narrow, so the hikers walked in single file. 등산객들은 어떤 대형으로 걸었는가?"
+    },
+    {
+      "itemId": "english-ex-29",
+      "page": 1,
+      "displayNumber": "29",
+      "text": "Lena put the keys in a drawer because she kept losing them. ‘them’이 가리키는 대상을 고르시오."
+    },
+    {
+      "itemId": "english-ex-30",
+      "page": 1,
+      "displayNumber": "30",
+      "text": "Lena [keep / keeps] losing the keys. 괄호 안에서 알맞은 것을 고르시오."
+    }
+  ]
+}
