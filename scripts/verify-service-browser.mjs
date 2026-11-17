@@ -73,7 +73,45 @@ await once(server, 'listening');
 const origin = 'http://127.0.0.1:' + server.address().port;
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const results = { pages: [], accessibility: [], interactions: [] };
+const responsive = process.argv.includes('--responsive');
+const widths = responsive
+  ? [1440, 1024, 820, 768, 390, 360, 320]
+  : [1440, 390, 360];
 try {
+  if (responsive) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 950 });
+      const response = await page.goto(origin + '/login');
+      results.pages.push({
+        role: 'login',
+        width,
+        href: '/login',
+        status: response.status(),
+        overflow: await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        errors: [],
+      });
+      if (width === 390) {
+        const audit = await new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
+          .analyze();
+        results.accessibility.push({
+          role: 'login',
+          href: '/login',
+          violations: audit.violations,
+        });
+      }
+      if ([390, 1440].includes(width))
+        await page.screenshot({
+          path: resolve(out, 'login-' + width + '.png'),
+          fullPage: true,
+        });
+    }
+    await context.close();
+  }
   for (const [account, role] of [
     ['TA_DIRECTOR', 'admin'],
     ['TA_TEACHER', 'teacher'],
@@ -97,7 +135,7 @@ try {
     const links = await page
       .locator('.sidebar .service-nav a')
       .evaluateAll((a) => a.map((x) => x.getAttribute('href')));
-    for (const width of [1440, 390, 360]) {
+    for (const width of widths) {
       await page.setViewportSize({ width, height: 950 });
       for (const href of links) {
         const response = await page.goto(origin + href);
@@ -171,6 +209,23 @@ try {
     });
     if (role === 'guardian') {
       await page.goto(origin + '/');
+      if (responsive) {
+        const schedule = page.locator('.home-primary');
+        const consultation = page.locator('.home-help');
+        assert.ok(
+          (await schedule.boundingBox()).y <
+            (await consultation.boundingBox()).y,
+        );
+        await page.locator('#home-question').focus();
+        assert.equal(await page.locator('.mobile-nav').isVisible(), false);
+        await page.locator('h1').click();
+        assert.equal(await page.locator('.mobile-nav').isVisible(), true);
+        results.interactions.push({
+          role,
+          check: 'mobile task order and input focus/navigation visibility',
+          pass: true,
+        });
+      }
       await page.locator('#home-question').fill('자습실 위치와 이용 시간은?');
       await Promise.all([
         page.waitForURL(/consultation\?q=/),
@@ -180,6 +235,25 @@ try {
         await page.locator('[name=question]').inputValue(),
         '자습실 위치와 이용 시간은?',
       );
+      if (responsive) {
+        await page.setViewportSize({ width: 320, height: 550 });
+        await page.locator('[name=question]').focus();
+        assert.equal(await page.locator('.mobile-nav').isVisible(), false);
+        await page.locator('[name=question]').fill('편집 가능한 질문');
+        assert.equal(
+          await page.locator('[name=question]').inputValue(),
+          '편집 가능한 질문',
+        );
+        await page.locator('h1').click();
+        await page.locator('.consultation-history-jump').click();
+        assert.ok(new URL(page.url()).hash === '#consultation-history');
+        await page.setViewportSize({ width: 320, height: 950 });
+        results.interactions.push({
+          role,
+          check: 'short viewport composer and conversation-list anchor',
+          pass: true,
+        });
+      }
       await page.locator('[data-question]').first().click();
       assert.equal(
         await page.locator('[name=question]').inputValue(),
