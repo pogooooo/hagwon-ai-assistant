@@ -254,7 +254,7 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · AXR</title><meta name="theme-color" content="#13664d"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=5"><link rel="stylesheet" href="/service-design.css?v=5"></head><body data-account="' +
+      ' · AXR</title><meta name="theme-color" content="#08775f"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=6"><link rel="stylesheet" href="/service-design.css?v=6"></head><body data-account="' +
       h(actor?.id ?? '') +
       '"><script src="/service-ui.js?v=5" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
@@ -289,7 +289,7 @@ export function createOperationsServer({
       ['보호자', 'TA_GUARDIAN_E_MATH'],
       ['방문자', 'TA_VISITOR'],
     ];
-    return `<section class="panel sign-in-form">
+    return `<div class="sign-in-layout"><aside class="sign-in-intro"><p class="login-eyebrow">AXR ACADEMY</p><h2>함께 배우고,<br><span>더 가까워지는 하루.</span></h2><p>수업 일정부터 학습 기록, 궁금한 이야기까지.<br>우리 학원의 하루를 한곳에서 만나세요.</p><div class="login-character" aria-hidden="true"><img src="/assets/walnut.png" alt=""><span>오늘도 반가워요!</span></div><div class="login-services"><span>수업 일정</span><span>학원 상담</span><span>학습 기록</span></div></aside><div class="sign-in-content"><section class="panel sign-in-form">
     <div class="sign-in-heading"><h1>학원 로그인</h1><p>학원에서 발급받은 계정으로 로그인하세요.</p></div>
     ${message ? `<p class="notice" role="alert">${h(message)}</p>` : ''}
     <form method="post" action="/login">
@@ -311,7 +311,7 @@ export function createOperationsServer({
       .join('')}</dl>
   </details>`
       : ''
-  }`;
+  }</div></div>`;
   }
 
   function sendPage(

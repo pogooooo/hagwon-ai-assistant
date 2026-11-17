@@ -792,7 +792,7 @@ function renderConsultation(ctx: PageContext) {
             ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
             : inbox || archive
               ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : ''}`
-              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>궁금한 일을 편하게 물어보세요.</h2><p>수업부터 학원 생활까지, 확인된 자료로 안내해 드려요.</p></div></div><div class="question-suggestions" aria-label="질문 예시">${['학원 위치와 주차 안내가 궁금해요.', '상담 가능한 시간과 신청 방법은?', '자습실 위치와 이용 시간 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">↗</span></button>`).join('')}</div>`
+              : `<div class="consultation-welcome"><div class="welcome-character"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""></div><div><p class="welcome-eyebrow">우리 학원의 상담 공간</p><h2>궁금한 일을<br>편하게 물어보세요.</h2><p>수업부터 학원 생활까지,<br>확인된 자료로 안내해 드려요.</p></div></div><div class="question-suggestions" aria-label="질문 예시">${['학원 위치와 주차 안내가 궁금해요.', '상담 가능한 시간과 신청 방법은?', '자습실 위치와 이용 시간 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">↗</span></button>`).join('')}</div>`
         }
         <div class="conversation-messages">${messages.map((message) => renderMessage(message, currentRevisions)).join('')}</div>
         ${
