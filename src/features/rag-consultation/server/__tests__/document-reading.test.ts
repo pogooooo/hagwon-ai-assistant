@@ -26,7 +26,10 @@ const catalog: AcademyCatalog = {
   classes: [],
   units: [],
 };
-async function setup(reply: (input: GenerationInput) => unknown) {
+async function setup(
+  reply: (input: GenerationInput) => unknown,
+  scope = access,
+) {
   const store = new InMemoryRagStore();
   const inputs: GenerationInput[] = [];
   const generation: GenerationPort = {
@@ -68,7 +71,7 @@ async function setup(reply: (input: GenerationInput) => unknown) {
       {
         store,
         catalog: { getAcademyCatalog: async () => catalog },
-        resolveScope: () => access,
+        resolveScope: () => scope,
       },
       {
         question,
@@ -122,6 +125,50 @@ test('a specialized parking shortcut must not consume the other compound require
     new Set(result.answer.citations.map((c) => c.documentId)),
     new Set(['address', 'parking']),
   );
+});
+
+test('guardian class membership does not turn public service timing into a class schedule', async () => {
+  const env = await setup(reading, {
+    ...access,
+    role: 'guardian',
+    allowedStudentIds: ['S'],
+    allowedClassIds: ['C'],
+    studentRefs: [
+      { studentId: 'S', displayLabel: '원생', aliases: [], classIds: ['C'] },
+    ],
+  });
+  await env.register(
+    'badge',
+    '## 출입증\n출입증 재발급은 행정실에서 신청하며 다음 영업일에 받습니다.',
+  );
+  const result = await env.ask('출입증 재발급은 어디서 하고 언제 받아요?');
+  assert.equal(result.answer.status, 'answered');
+  assert.match(result.answer.answer, /행정실/);
+  assert.match(result.answer.answer, /다음 영업일/);
+  assert.equal(env.inputs.length, 1);
+  assert.equal(env.inputs[0].containsPersonalData, false);
+});
+
+test('a return-policy word containing 반 is not an implicit class reference', async () => {
+  const env = await setup(reading, {
+    ...access,
+    role: 'guardian',
+    allowedStudentIds: ['S'],
+    allowedClassIds: ['C'],
+    studentRefs: [
+      { studentId: 'S', displayLabel: '원생', aliases: [], classIds: ['C'] },
+    ],
+  });
+  await env.register(
+    'library',
+    '## 도서 대여\n책은 2권까지 빌릴 수 있고 7일 안에 4층으로 반납합니다.',
+  );
+  const result = await env.ask('책은 몇 권 빌리고 언제 어디로 반납해요?');
+  assert.equal(result.answer.status, 'answered');
+  assert.match(result.answer.answer, /2권/);
+  assert.match(result.answer.answer, /7일/);
+  assert.match(result.answer.answer, /4층/);
+  assert.equal(env.inputs.length, 1);
 });
 for (const fault of [
   'omitted-request',
@@ -269,6 +316,48 @@ test('public rule tables retain row evidence while unrelated prose stays exclude
   assert.match(result.answer.answer, /70원/);
   assert.equal(result.answer.citations[0].documentId, 'rules');
   assert.ok(result.answer.citations[0].location);
+  assert.equal(env.inputs.length, 0);
+});
+
+test('an academy timetable cannot substitute for study-room evidence with the same hours', async () => {
+  const suite = loadSuite('v1-paraphrase-100');
+  const variant = VARIANTS['engine-planned'];
+  const prepared = await prepareSuite(suite, variant, { ocr: null });
+  const fixture = suite.cases.find((c) => c.id === 'MS-026')!;
+  let calls = 0;
+  const generation: GenerationPort = {
+    providerId: 'clova:HCX-007',
+    isExternal: true,
+    personalDataApproved: false,
+    availability: () => 'available',
+    generateGroundedAnswer: async (input) => {
+      calls++;
+      assert.ok(!input.sources.some((s) => /구분: 토요일.*시간:/.test(s.text)));
+      const source = input.sources.find((s) =>
+        s.text.includes('자습실 운영:'),
+      )!;
+      assert.ok(source);
+      const quote = source.text
+        .split('\n')
+        .find((s) => s.includes('자습실 운영:'))!;
+      return {
+        ok: true,
+        rawText: JSON.stringify({
+          question: input.question,
+          ambiguous: false,
+          items: input.requirements!.map((request) => ({
+            request,
+            complete: true,
+            quotes: [{ sourceId: source.sourceId, quote }],
+          })),
+        }),
+      };
+    },
+  };
+  const result = await runCase(prepared, variant, fixture, { generation });
+  assert.equal(result.correct, true, result.answer);
+  assert.equal(calls, 1);
+  assert.deepEqual(result.cited, ['GA_FACILITY:r1:body']);
 });
 
 test('an implicit student class cannot be widened to all public classes', async () => {

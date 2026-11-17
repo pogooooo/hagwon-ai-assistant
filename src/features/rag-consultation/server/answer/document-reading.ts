@@ -137,12 +137,9 @@ export async function answerPublicDocuments(
     question: ctx.question,
     limit: 24,
   });
-  const classNames = ctx.catalog.classes
-    .flatMap((c) => [c.name, ...c.aliases])
-    .filter((n) => n.length >= 3)
-    .map((n) => n.replace(/\s/g, ''));
-  // Public prose can mention classes (e.g. event eligibility). Class/student
-  // table axes remain with scoped engines; class-specific queries never enter.
+  // A generic reader must not turn an unrelated table's matching time/price
+  // into evidence for a different subject. Tables use the existing row/column
+  // engines, including common rule tables. Public prose can mention classes.
   const candidates = [
     ...(candidate?.citations.flatMap((c) =>
       c.kind === 'chunk' ? [c.chunk] : [],
@@ -159,17 +156,7 @@ export async function answerPublicDocuments(
         !c.suspicious &&
         !c.extraction?.needsReview &&
         !c.extraction?.uncertainTokens.length &&
-        !(
-          c.location.kind === 'table_row' &&
-          (c.location.header?.length ?? 0) > 2
-        ) &&
-        !(
-          c.location.kind === 'table_row' &&
-          classNames.some((n) => c.text.replace(/\s/g, '').includes(n))
-        ) &&
-        !c.location.header?.some((h) =>
-          /^(?:반|반명|학년|학생|원생|교시|과목|강사)$/.test(h.trim()),
-        ),
+        c.location.kind !== 'table_row',
     )
     .slice(0, 16);
   ctx.trace.retrievedChunkIds.push(...chunks.map((c) => c.chunkId));

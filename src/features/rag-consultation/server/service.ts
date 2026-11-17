@@ -1575,8 +1575,10 @@ export function createRagConsultationService(
               ) &&
               !(
                 ctx.studentClassIds.length &&
-                (frame.topics.some((t) => t.kind === 'structured') ||
-                  /수업|반|강사|선생/.test(question))
+                (frame.subjects.length > 0 ||
+                  /수업|강사|선생|(?:^|\s)(?:(?:우리|저희)\s*)?반(?:$|\s|[은는이가을를의에])/.test(
+                    question,
+                  ))
               ) &&
               isPublicDocumentQuestion(frame);
             if (plan.requests.length > 1) {
