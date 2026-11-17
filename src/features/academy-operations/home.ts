@@ -65,14 +65,6 @@ function schedulePanel(ctx: PageContext, from: string) {
   );
 }
 
-function consultationCard(ctx: PageContext) {
-  return `<section class="panel consultation-shortcut">
-    <img src="/assets/${selectedCharacter(ctx)}.png" alt="">
-    <div><h2>학원 상담</h2><p>수업 일정이나 학원 생활에 대해 질문해 보세요.</p></div>
-    <a class="button-link" href="/consultation">새 상담</a>
-  </section>`;
-}
-
 export function renderHome(ctx: PageContext) {
   const { actor } = ctx;
   const staff = actor.role === 'admin' || actor.role === 'teacher';
@@ -88,11 +80,11 @@ export function renderHome(ctx: PageContext) {
   const today = new Date(now.getTime() + 9 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
-  const heading = `<div class="workspace-heading dashboard-heading"><div><p class="eyebrow">${staff ? '오늘의 운영' : '나의 학원 생활'}</p><h1>${h(actor.name)}님, 안녕하세요.</h1><time datetime="${today}">${h(date)}</time></div>${
+  const heading = `<div class="workspace-heading dashboard-heading"><div><h1>${staff ? '학원 현황' : '나의 학원'}</h1><p class="home-account">${h(actor.name)}님</p></div><div class="home-heading-tools"><time datetime="${today}">${h(date)}</time>${
     staff
       ? `<div class="actions">${actor.role === 'admin' ? '<a class="button-link subtle-link" href="/documents?view=create#document-edit">자료 등록</a>' : ''}<a class="button-link" href="/schedule?view=makeup">휴·보강 관리</a></div>`
       : ''
-  }</div>`;
+  }</div></div>`;
   const { pending, recent } = consultationOverview(ctx);
   const homework = visitor ? undefined : homeworkOverview(ctx);
   const agenda = visitor ? '' : schedulePanel(ctx, today);
@@ -136,18 +128,18 @@ export function renderHome(ctx: PageContext) {
         `<a href="${href}">${serviceIcon(href)}<span>${label}</span></a>`,
     )
     .join('')}</nav>`;
-  const search = `<section class="home-search" aria-label="학원에 물어보기"><div class="home-search-copy"><p class="hero-eyebrow"><span aria-hidden="true"></span>우리 학원과 더 가까이</p><h2>궁금한 순간,<br><strong>편하게 물어보세요.</strong></h2><form action="/consultation" method="get"><label class="visually-hidden" for="home-question">상담할 질문</label><input id="home-question" name="q" maxlength="500" required placeholder="학원에 궁금한 내용을 물어보세요" autocomplete="off"><button aria-label="상담 시작"><span>질문하기</span><span aria-hidden="true">↗</span></button></form><p class="hero-note">학원에서 확인한 자료를 바탕으로 안내해 드려요.</p></div><div class="home-search-art" aria-hidden="true"><span class="hero-bubble">함께 알아볼까요?</span><div class="character-stage"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""></div><span class="hero-orbit hero-orbit-chat">${serviceIcon('/consultation')}</span><span class="hero-orbit hero-orbit-calendar">${serviceIcon('/schedule')}</span></div></section>${shortcuts}`;
+  const search = `<section class="home-search" aria-label="학원에 물어보기"><div class="home-search-heading"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>학원에 물어보기</h2><p>궁금한 내용을 남겨 주세요.</p></div></div><form action="/consultation" method="get"><label class="visually-hidden" for="home-question">상담할 질문</label><input id="home-question" name="q" maxlength="500" required placeholder="질문을 입력해 주세요" autocomplete="off"><button aria-label="상담 시작"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button></form><a class="home-consultation-link" href="/consultation">이전 상담 보기 <span aria-hidden="true">›</span></a></section>`;
   if (staff && homework) {
-    return `${heading}${search}
+    return `${heading}
       <section class="work-queue" aria-labelledby="work-queue-title">
-        <h2 id="work-queue-title">처리할 업무</h2>
+        <h2 id="work-queue-title" class="visually-hidden">처리할 업무</h2>
         <div class="queue-grid">
-          <a href="/consultation?view=inbox"><span class="queue-label">${serviceIcon('/consultation')}처리 중인 상담</span><strong>${pending.length}<small>건</small></strong><span aria-hidden="true">↗</span></a>
-          <a href="/homework?view=review"><span class="queue-label">${serviceIcon('/homework')}확인할 제출물</span><strong>${homework.review.length}<small>건</small></strong><span aria-hidden="true">↗</span></a>
+          <a href="/consultation?view=inbox"><span class="queue-label">처리 중인 상담</span><strong>${pending.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
+          <a href="/homework?view=review"><span class="queue-label">확인할 제출물</span><strong>${homework.review.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
         </div>
       </section>
-      <div class="dashboard-grid">
-        <div>${panel(
+      ${shortcuts}<div class="home-columns">
+        <div class="home-primary">${agenda}${panel(
           '상담 요청',
           '/consultation?view=inbox',
           pending.slice(0, 4).map(({ id, title, label }) => ({
@@ -179,7 +171,8 @@ export function renderHome(ctx: PageContext) {
             ),
           '확인할 제출물이 없습니다.',
         )}</div>
-        <div>${agenda}${documentList()}</div>
+        <div class="home-help">${search}</div>
+        <div class="home-secondary">${documentList()}${recentConsultations()}</div>
       </div>`;
   }
 
@@ -220,10 +213,9 @@ export function renderHome(ctx: PageContext) {
         })),
         '확정된 학습 기록이 없습니다.',
       );
-  return `${heading}${search}<div class="dashboard-grid family-dashboard">
-    <div class="dashboard-agenda">${agenda || documentList()}</div>
-    <div class="dashboard-chat">${consultationCard(ctx)}</div>
-    ${visitor ? '' : `<div class="dashboard-records">${homeworkPanel || ''}${learning}${documentList()}</div>`}
-    <div class="dashboard-history">${recentConsultations()}</div>
+  return `${heading}${shortcuts}<div class="home-columns">
+    <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
+    <div class="home-help">${search}</div>
+    <div class="home-secondary">${visitor ? '' : documentList()}${recentConsultations()}</div>
   </div>`;
 }
