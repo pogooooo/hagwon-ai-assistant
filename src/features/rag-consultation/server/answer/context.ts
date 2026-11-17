@@ -72,9 +72,6 @@ export interface CitationWitness {
 }
 
 export interface AnswerDraft {
-  /** Generic public prose selection needs semantic reading when available.
-   * Scoped domain decisions and identity/security decisions do not. */
-  documentReadingCandidate?: boolean;
   excerpts?: EvidenceExcerpt[];
   status: RagAnswerStatus;
   text: string;

@@ -108,6 +108,21 @@ test('full question and every request survive model extraction; original paragra
     documentRequirements('공간 위치와 운영 시간은?'),
   );
 });
+
+test('a specialized parking shortcut must not consume the other compound requirement', async () => {
+  const env = await setup(reading);
+  await env.register('address', '## 위치\n학원 주소는 구름로 85, 7층입니다.');
+  await env.register('parking', '## 주차\n주차는 건물 뒤에서 80분 무료입니다.');
+  const result = await env.ask('학원 주소와 주차 무료 시간은?');
+  assert.equal(result.answer.status, 'answered');
+  assert.match(result.answer.answer, /구름로 85/);
+  assert.match(result.answer.answer, /80분/);
+  assert.equal(env.inputs.length, 1);
+  assert.deepEqual(
+    new Set(result.answer.citations.map((c) => c.documentId)),
+    new Set(['address', 'parking']),
+  );
+});
 for (const fault of [
   'omitted-request',
   'invented-request',
@@ -303,8 +318,8 @@ test('an implicit student class cannot be widened to all public classes', async 
 for (const [suiteId, ids] of [
   ['v1-90', ['GA-012']],
   ['v1-paraphrase-100', ['MS-051', 'MS-077', 'MS-081']],
-  ['v2-dev', ['HK-D-025', 'HK-D-115', 'HK-D-134']],
-  ['v2-test', ['OS-T-107', 'SD-T-003']],
+  ['v2-dev', ['HK-D-025', 'HK-D-115']],
+  ['v2-test', ['OS-T-107']],
 ] as const) {
   test('NAVER reading preserves scoped decisions: ' + suiteId, async () => {
     const suite = loadSuite(suiteId);

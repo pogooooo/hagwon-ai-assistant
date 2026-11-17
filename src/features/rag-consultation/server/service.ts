@@ -907,22 +907,6 @@ export function createRagConsultationService(
     ctx: AnswerContext,
     studentIdHint: string | undefined,
   ): Promise<AnswerDraft> {
-    const draft = await routeInfoCandidate(ctx, studentIdHint);
-    return {
-      ...draft,
-      documentReadingCandidate:
-        ctx.trace.intent !== 'teacher_personal_contact' &&
-        (draft.status === 'answered' ||
-          draft.status === 'partial' ||
-          (draft.status === 'abstained' &&
-            draft.reasonCode === 'INSUFFICIENT_EVIDENCE')),
-    };
-  }
-
-  async function routeInfoCandidate(
-    ctx: AnswerContext,
-    studentIdHint: string | undefined,
-  ): Promise<AnswerDraft> {
     const { frame, access } = ctx;
     if (frame.unknownPrograms.length > 0) return answerInfo(ctx);
     // 자녀가 둘 이상인 보호자가 "우리 애"처럼 한 명을 가리키며 반마다 다른 정보를 물으면 누구인지 먼저 확인한다.
@@ -1586,6 +1570,10 @@ export function createRagConsultationService(
               deps.generation.providerId.startsWith('clova:') &&
               !input.studentIdHint &&
               !(
+                namedTeacher(frame.normalized) &&
+                frame.topics.some((t) => t.id === 'contact')
+              ) &&
+              !(
                 ctx.studentClassIds.length &&
                 (frame.topics.some((t) => t.kind === 'structured') ||
                   /수업|반|강사|선생/.test(question))
@@ -1674,9 +1662,6 @@ export function createRagConsultationService(
                 drafts,
                 plan.requests.map((request) => request.question),
               );
-              draft.documentReadingCandidate = drafts.some(
-                (part) => part.documentReadingCandidate,
-              );
             } else {
               ctx.plannedRequest = plan.requests[0];
               const proposal = await propose(ctx);
@@ -1703,8 +1688,11 @@ export function createRagConsultationService(
               );
             if (
               publicReading &&
-              draft.documentReadingCandidate &&
-              ['answered', 'partial', 'abstained'].includes(draft.status) &&
+              trace.intent !== 'teacher_personal_contact' &&
+              (draft.status === 'answered' ||
+                draft.status === 'partial' ||
+                (draft.status === 'abstained' &&
+                  draft.reasonCode === 'INSUFFICIENT_EVIDENCE')) &&
               !bound &&
               trace.generationCalls === 0
             )

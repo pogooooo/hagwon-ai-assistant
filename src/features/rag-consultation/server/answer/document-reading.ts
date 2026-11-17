@@ -95,7 +95,6 @@ export function isPublicDocumentQuestion(frame: QueryFrame): boolean {
     !frame.groupReference &&
     !frame.anaphora &&
     !frame.hasAnalysisTerms &&
-    !frame.topics.some((t) => t.id === 'shuttle') &&
     !frame.unknownPrograms.length &&
     !frame.unboundProgram &&
     frame.explicitDates.length === 0 &&
