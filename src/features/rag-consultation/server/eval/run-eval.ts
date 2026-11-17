@@ -14,6 +14,7 @@
  * --automated-holdout: 사람 검수 없는 외부 합성 평가. v4와 --reject-known-overlap이 필수다.
  * --contract-state: v4의 근거 검사에 abstained 응답의 공개 API 계약을 적용하는 slot-v4.1로 채점한다.
  * --generation gemini | gemini-synthetic: 명시적으로 외부 공급자 사용. --max-live-calls, --out 필수.
+ * --variant clova-supervisor,rules-clova-fallback,clova-hybrid,clova-rerank,clova-rerank-gate / --clova-scan: synthetic CLOVA experiments. Explicit --out required.
  * --reject-known-overlap: 외부 평가에서 기존 학원 ID, 문항 ID 또는 문서가 일치하면 실행을 중단한다.
  * 기본 out = src/features/rag-consultation/server/__fixtures__/eval-results
  */
@@ -48,6 +49,11 @@ import {
 } from './holdout-review.ts';
 import { VARIANTS } from './variants.ts';
 import { createEvalGemini } from './live-generation.ts';
+import { createClovaApi } from '../generation/clova-api.ts';
+import { createClovaScanVision } from '../ingest/parsers/clova-vision.ts';
+import { createClovaSearch } from './clova-search.ts';
+import { selectClovaTool } from './clova-supervisor.ts';
+import type { SupervisorSelector } from '../service.ts';
 
 const args = process.argv.slice(2);
 const option = (name: string, fallback?: string) => {
@@ -147,6 +153,34 @@ const suites = holdoutRoot
 const variantIds = (
   option('variant') ?? (holdoutRoot ? 'engine-planned' : 'engine')
 ).split(',');
+const clovaSearchModes = {
+  'clova-hybrid': 'hybrid',
+  'clova-rerank': 'rerank',
+  'clova-rerank-gate': 'gate',
+} as const;
+const clovaScan = args.includes('--clova-scan');
+const useClova =
+  clovaScan ||
+  variantIds.some(
+    (id) => VARIANTS[id]?.supervisor || Object.hasOwn(clovaSearchModes, id),
+  );
+if (
+  useClova &&
+  ((holdoutOption && !automatedHoldout) ||
+    liveMode ||
+    !option('out') ||
+    option('out')?.startsWith('--'))
+)
+  throw new Error(
+    'CLOVA experiments require synthetic inputs (repository or --automated-holdout), mock generation mode and explicit --out',
+  );
+if (clovaScan && args.includes('--no-ocr'))
+  throw new Error('Select either --clova-scan or --no-ocr');
+const clova = useClova
+  ? createClovaApi(process.env.RAG_CLOVA_API_KEY ?? '')
+  : undefined;
+const scanVision =
+  clovaScan && clova ? createClovaScanVision(clova) : undefined;
 if (liveMode && variantIds.some((id) => VARIANTS[id]?.kind !== 'engine'))
   throw new Error('Gemini evaluation requires engine variants');
 const label = option('label') ?? 'latest';
@@ -195,6 +229,16 @@ const frozen =
         goldSha256: sha256(goldBytes),
         engineSha256: codeDigest(),
         generation: generationMode,
+        ...(clova
+          ? {
+              clovaScan,
+              clovaVariants: variantIds.filter(
+                (id) =>
+                  VARIANTS[id]?.supervisor ||
+                  Object.hasOwn(clovaSearchModes, id),
+              ),
+            }
+          : {}),
         scoring: slotVersion,
       }
     : undefined;
@@ -304,26 +348,46 @@ const syntheticAcademies = new Set([
 for (const suiteName of suites) {
   const suite = externalSuite ?? loadSuite(suiteName);
   if (
-    generationMode === 'gemini-synthetic' &&
+    (generationMode === 'gemini-synthetic' || (clova && !externalSuite)) &&
     (!suite.cases.length ||
       suite.dataset.academies.some(
         ({ academy_id }) => !syntheticAcademies.has(academy_id),
       ))
   )
     throw new Error(
-      'gemini-synthetic only accepts repository synthetic academies',
+      'The selected provider only accepts repository synthetic academies',
     );
   for (const variantId of variantIds) {
-    const variant: Variant | undefined = VARIANTS[variantId];
+    const mode = Object.hasOwn(clovaSearchModes, variantId)
+      ? clovaSearchModes[variantId as keyof typeof clovaSearchModes]
+      : undefined;
+    const experiment = Boolean(mode || VARIANTS[variantId]?.supervisor);
+    const variant: Variant | undefined =
+      mode && clova
+        ? {
+            id: variantId,
+            kind: 'engine',
+            engine: 'planned',
+            ranker: () =>
+              createClovaSearch(
+                clova,
+                join(outRoot, '.clova-embedding-v2'),
+                mode,
+              ),
+          }
+        : VARIANTS[variantId];
+    const beforeIndex = clova?.usage();
     if (!variant) throw new Error(`unknown variant ${variantId}`);
     const memoryBefore = process.memoryUsage().rss;
     const buildStarted = performance.now();
     const prepared = await prepareSuite(
       suite,
       variant,
-      noOcr ? { ocr: null } : {},
+      scanVision ? { vision: scanVision } : noOcr ? { ocr: null } : {},
     );
     const buildMs = performance.now() - buildStarted;
+    const indexingRequests =
+      (clova?.usage().requests ?? 0) - (beforeIndex?.requests ?? 0);
     const cpuBefore = process.cpuUsage();
     let peakRss = process.memoryUsage().rss;
     const results: CaseResult[] = [];
@@ -337,18 +401,28 @@ for (const suiteName of suites) {
     }> = [];
     for (const c of suite.cases) {
       const gold = goldByCase?.get(c.id);
-      if (gold && variant.kind !== 'engine')
-        throw new Error(
-          'Slot scoring requires an engine variant for annotated cases',
-        );
       const requestsBefore = live?.report().liveRequests ?? 0;
+      let beforeQuestion = clova?.usage();
+      const tools: string[] = [];
+      let selector: SupervisorSelector | undefined;
       const result = await runCase(
         prepared,
         variant,
         c,
-        gold || live
+        gold || live || experiment
           ? {
               generation: live?.provider,
+              supervisor: variant.supervisor
+                ? (ctx) => {
+                    if (!selector) throw new Error('Supervisor unavailable');
+                    return selector(ctx);
+                  }
+                : undefined,
+              beginMeasuredQuestion() {
+                beforeQuestion = clova?.usage();
+                if (variant.supervisor && clova)
+                  selector = selectClovaTool(clova, (name) => tools.push(name));
+              },
               captureWitnesses: Boolean(gold && strict),
               observe: gold
                 ? (observation) => {
@@ -370,6 +444,15 @@ for (const suiteName of suites) {
         result.liveRequests = live.report().liveRequests - requestsBefore;
         result.generationMode =
           c.apiState === 'ok' ? generationMode : 'simulated_failure';
+      }
+      if (clova && beforeQuestion) {
+        const after = clova.usage();
+        result.clova = {
+          requests: after.requests - beforeQuestion.requests,
+          tokens: after.tokens - beforeQuestion.tokens,
+          unreported: after.unreported - beforeQuestion.unreported,
+          tools,
+        };
       }
       results.push(result);
       peakRss = Math.max(peakRss, process.memoryUsage().rss);
@@ -413,6 +496,30 @@ for (const suiteName of suites) {
       suite: suiteName,
       variant: variantId,
       ...stats,
+      ...(clova
+        ? {
+            clova: {
+              indexingRequests,
+              casesWithModelCall: results.filter((r) => r.clova?.requests)
+                .length,
+              modelRequests: results.reduce(
+                (sum, r) => sum + (r.clova?.requests ?? 0),
+                0,
+              ),
+              modelCallRate:
+                results.filter((r) => r.clova?.requests).length /
+                results.length,
+              tokensPerQuestion: results.some((r) => r.clova?.unreported)
+                ? null
+                : results.reduce((sum, r) => sum + (r.clova?.tokens ?? 0), 0) /
+                  results.length,
+              requestsWithoutUsage: results.reduce(
+                (sum, r) => sum + (r.clova?.unreported ?? 0),
+                0,
+              ),
+            },
+          }
+        : {}),
       ...(live
         ? {
             generation: {

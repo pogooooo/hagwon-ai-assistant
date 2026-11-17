@@ -18,6 +18,7 @@ import {
   type Visibility,
 } from '../rag-consultation/server/index.ts';
 import { prepareFileDocument } from '../rag-consultation/server/ingest/ingest-file.ts';
+import { scanReviewMarker } from '../rag-consultation/server/ingest/parsers/clova-vision.ts';
 import { DEFAULT_PARSE_LIMITS } from '../rag-consultation/server/ingest/parsers/types.ts';
 import { validateDocument } from '../rag-consultation/server/ingest/validation.ts';
 import { canReadRecord } from '../rag-consultation/server/retrieval/access-filter.ts';
@@ -500,7 +501,7 @@ function revisionForm(ctx: PageContext, previous?: SourceDocumentInput) {
   const students = accessibleStudents(ctx.db, ctx.actor);
   return `<section class="panel" id="document-edit">
     <h2>${previous ? '새 개정판 작성' : '자료 등록'}</h2>
-    <form method="post" action="/documents" enctype="multipart/form-data">
+    <form method="post" action="/documents" enctype="multipart/form-data" data-document-upload>
       <input type="hidden" name="action" value="save">
       ${
         previous
@@ -516,15 +517,28 @@ function revisionForm(ctx: PageContext, previous?: SourceDocumentInput) {
         <label>대상 학생 <select name="studentId">${targetOptions(students, previous?.studentId)}</select></label>
         <label>적용 시작 (한국시간) <input type="datetime-local" name="validFrom" value="${h(localDateTime(previous?.validFrom))}"></label>
         <label>적용 종료 (한국시간) <input type="datetime-local" name="validTo" value="${h(localDateTime(previous?.validTo))}"></label>
-        <label>파일 <input type="file" name="file" accept=".pdf,.docx,.hwpx,.txt,.md,.markdown"></label>
+        <label>파일 <input type="file" name="file" accept=".pdf,.docx,.hwpx,.txt,.md,.markdown${ctx.scanVision ? ',.png,.jpg,.jpeg' : ''}"></label>
       </div>
       <label>직접 입력 또는 추출 내용 수정
         <textarea name="text" rows="7" maxlength="${DEFAULT_RAG_CONFIG.maxDocumentChars}">${h(previous?.text)}</textarea>
       </label>
       <p class="muted">파일을 선택하면 파일의 텍스트를 읽습니다. 파일 없이 내용만 입력할 수도 있습니다.</p>
+      ${ctx.scanVision ? '<label class="check-label"><input type="checkbox" name="clovaScan" value="1">개인정보가 없는 스캔 또는 사진의 CLOVA 판독에 동의합니다.</label>' : ''}
       <button type="submit">검수 대기로 저장</button>
+      <p role="status" data-document-progress hidden>파일을 판독하고 있습니다. 완료되면 검수 화면이 열립니다.</p>
     </form>
   </section>`;
+}
+
+function hasScanReview(input: SourceDocumentInput) {
+  return (
+    input.text.includes(scanReviewMarker) ||
+    Boolean(
+      input.extraction?.warnings?.some((warning) =>
+        warning.startsWith('vision_review:'),
+      ),
+    )
+  );
 }
 
 async function renderDocuments(ctx: PageContext) {
@@ -595,6 +609,7 @@ async function renderDocuments(ctx: PageContext) {
   );
   return `<div class="workspace-heading"><h1>학원 자료</h1>${admin ? '<a class="button-link" href="/documents?view=create#document-edit">자료 등록</a>' : ''}</div>
     ${create ? revisionForm(ctx) : ''}
+    ${admin && selected?.state === 'draft' && ctx.url.searchParams.get('scan') === 'ready' ? '<p class="notice" role="status">판독을 완료했습니다. 내용을 검수해 주세요.</p>' : ''}
     ${scheduleDocs.length ? `<section class="panel"><h2>일정에서 자동 반영된 자료</h2><p class="muted">원본 일정에서 관리합니다. 수업 시간·휴강·보강 상담은 이 자료를 기준으로 답합니다.</p>${scheduleDocs.map((d) => `<details><summary>${h(d.title)} · v${d.revision}</summary><pre class="preview">${h(d.text)}</pre><a href="/schedule?view=makeup">원본 일정 보기</a></details>`).join('')}</section>` : ''}
     <section class="panel">
       <h2>자료 목록</h2><form class="document-filters" method="get"><label>자료 검색<input name="q" value="${h(search)}" maxlength="200" placeholder="제목 또는 본문"></label><label>분류<select name="category"><option value="">전체 분류</option>${Object.entries(
@@ -614,6 +629,7 @@ async function renderDocuments(ctx: PageContext) {
         ? `<section class="panel">
       <h2>${h(selected.input.title)} · v${selected.input.revision}</h2>
       ${selected.input.extraction?.warnings?.length ? `<p class="notice">검수 항목 ${h(selected.input.extraction.warnings.join(', '))}</p>` : ''}
+      ${admin && selected.state === 'draft' && hasScanReview(selected.input) ? '<p class="notice">판독이 일치하지 않은 위치를 원본에서 확인하고 새 개정판의 본문을 수정해 주세요.</p>' : ''}
       <pre class="preview">${h(selected.input.text)}</pre>${canPreview ? `<details class="panel" ${question ? 'open' : ''}><summary>이 자료로 답변 미리보기</summary><form method="get"><input type="hidden" name="id" value="${h(selected.input.documentId)}"><input type="hidden" name="revision" value="${selected.input.revision}"><label>질문<input name="previewQuestion" maxlength="500" required value="${h(question)}"></label><button>근거 확인</button></form>${preview}</details>` : ''}
       <div class="actions">
         <a href="/documents/download?${link(selected.input)}">확인한 텍스트 내려받기</a>
@@ -624,7 +640,7 @@ async function renderDocuments(ctx: PageContext) {
           ? `<form class="actions" method="post">
         <input type="hidden" name="documentId" value="${h(selected.input.documentId)}">
         <input type="hidden" name="revision" value="${selected.input.revision}">
-        ${selected.state === 'draft' ? '<button name="action" value="approve">내용 검수 후 승인</button>' : ''}
+        ${selected.state === 'draft' && !hasScanReview(selected.input) ? '<button name="action" value="approve">내용 검수 후 승인</button>' : ''}
         <button class="secondary" name="action" value="withdraw">${selected.state === 'draft' ? '초안 철회' : '자료 공개 철회'}</button>
       </form>`
           : ''
@@ -696,6 +712,12 @@ async function approveDocument(ctx: PageContext, version: DocumentVersion) {
     throw new OperationError('최신 검수 대기 개정판을 선택해 주세요.', 409);
   }
   checkDraft();
+  if (hasScanReview(version.input)) {
+    throw new OperationError(
+      '판독이 일치하지 않은 부분은 원본을 확인하고 새 개정판에서 수정해 주세요.',
+      422,
+    );
+  }
   const publishedRevision = latestPublishedRevision(
     db,
     actor.academyId,
@@ -841,17 +863,53 @@ async function submitDocument(ctx: PageContext, form: FormData) {
         required(form, 'text', '내용', DEFAULT_RAG_CONFIG.maxDocumentChars),
         'utf8',
       );
-  const prepared = await prepareFileDocument(
-    meta,
-    { bytes, fileName: original?.name ?? '직접입력.md' },
-    { ocr: null },
-  );
+  const vision =
+    original &&
+    field(form, 'clovaScan') === '1' &&
+    visibility === 'academy_public' &&
+    documentType !== 'student_analysis'
+      ? ctx.scanVision
+      : undefined;
+  if (original && field(form, 'clovaScan') === '1' && !vision)
+    throw new OperationError(
+      'CLOVA 판독은 학원 공개 자료에 사용할 수 있습니다.',
+      422,
+    );
+  let prepared: Awaited<ReturnType<typeof prepareFileDocument>>;
+  try {
+    prepared = await prepareFileDocument(
+      meta,
+      { bytes, fileName: original?.name ?? '직접입력.md' },
+      {
+        ocr: null,
+        vision: vision && {
+          id: vision.id,
+          readPage(bytes, page) {
+            ctx.assertCurrentAccess?.();
+            return vision.readPage(bytes, page);
+          },
+        },
+        limits: vision ? { maxOcrPages: 3 } : undefined,
+      },
+    );
+  } catch (error) {
+    if (!vision || error instanceof OperationError) throw error;
+    throw new OperationError(
+      '파일을 자동으로 판독하지 못했습니다. 다시 시도하거나 원본을 확인한 뒤 본문을 직접 입력해 주세요.',
+      422,
+    );
+  }
   if (!prepared.document) {
     throw new OperationError(
       '텍스트를 읽을 수 없습니다. 텍스트가 포함된 파일을 올리거나 확인한 내용을 입력해 주세요.',
     );
   }
   const input = prepared.document;
+  if (!original && input.text.includes(scanReviewMarker))
+    throw new OperationError(
+      '판독 확인 표시를 원본에서 확인한 내용으로 바꿔 주세요.',
+      422,
+    );
   if (!validateDocument(input, [], DEFAULT_RAG_CONFIG).ok) {
     throw new OperationError(
       '자료 내용, 공개 범위와 적용 기간을 확인해 주세요.',
@@ -881,6 +939,8 @@ async function submitDocument(ctx: PageContext, form: FormData) {
       original ? bytes : null,
     );
   });
+  if (vision && prepared.parsed.stats.ocrPages)
+    return `/documents?id=${encodeURIComponent(meta.documentId)}&revision=${meta.revision}&scan=ready`;
 }
 
 export const documentsModule: OperationModule = {

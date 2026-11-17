@@ -433,6 +433,7 @@ function parseCacheDir(): string {
 export interface BuildStoreOptions {
   /** OCR 엔진(없으면 필요할 때 tesseract.js). null 이면 OCR 끔 */
   ocr?: OcrEngine | null;
+  vision?: import('../../ingest/parsers/types.ts').ScanVision;
   /** 파싱 결과 캐시 사용(기본 true) */
   cache?: boolean;
   /** 문서별 파싱 결과를 받는다(파싱 정확도 보고용) */
@@ -452,8 +453,9 @@ async function documentInput(
   const base = toAcademyDocumentInput(document);
   if (!document.source) return base;
   const bytes = new Uint8Array(readFileSync(document.source.path));
-  const ocrMode =
-    options.ocr === undefined
+  const ocrMode = options.vision
+    ? options.vision.id
+    : options.ocr === undefined
       ? 'auto:tesseract.js:kor+eng'
       : options.ocr === null
         ? 'disabled'
@@ -477,7 +479,7 @@ async function documentInput(
   const prepared = await prepareFileDocument(
     meta,
     { bytes, fileName: document.source.fileName },
-    { ocr: options.ocr },
+    { ocr: options.ocr, vision: options.vision },
   );
   options.onParsed?.(document, prepared.parsed, false);
   // 일시적 OCR 장애·빈 결과를 저장해 다음 실행의 복구를 막지 않는다.

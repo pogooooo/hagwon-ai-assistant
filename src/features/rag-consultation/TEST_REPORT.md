@@ -1405,3 +1405,42 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON $runner --automated-holdout 
 공개 고정 7세트의 문항별 정오가 기본·계획 모드 모두 이전과 일치했습니다. 계획 모드는 공개 384/393, 개발 152/153, 기존 90/90, 구어체 100/100, 합성 300/300, 슬롯 v2 240/240입니다. 코드 검사 명령 `npm test`의 검사 항목 540건은 기본·계획 모드에서 각각 통과했습니다. 정적 검사와 빌드도 통과했습니다.
 
 첫 실행 결과와 입력은 로컬 `.git/rag-validation/automated-holdout/seed-7/`에 있습니다. `frozen.json`에 사전 해시, `inputs/`에 원본과 문항, `gold-v4.json`에 고정 정답, `runs/seed-7-first-pass/`에 JSON·CSV와 판정이 있습니다. 세트 5의 재검증과 원본 판독 비교는 같은 상위 폴더에 있습니다. [기술 비교](RAG_TECHNIQUES.md)
+
+## 기술 보강 SRS 회귀 및 CLOVA 실험
+
+### 질문 처리 구성
+
+공개 합성 300문항은 `v2-AC_ARCH_1`부터 `v2-AC_ARCH_3`까지 합산했습니다. 표현 변형 100문항은 `v1-paraphrase-100`입니다. 각 세트의 문항과 기존 v1 채점기를 그대로 사용했습니다. 근거 적중률은 정답 출처가 있는 문항 중 하나 이상을 검색한 비율입니다. 응답 시간은 로컬에서 측정한 p50/p95입니다. 검색 1위 반환과 계획 엔진의 외부 모델 호출 및 외부 토큰 사용은 모두 0입니다.
+
+| 구성                            | 공개 합성 300 정답 | 표현 변형 100 정답 | 근거 적중률 (300 / 100) | 응답 ms p50/p95 (300 / 100) |   위반 |
+| ------------------------------- | -----------------: | -----------------: | ----------------------- | --------------------------- | -----: |
+| BM25 검색 1위 반환              |             75/300 |             12/100 | 100% / 82.4%            | 0.2/0.4 / 2.6/4.9           |      0 |
+| 계획 엔진                       |            300/300 |            100/100 | 100% / 100%             | 1.8/5.8 / 3.7/13.3          |      0 |
+| HCX-007 지휘                    |             미측정 |             미측정 | 미측정                  | 미측정                      | 미측정 |
+| 규칙 우선, 근거 부족 시 HCX-007 |             미측정 |             미측정 | 미측정                  | 미측정                      | 미측정 |
+
+HCX-007은 기존 상담 도구 한 개를 고릅니다. 카탈로그와 서버 권한에서 확인한 대상만 인자로 허용하고, 원래 질문의 대상과 조건을 사용해 도구를 실행합니다. 일정·요금·학습기록의 응답 값은 기존 도구가 결정하며 기존 인용·개정·수치 검증을 거칩니다. 질문당 선택 호출은 최대 4회입니다. 사용량, 호출 비율, 선택 도구, 응답시간, 안전 위반을 JSON에 기록합니다. 운영 구성은 CLOVA 실험을 측정한 뒤 판단합니다. [CLOVA 함수 호출](https://api.ncloud-docs.com/docs/en/clovastudio-chatcompletionsv3-fc)
+
+```sh
+node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/run-eval.ts --suite v2-AC_ARCH_1,v2-AC_ARCH_2,v2-AC_ARCH_3,v1-paraphrase-100 --variant rag-bm25,engine-planned,clova-supervisor,rules-clova-fallback --out .local/rag-eval --label technical-routing
+```
+
+### 스캔 원본
+
+HCX-005에 글자 층이 없는 PDF 쪽이나 관리자가 선택한 사진을 두 번 보냅니다. 합의한 표 구조를 페이지·행·열 순서대로 남기고, 불일치한 셀은 검수 표시로 바꿉니다. 관리자 승인 전에는 검색할 수 없습니다. 텍스트·스캔 혼합 PDF 한 건에서 스캔 쪽만 두 번 호출하는 요청을 모의 HTTP로 확인했습니다. 검수 화면, 승인 차단, 수정 후 공개도 자동으로 확인했습니다. [CLOVA 이미지 입력](https://api.ncloud-docs.com/docs/en/clovastudio-chatcompletionsv3)
+
+SRS가 가리키는 세트 7의 300문항 중 스캔 오답 12개에 해당하는 원본과 고정 라벨은 이 작업 환경에서 찾지 못했습니다. 보존된 세트 7의 결과는 288/300입니다. 별도로 저장소의 공개 393문항을 기존 Tesseract 경로로 재실행한 결과는 384/393이었고 위반은 0건이었습니다. HCX-005 실측과 원래 12문항의 전후 비교는 미완료입니다.
+
+원본과 라벨을 복구한 뒤 동일한 `--holdout-root`, `--gold-v4`, `--contract-state`, `--automated-holdout`, `--reject-known-overlap`, `--variant engine-planned`를 두 실행에 지정합니다. HCX-005 쪽에만 `--clova-scan`을 추가하고 결과의 동일 문항 ID를 비교합니다.
+
+### 검색과 재정렬
+
+`clova-hybrid`는 BM25와 임베딩 v2 순위를 합칩니다. 문서와 질의 벡터를 내용 해시로 저장합니다. `clova-rerank`는 하이브리드의 상위 후보 중 CLOVA가 선택한 ID를 올립니다. 후보에 없던 ID는 거부합니다. `clova-rerank-gate`는 선택 ID가 없으면 해당 문서 검색을 보류합니다. 공식 API가 관련도 점수를 제공하지 않아 숫자 문턱을 평가할 수 없습니다. 세 변형의 실제 정확도·근거 적중률·지연은 CLOVA 키가 없어 미측정입니다. 모의 HTTP에서는 동일 청크·질의로 다시 실행했을 때 임베딩 호출 0회와 미등록 ID 거부를 확인했습니다. [임베딩 v2](https://api.ncloud-docs.com/docs/clovastudio-embeddingv2) · [리랭커 응답 형식](https://api.ncloud-docs.com/docs/clovastudio-reranker)
+
+```sh
+node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/eval/run-eval.ts --suite v2-AC_ARCH_1,v2-AC_ARCH_2,v2-AC_ARCH_3,v1-paraphrase-100 --variant engine-planned,clova-hybrid,clova-rerank,clova-rerank-gate --out .local/rag-eval --label technical-retrieval
+```
+
+### 운영 서비스 검증
+
+전체 자동 테스트 675개와 정적 검사를 통과했습니다. 로컬 Node 운영 서버에서 가상 계정 로그인과 HTTP 회귀 질문 8개를 확인했습니다. SQLite 운영 중 백업 파일을 다시 열어 무결성을 확인했습니다. 네이버 클라우드에서의 실행·재부팅·HTTPS·스캔 업로드 실측은 남아 있습니다. [서버 구성 및 확인 절차](../../../deploy/ncloud/README.md)

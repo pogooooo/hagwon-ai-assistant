@@ -1,0 +1,17 @@
+
+[Unit]
+Description=Back up the AXR operations SQLite database
+
+[Service]
+Type=oneshot
+User=axr
+Group=axr
+WorkingDirectory=/opt/axr
+EnvironmentFile=/etc/axr/operations.env
+StateDirectory=axr
+UMask=0077
+ExecStart=/usr/local/bin/node deploy/ncloud/backup.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

@@ -80,6 +80,7 @@ import {
   abstainForUncertainOcr,
   className,
   deny,
+  handoff,
   studentLabel,
   type AnswerContext,
   type AnswerDraft,
@@ -147,6 +148,13 @@ export interface RagConsultationDeps {
   ) => { facts: ApprovedFactsPort; documents: RagDocumentsPort } | undefined;
 }
 
+export const SUPERVISOR_TIMEOUT_MS = 8000;
+export type SupervisorTool =
+  'schedule' | 'tuition_timetable' | 'documents' | 'learning' | 'handoff';
+export type SupervisorSelector = (
+  ctx: AnswerContext,
+) => Promise<SupervisorTool>;
+
 export type FrameRefinement = Pick<QueryFrame, 'classIds' | 'topics'>;
 
 export interface RagQueryInput {
@@ -210,6 +218,11 @@ export function createRagConsultationService(
   // Server-side diagnostics only. Public request fields cannot override the parser.
   diagnostics?: {
     refineFrame?: (frame: Readonly<QueryFrame>) => FrameRefinement;
+    supervisor?: {
+      mode: 'first' | 'fallback';
+      select: SupervisorSelector;
+      enabled?: () => boolean;
+    };
     observeLocations?: (citations: RagCitation[]) => void;
     observeWitnesses?: (witnesses: readonly CitationWitness[]) => void;
   },
@@ -221,6 +234,7 @@ export function createRagConsultationService(
   async function route(
     ctx: AnswerContext,
     studentIdHint: string | undefined,
+    selectTool?: SupervisorSelector,
   ): Promise<AnswerDraft> {
     const selectedEvidence = deps.selectEvidence?.(ctx.frame);
     if (selectedEvidence) {
@@ -320,6 +334,52 @@ export function createRagConsultationService(
       if (predictsOutcome && !flags.prediction)
         ctx.frame = { ...frame, flags: { ...flags, prediction: true } };
       return routeAnalysis(ctx, studentIdHint);
+    }
+    if (
+      selectTool &&
+      !flags.injectionDirective &&
+      !flags.documentIdReference &&
+      !flags.attitude &&
+      !predictsOutcome &&
+      !flags.causal &&
+      !flags.misattribution
+    ) {
+      const tool = await selectTool(ctx);
+      if (tool === 'handoff')
+        return handoff(
+          '담당자 상담으로 연결해 드립니다.',
+          'INSUFFICIENT_EVIDENCE',
+        );
+      trace.intent = tool;
+      if (tool === 'learning') {
+        const resolution = resolveSubjects({
+          access,
+          frame,
+          state,
+          studentIdHint,
+        });
+        if (resolution.kind !== 'resolved')
+          return routeAnalysis(ctx, studentIdHint);
+        trace.domain = 'analysis';
+        trace.targetStudentIds = resolution.studentIds;
+        return answerAnalysis(ctx, resolution.studentIds);
+      }
+      trace.domain = 'info';
+      if (tool === 'schedule')
+        return (
+          (await answerDatedScheduleNotice(ctx)) ??
+          (await answerClosureMakeup(ctx)) ??
+          (await answerClassScheduleFields(ctx)) ??
+          (await routeInfo(ctx, studentIdHint))
+        );
+      if (tool === 'tuition_timetable') return routeInfo(ctx, studentIdHint);
+      const evidence = await retrieveEvidence(ctx);
+      return answerByPlan(
+        ctx,
+        evidence,
+        planFromEvidence(ctx, evidence),
+        studentIdHint,
+      );
     }
     if (ctx.engine === 'planned') {
       if (
@@ -1387,6 +1447,29 @@ export function createRagConsultationService(
 
   return {
     async query(input) {
+      const supervisor = diagnostics?.supervisor;
+      const startedAt = supervisor ? performance.now() : 0;
+      let consultedSupervisor = false;
+      const propose = async (context: AnswerContext) => {
+        if (!supervisor || supervisor.enabled?.() === false)
+          return route(context, input.studentIdHint);
+        const select = (ctx: AnswerContext) => {
+          consultedSupervisor = true;
+          return supervisor.select(ctx);
+        };
+        const original = await route(
+          context,
+          input.studentIdHint,
+          supervisor.mode === 'first' ? select : undefined,
+        );
+        if (
+          supervisor.mode !== 'fallback' ||
+          original.status !== 'abstained' ||
+          original.reasonCode !== 'INSUFFICIENT_EVIDENCE'
+        )
+          return original;
+        return route(context, input.studentIdHint, select);
+      };
       const started = deps.clock.now();
       const requestId = createRequestId();
       const trace: RagTrace = {
@@ -1534,7 +1617,7 @@ export function createRagConsultationService(
                           input.studentIdHint,
                         ),
                 };
-                const proposal = await route(partContext, input.studentIdHint);
+                const proposal = await propose(partContext);
                 const answer =
                   deps.engine === 'planned'
                     ? validateEvidence(
@@ -1563,7 +1646,7 @@ export function createRagConsultationService(
               );
             } else {
               ctx.plannedRequest = plan.requests[0];
-              const proposal = await route(ctx, input.studentIdHint);
+              const proposal = await propose(ctx);
               draft =
                 deps.engine === 'planned'
                   ? validateEvidence(
@@ -1573,6 +1656,20 @@ export function createRagConsultationService(
                   : proposal;
             }
             final = await finalize(ctx, draft);
+            if (
+              consultedSupervisor &&
+              performance.now() - startedAt >= SUPERVISOR_TIMEOUT_MS
+            ) {
+              diagnostics?.observeLocations?.([]);
+              diagnostics?.observeWitnesses?.([]);
+              final = {
+                ...handoff(
+                  '담당자 상담으로 연결해 드립니다.',
+                  'INSUFFICIENT_EVIDENCE',
+                ),
+                resolvedCitations: [],
+              };
+            }
           }
         }
       } catch {

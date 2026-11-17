@@ -22,6 +22,18 @@ export const VARIANTS: Record<string, Variant> = {
   'rag-bm25': { id: 'rag-bm25', kind: 'rag' },
   engine: { id: 'engine', kind: 'engine' },
   'engine-planned': { id: 'engine-planned', kind: 'engine', engine: 'planned' },
+  'clova-supervisor': {
+    id: 'clova-supervisor',
+    kind: 'engine',
+    engine: 'planned',
+    supervisor: 'first',
+  },
+  'rules-clova-fallback': {
+    id: 'rules-clova-fallback',
+    kind: 'engine',
+    engine: 'planned',
+    supervisor: 'fallback',
+  },
   'engine-dense': {
     id: 'engine-dense',
     kind: 'engine',

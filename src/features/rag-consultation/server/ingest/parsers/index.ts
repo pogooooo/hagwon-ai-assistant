@@ -5,6 +5,7 @@
  */
 import { parseDocx, parseHwpx, ZipLimitError } from './office.ts';
 import { createTesseractOcr } from './ocr.ts';
+import { toMarkdown } from './layout.ts';
 import { parsePdf } from './pdf.ts';
 import { maskPersonalData } from './pii.ts';
 import {
@@ -14,6 +15,7 @@ import {
   type ParseLimits,
   type ParseWarning,
   type SourceFormat,
+  type ScanVision,
 } from './types.ts';
 
 export * from './types.ts';
@@ -29,6 +31,7 @@ export interface ParseInput {
   limits?: Partial<ParseLimits>;
   /** OCR 엔진. 지정하지 않으면 필요할 때 tesseract.js 를 띄운다. null 이면 OCR 끔. */
   ocr?: OcrEngine | null;
+  vision?: ScanVision;
 }
 
 const startsWith = (bytes: Uint8Array, signature: number[]) =>
@@ -38,6 +41,11 @@ export function detectFormat(
   bytes: Uint8Array,
   fileName: string,
 ): SourceFormat | 'hwp_binary' | 'zip_unknown' | 'unknown' {
+  if (
+    startsWith(bytes, [0xff, 0xd8, 0xff]) ||
+    startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  )
+    return 'image';
   if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46])) return 'pdf'; // %PDF
   if (startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0])) return 'hwp_binary'; // OLE 복합 문서(구형 HWP/DOC)
   if (startsWith(bytes, [0x50, 0x4b, 0x03, 0x04])) {
@@ -121,11 +129,35 @@ export async function parseSourceFile(input: ParseInput): Promise<ParsedFile> {
     return fail('txt', 'unsupported_format');
 
   let result: ParsedFile;
-  if (detected === 'pdf') {
+  if (detected === 'image') {
+    if (!input.vision) return fail('image', 'unsupported_format');
+    const { blocks, issues } = await input.vision.readPage(input.bytes, 1);
+    const text = toMarkdown(blocks).trim();
+    if (!text) return fail('image', 'empty');
+    result = {
+      format: 'image',
+      status: issues.length ? 'needs_review' : 'ok',
+      text,
+      pages: [{ page: 1, method: 'ocr', needsReview: issues.length > 0 }],
+      warnings: issues.map((detail) => ({
+        code: 'vision_review',
+        page: 1,
+        detail,
+      })),
+      stats: {
+        ...base,
+        pageCount: 1,
+        ocrPages: 1,
+        tables: blocks.filter(({ kind }) => kind === 'table').length,
+        parseMs: 0,
+      },
+    };
+  } else if (detected === 'pdf') {
     let created: OcrEngine | null = null;
     try {
       const pdf = await parsePdf(input.bytes, {
         limits,
+        vision: input.vision,
         getOcr: async () => {
           if (input.ocr !== undefined) return input.ocr;
           created = await createTesseractOcr();

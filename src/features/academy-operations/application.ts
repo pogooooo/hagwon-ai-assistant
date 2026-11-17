@@ -84,6 +84,7 @@ export interface OperationsServerOptions {
   fixturesRoot?: URL;
   documentsRoot?: string;
   maxDocumentBytes?: number;
+  scanVision?: import('../rag-consultation/server/ingest/parsers/types.ts').ScanVision;
 }
 
 export function createOperationsServer({
@@ -96,6 +97,7 @@ export function createOperationsServer({
   fixturesRoot,
   documentsRoot,
   maxDocumentBytes = defaultMaxDocumentBytes,
+  scanVision,
 }: OperationsServerOptions) {
   if (
     publicOrigin &&
@@ -488,6 +490,7 @@ export function createOperationsServer({
         url,
         assertCurrentAccess,
         maxDocumentBytes,
+        scanVision,
       };
       if (
         form &&
