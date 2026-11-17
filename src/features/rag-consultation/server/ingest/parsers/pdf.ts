@@ -17,6 +17,7 @@ import type {
   ParseLimits,
   ParseWarning,
   PositionedText,
+  ScanVision,
 } from './types.ts';
 
 import { createRequire } from 'node:module';
@@ -68,6 +69,7 @@ interface PageData {
   page: number;
   width: number;
   items: PositionedText[];
+  blocks?: LayoutBlock[];
   extraction: PageExtraction;
 }
 
@@ -192,7 +194,11 @@ async function ocrPage(
 
 export async function parsePdf(
   bytes: Uint8Array,
-  options: { limits: ParseLimits; getOcr: () => Promise<OcrEngine | null> },
+  options: {
+    limits: ParseLimits;
+    getOcr: () => Promise<OcrEngine | null>;
+    vision?: ScanVision;
+  },
 ): Promise<
   Omit<ParsedFile, 'format' | 'stats'> & {
     pageCount: number;
@@ -282,7 +288,25 @@ export async function parsePdf(
         const textChars = raw.replace(/\s/g, '').length;
         const garbled = isGarbled(raw);
         if (garbled) warnings.push({ code: 'garbled_text', page: pageNumber });
-        if (textChars >= MIN_TEXT_CHARS && !garbled) {
+        if (options.vision && textChars > 0 && garbled) {
+          warnings.push({
+            code: 'vision_review',
+            page: pageNumber,
+            detail: 'PDF 글자 층을 해석할 수 없음',
+          });
+          pages.push({
+            page: pageNumber,
+            width: viewport.width,
+            items: [],
+            extraction: {
+              page: pageNumber,
+              method: 'empty',
+              needsReview: true,
+            },
+          });
+          continue;
+        }
+        if (textChars >= (options.vision ? 1 : MIN_TEXT_CHARS) && !garbled) {
           pages.push({
             page: pageNumber,
             width: viewport.width,
@@ -292,7 +316,11 @@ export async function parsePdf(
           continue;
         }
         if (ocrPages >= options.limits.maxOcrPages) {
-          warnings.push({ code: 'ocr_page_limit', page: pageNumber });
+          warnings.push({
+            code: options.vision ? 'vision_review' : 'ocr_page_limit',
+            page: pageNumber,
+            detail: options.vision ? '자동 판독 페이지 한도 초과' : undefined,
+          });
           pages.push({
             page: pageNumber,
             width: viewport.width,
@@ -301,6 +329,37 @@ export async function parsePdf(
               page: pageNumber,
               method: 'empty',
               needsReview: true,
+            },
+          });
+          continue;
+        }
+        if (options.vision) {
+          ocrPages++;
+          const scale = Math.min(
+            2,
+            2200 / Math.max(viewport.width, viewport.height),
+          );
+          const canvas = await renderPage(page, scale);
+          const result = await options.vision.readPage(
+            canvas.toBuffer('image/png'),
+            pageNumber,
+          );
+          warnings.push(
+            ...result.issues.map((detail) => ({
+              code: 'vision_review' as const,
+              page: pageNumber,
+              detail,
+            })),
+          );
+          pages.push({
+            page: pageNumber,
+            width: viewport.width,
+            items: [],
+            blocks: result.blocks,
+            extraction: {
+              page: pageNumber,
+              method: 'ocr',
+              needsReview: result.issues.length > 0,
             },
           });
           continue;
@@ -344,6 +403,10 @@ export async function parsePdf(
       : undefined;
     let blocks: LayoutBlock[] = [];
     for (const data of pages) {
+      if (data.blocks) {
+        blocks.push(...data.blocks);
+        continue;
+      }
       if (data.items.length === 0) {
         if (data.extraction.method !== 'empty')
           warnings.push({ code: 'page_empty', page: data.page });

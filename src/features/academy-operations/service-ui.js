@@ -99,6 +99,17 @@ for (const form of document.querySelectorAll('#makeup form')) {
   });
 }
 
+const documentUpload = document.querySelector('[data-document-upload]');
+if (documentUpload) {
+  documentUpload.addEventListener('submit', () => {
+    const progress = documentUpload.querySelector('[data-document-progress]');
+    if (documentUpload.elements.namedItem('file').files.length) {
+      progress.hidden = false;
+      documentUpload.querySelector('button[type="submit"]').disabled = true;
+    }
+  });
+}
+
 const allCorrect = document.querySelector('input[name="allCorrect"]');
 if (allCorrect) {
   const wrong = allCorrect.form.querySelectorAll('input[name="wrong"]');

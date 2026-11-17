@@ -4,7 +4,18 @@
  *   - `<!-- page N -->` 페이지 시작(표 안에도 올 수 있음: 여러 페이지에 걸친 표)
  *   - `# 제목`, `## 절`, 문단(빈 줄 구분), `| 칸 | 칸 |` 표(첫 행 = 헤더, 다음 줄 구분선)
  */
-export type SourceFormat = 'pdf' | 'docx' | 'hwpx' | 'txt' | 'markdown';
+import type { LayoutBlock } from './layout.ts';
+
+export interface ScanVision {
+  readonly id: string;
+  readPage(
+    bytes: Uint8Array,
+    page: number,
+  ): Promise<{ blocks: LayoutBlock[]; issues: string[] }>;
+}
+
+export type SourceFormat =
+  'image' | 'pdf' | 'docx' | 'hwpx' | 'txt' | 'markdown';
 
 export type ExtractionMethod = 'text' | 'ocr' | 'empty';
 
@@ -25,6 +36,7 @@ export type ExtractionStatus = 'ok' | 'needs_review' | 'partial' | 'failed';
 
 export interface ParseWarning {
   code:
+    | 'vision_review'
     | 'ocr_used'
     | 'ocr_low_confidence'
     | 'ocr_unavailable'

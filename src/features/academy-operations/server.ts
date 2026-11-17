@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { createScanVisionFromEnv } from '../rag-consultation/server/ingest/parsers/clova-vision.ts';
 import { createOperationsServer } from './application.ts';
 
 const port = Number(process.env.AXR_OPERATIONS_PORT ?? '8791');
@@ -19,6 +20,7 @@ db.exec(`
 `);
 const server = createOperationsServer({
   db,
+  scanVision: createScanVisionFromEnv(process.env),
   publicOrigin: process.env.AXR_OPERATIONS_PUBLIC_ORIGIN
     ? new URL(process.env.AXR_OPERATIONS_PUBLIC_ORIGIN)
     : undefined,

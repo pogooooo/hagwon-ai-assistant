@@ -8,6 +8,7 @@ import {
   type OcrEngine,
   type ParsedFile,
   type ParseLimits,
+  type ScanVision,
 } from './parsers/index.ts';
 
 export type FileDocumentMeta = Omit<SourceDocumentInput, 'text' | 'extraction'>;
@@ -23,12 +24,17 @@ export interface PreparedFileDocument {
 export async function prepareFileDocument(
   meta: FileDocumentMeta,
   file: { bytes: Uint8Array; fileName: string },
-  options: { ocr?: OcrEngine | null; limits?: Partial<ParseLimits> } = {},
+  options: {
+    ocr?: OcrEngine | null;
+    limits?: Partial<ParseLimits>;
+    vision?: ScanVision;
+  } = {},
 ): Promise<PreparedFileDocument> {
   const parsed = await parseSourceFile({
     bytes: file.bytes,
     fileName: file.fileName,
     ocr: options.ocr,
+    vision: options.vision,
     limits: options.limits,
   });
   if (parsed.status === 'failed') {

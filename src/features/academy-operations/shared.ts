@@ -1,3 +1,4 @@
+import type { ScanVision } from '../rag-consultation/server/ingest/parsers/types.ts';
 import type { OperationsDatabase, SQLInputValue } from './database.ts';
 
 export type Role = 'admin' | 'teacher' | 'student' | 'guardian' | 'visitor';
@@ -16,6 +17,7 @@ export interface PageContext {
   actor: Actor;
   url: URL;
   maxDocumentBytes?: number;
+  scanVision?: ScanVision;
   assertCurrentAccess?: () => void;
   submittedForm?: FormData;
   formError?: string;

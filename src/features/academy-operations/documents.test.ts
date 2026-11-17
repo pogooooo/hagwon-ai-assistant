@@ -407,3 +407,74 @@ test('자료 검색과 선택 자료 답변 미리보기는 승인된 해당 문
   const publicView = await documentsModule.render({ ...visitor, url: ctx.url });
   assert.doesNotMatch(publicView, /answer-preview/);
 });
+
+test('스캔 사진은 관리자 검수 전 색인되지 않고 불일치한 셀은 수정 후 승인된다', async (t) => {
+  const { admin, visitor } = setup(t);
+  const page = 'http://127.0.0.1/documents';
+  admin.scanVision = {
+    id: 'fixture',
+    async readPage(_bytes, pageNumber) {
+      return {
+        blocks: [
+          {
+            kind: 'table',
+            page: pageNumber,
+            rows: [
+              ['반', '수업료'],
+              ['산수반', '⟦판독 확인 필요⟧'],
+            ],
+          },
+        ],
+        issues: ['블록 1 표 2행 2열'],
+      };
+    },
+  };
+  const upload = new FormData();
+  for (const [key, value] of Object.entries({
+    action: 'save',
+    title: '산수반 수업료',
+    visibility: 'academy_public',
+    documentType: 'fee',
+    clovaScan: '1',
+    validFrom: '2020-01-01T00:00',
+  }))
+    upload.set(key, value);
+  upload.set('file', new File([Uint8Array.of(0xff, 0xd8, 0xff)], 'scan.jpg'));
+  const redirect = await documentsModule.submit(admin, upload);
+  assert.ok(redirect);
+  const url = new URL(redirect, page);
+  const id = url.searchParams.get('id')!;
+  assert.match(
+    await documentsModule.render({ ...admin, url }),
+    /판독을 완료|2행 2열/,
+  );
+  assert.doesNotMatch(
+    await documentsModule.render({ ...visitor, url }),
+    /판독 확인 필요/,
+  );
+  assert.equal(currentDocumentRevisions(visitor).has(id), false);
+  await assert.rejects(
+    async () =>
+      submit(admin, { action: 'approve', documentId: id, revision: '1' }),
+    assertStatus(422),
+  );
+  await submit(admin, {
+    action: 'save',
+    documentId: id,
+    baseRevision: '1',
+    title: '산수반 수업료',
+    visibility: 'academy_public',
+    documentType: 'fee',
+    validFrom: '2020-01-01T00:00',
+    text: '<!-- page 1 -->\n| 반 | 수업료 |\n| --- | --- |\n| 산수반 | 25만원 |',
+  });
+  await submit(admin, { action: 'approve', documentId: id, revision: '2' });
+  assert.equal(currentDocumentRevisions(visitor).get(id)?.has(2), true);
+  assert.match(
+    await documentsModule.render({
+      ...visitor,
+      url: new URL('?id=' + id + '&revision=2', page),
+    }),
+    /25만원/,
+  );
+});

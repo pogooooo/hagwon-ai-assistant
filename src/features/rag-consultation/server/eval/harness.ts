@@ -217,6 +217,7 @@ export interface Variant {
   /** rag: 검색 1위 청크를 그대로 답으로(생성·보류 없음) / engine: 상담 엔진 */
   kind: 'rag' | 'engine';
   engine?: RagConsultationDeps['engine'];
+  supervisor?: 'first' | 'fallback';
   ranker?: () => Promise<ChunkRanker> | ChunkRanker;
   config?: RagConsultationDeps['config'];
   /** rag 변형의 보류 규칙(없으면 검색 결과가 없을 때만 보류) */
@@ -256,6 +257,12 @@ export interface CaseResult {
   liveRequests?: number;
   generationPolicyBlocked?: boolean;
   generationMode?: 'gemini' | 'gemini-synthetic' | 'simulated_failure';
+  clova?: {
+    requests: number;
+    tokens: number;
+    unreported: number;
+    tools: string[];
+  };
   latencyMs: number;
   answer: string;
 }
@@ -306,6 +313,8 @@ export async function runCase(
     observe?: (observation: ObservationV2) => void;
     captureWitnesses?: boolean;
     generation?: GenerationPort;
+    supervisor?: import('../service.ts').SupervisorSelector;
+    beginMeasuredQuestion?: () => void;
   },
 ): Promise<CaseResult> {
   const { dataset } = prepared.suite;
@@ -335,6 +344,7 @@ export async function runCase(
     | undefined;
 
   if (variant.kind === 'rag') {
+    diagnostics?.beginMeasuredQuestion?.();
     const started = performance.now();
     const results = await prepared.store.searchApprovedChunks({
       access,
@@ -351,6 +361,37 @@ export async function runCase(
     answer = abstain ? '' : results[0].chunk.text;
     cited = abstain ? [] : [results[0].chunk.sourceId];
     touched = results.map((r) => r.chunk.sourceId);
+    const top = abstain ? undefined : results[0].chunk;
+    const citation = top
+      ? {
+          sourceId: top.sourceId,
+          documentId: top.documentId,
+          revision: top.revision,
+          title: top.title,
+          location: top.location.label,
+        }
+      : undefined;
+    observed = {
+      answer: {
+        status: abstain ? 'abstained' : 'answered',
+        answer,
+        requestId: c.id,
+        citations: citation ? [citation] : [],
+      },
+      citationLocations: citation ? [citation] : [],
+      citationWitnesses: top
+        ? [
+            {
+              sourceId: top.sourceId,
+              location: top.location.label,
+              chunkId: top.chunkId,
+              text: top.text,
+            },
+          ]
+        : [],
+      retrievedChunkIds: results.map(({ chunk }) => chunk.chunkId),
+      retrievedSourceIds: touched,
+    };
   } else {
     const provider =
       (c.apiState === 'ok' ? diagnostics?.generation : undefined) ??
@@ -362,6 +403,7 @@ export async function runCase(
     }
     let citationLocations: ObservationV2['citationLocations'];
     let citationWitnesses: ObservationV2['citationWitnesses'];
+    let measured = false;
     const service = createRagConsultationService(
       {
         facts: prepared.store,
@@ -387,6 +429,14 @@ export async function runCase(
       },
       diagnostics && {
         refineFrame: diagnostics.refineFrame,
+        supervisor:
+          variant.supervisor && diagnostics.supervisor
+            ? {
+                mode: variant.supervisor,
+                enabled: () => measured,
+                select: diagnostics.supervisor,
+              }
+            : undefined,
         observeLocations: (citations) => {
           citationLocations = citations;
         },
@@ -402,6 +452,8 @@ export async function runCase(
     }
     citationLocations = undefined;
     citationWitnesses = undefined;
+    measured = true;
+    diagnostics?.beginMeasuredQuestion?.();
     const started = performance.now();
     const output = await service.query({
       access,
@@ -659,6 +711,11 @@ export function summarize(results: CaseResult[]) {
     ),
     unanswerable: unanswerable.length,
     falseAnswerRate: pct(unanswerable.filter(gave).length, unanswerable.length),
+    evidenceHitRate: pct(
+      results.filter((r) => r.sourceCoverage.listed.length && r.goldRetrieved)
+        .length,
+      results.filter((r) => r.sourceCoverage.listed.length).length,
+    ),
     citationAccuracy: pct(
       answerable.filter((r) => gave(r) && r.checks.citation).length,
       answerable.filter(gave).length,
