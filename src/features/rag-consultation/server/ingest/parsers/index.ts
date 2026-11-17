@@ -1,9 +1,11 @@
 /**
  * 원본 파일 → 정규화 Markdown + 페이지 품질. 형식은 확장자가 아니라 파일 내용(매직 바이트)으로 판단한다.
- *   PDF(텍스트·스캔) · DOCX · HWPX · TXT(UTF-8/EUC-KR) · Markdown. 구형 HWP(바이너리)는 지원하지 않음.
+ *   PDF(텍스트·스캔) · DOCX · HWPX · XLSX · CSV/TSV · PPTX · TXT(UTF-8/EUC-KR) · Markdown.
+ * 구형 HWP/DOC/XLS 및 PPT 바이너리는 변환 후 등록한다.
  * 모든 결과는 개인정보 가림을 거친다.
  */
 import { parseDocx, parseHwpx, ZipLimitError } from './office.ts';
+import { parseDelimited, parseXlsx, parsePptx } from './business-office.ts';
 import { createTesseractOcr } from './ocr.ts';
 import { toMarkdown } from './layout.ts';
 import { parsePdf } from './pdf.ts';
@@ -21,7 +23,7 @@ import {
 export * from './types.ts';
 
 /** 파서 동작이 바뀌면 올린다(파싱 결과 캐시 무효화). */
-export const PARSER_VERSION = 'parsers-2026-11-07.2';
+export const PARSER_VERSION = 'parsers-2026-11-18.1';
 export { createTesseractOcr } from './ocr.ts';
 export { PII_MASK } from './pii.ts';
 
@@ -53,6 +55,8 @@ export function detectFormat(
       bytes.subarray(0, Math.min(bytes.length, 4096)),
     );
     if (head.includes('word/')) return 'docx';
+    if (head.includes('xl/') || /\.xlsx$/i.test(fileName)) return 'xlsx';
+    if (head.includes('ppt/') || /\.pptx$/i.test(fileName)) return 'pptx';
     if (
       head.includes('mimetypeapplication/hwp+zip') ||
       head.includes('Contents/') ||
@@ -63,6 +67,8 @@ export function detectFormat(
     return 'zip_unknown';
   }
   if (/\.(md|markdown)$/i.test(fileName)) return 'markdown';
+  if (/\.csv$/i.test(fileName)) return 'csv';
+  if (/\.tsv$/i.test(fileName)) return 'tsv';
   if (
     /\.(txt|text|csv)$/i.test(fileName) ||
     !bytes.subarray(0, 4096).includes(0)
@@ -182,20 +188,45 @@ export async function parseSourceFile(input: ParseInput): Promise<ParsedFile> {
     } finally {
       if (created) await (created as OcrEngine).terminate();
     }
-  } else if (detected === 'docx' || detected === 'hwpx') {
+  } else if (
+    ['docx', 'hwpx', 'xlsx', 'pptx', 'csv', 'tsv'].includes(detected)
+  ) {
     try {
       const office =
         detected === 'docx'
           ? parseDocx(input.bytes, limits)
-          : parseHwpx(input.bytes, limits);
+          : detected === 'hwpx'
+            ? parseHwpx(input.bytes, limits)
+            : detected === 'xlsx'
+              ? parseXlsx(input.bytes, limits)
+              : detected === 'pptx'
+                ? parsePptx(input.bytes, limits)
+                : parseDelimited(
+                    decodeText(input.bytes, warnings),
+                    detected === 'tsv' ? '\t' : ',',
+                  );
+      const pageCount = 'pageCount' in office ? Number(office.pageCount) : 1;
+      const needsReview = 'needsReview' in office && office.needsReview;
+      if (needsReview)
+        warnings.push({
+          code: 'office_review',
+          detail:
+            '수식·표시 형식·병합 셀 또는 이미지 포함. 추출 내용과 원본을 비교해 주세요.',
+        });
       result = {
         format: detected,
-        status: office.text ? 'ok' : 'failed',
+        status: office.text ? (needsReview ? 'needs_review' : 'ok') : 'failed',
         ...(office.text ? {} : { error: 'empty' as const }),
         text: office.text,
-        pages: office.text ? [{ page: 1, method: 'text' }] : [],
+        pages: office.text
+          ? Array.from({ length: pageCount }, (_, n) => ({
+              page: n + 1,
+              method: 'text' as const,
+              ...(needsReview ? { needsReview: true } : {}),
+            }))
+          : [],
         warnings,
-        stats: { ...base, pageCount: 1, tables: office.tables, parseMs: 0 },
+        stats: { ...base, pageCount, tables: office.tables, parseMs: 0 },
       };
     } catch (error) {
       return fail(

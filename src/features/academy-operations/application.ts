@@ -34,6 +34,8 @@ import {
 import { homeworkModule, homeworkPhoto } from './homework.ts';
 import { learningModule } from './learning.ts';
 import { briefingModule } from './briefing.ts';
+import { parentMessagesModule } from './parent-messages.ts';
+import { unreadParentCount } from './parent-messages-model.ts';
 import { calendarModule } from './calendar.ts';
 import { previewTeamSchedule } from './team-schedule.ts';
 import { renderHome } from './home.ts';
@@ -63,6 +65,7 @@ const modules: OperationModule[] = [
   knowledgeModule,
   schoolsModule,
   voiceModule,
+  parentMessagesModule,
 ];
 const sessionSeconds = 8 * 60 * 60;
 const sessionCookie = 'axr_operations';
@@ -79,6 +82,7 @@ const menuOrder = [
   '/knowledge',
   '/schools',
   '/voice',
+  '/messages',
 ];
 
 export interface OperationsServerOptions {
@@ -254,16 +258,20 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · AXR</title><meta name="theme-color" content="#ffffff"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=7"><link rel="stylesheet" href="/service-design.css?v=7"></head><body data-account="' +
+      ' · AXR</title><meta name="theme-color" content="#ffffff"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=8"><link rel="stylesheet" href="/service-design.css?v=8"></head><body data-account="' +
       h(actor?.id ?? '') +
-      '"><script src="/service-ui.js?v=5" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=6" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName
         ? '<span class="academy-name">' + h(academyName) + '</span>'
         : '') +
       (actor
-        ? '<div class="session"><a class="profile-link" href="/settings" aria-label="계정 설정"><img src="/assets/' +
+        ? '<div class="session">' +
+          (['admin', 'guardian'].includes(actor.role)
+            ? `<a class="parent-inbox-link" href="/messages" aria-label="학원 알림${unreadParentCount({ db, actor, url: new URL('http://localhost/') }) ? ' · 읽지 않은 알림 있음' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="m4 6 8 7 8-7"/></svg>${unreadParentCount({ db, actor, url: new URL('http://localhost/') }) ? '<span class="unread-dot" aria-hidden="true"></span>' : ''}</a>`
+            : '') +
+          '<a class="profile-link" href="/settings" aria-label="계정 설정"><img src="/assets/' +
           character +
           '.png" alt=""></a><span>' +
           h(actor.name) +
@@ -555,9 +563,9 @@ export function createOperationsServer({
           redirect(response, target ?? url.pathname + url.search);
         } catch (error) {
           if (
-            operation !== calendarModule ||
+            ![calendarModule, parentMessagesModule].includes(operation) ||
             !(error instanceof OperationError) ||
-            ![400, 409, 422].includes(error.status)
+            ![400, 409, 422, 502, 503].includes(error.status)
           )
             throw error;
           assertCurrentAccess();

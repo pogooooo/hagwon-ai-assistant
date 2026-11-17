@@ -4,6 +4,10 @@ import {
   DOCUMENT_READING_RULES,
   readingSchema,
 } from '../answer/document-reading.ts';
+import {
+  PARENT_TEMPLATE_RULES,
+  parentTemplateSchema,
+} from './parent-template-prompt.ts';
 
 /** Native CLOVA v3. No cross-provider retry; truncated JSON is never accepted. */
 export function createClovaProvider(options: {
@@ -21,6 +25,7 @@ export function createClovaProvider(options: {
       if (input.containsPersonalData && !options.personalDataApproved)
         return { ok: false, error: 'invalid_response' };
       const reading = input.mode === 'document-reading';
+      const parentTemplate = input.mode === 'parent-template';
       try {
         const response = await send(
           'https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007',
@@ -37,51 +42,64 @@ export function createClovaProvider(options: {
               messages: [
                 {
                   role: 'system',
-                  content: reading ? DOCUMENT_READING_RULES : SYSTEM_RULES,
+                  content: parentTemplate
+                    ? PARENT_TEMPLATE_RULES
+                    : reading
+                      ? DOCUMENT_READING_RULES
+                      : SYSTEM_RULES,
                 },
                 {
                   role: 'user',
-                  content: reading
-                    ? JSON.stringify({
-                        question: input.question,
-                        requirements: input.requirements,
-                        documents: input.sources,
-                      })
-                    : buildUserPrompt(input),
+                  content: parentTemplate
+                    ? JSON.stringify({ tone: input.question })
+                    : reading
+                      ? JSON.stringify({
+                          question: input.question,
+                          requirements: input.requirements,
+                          documents: input.sources,
+                        })
+                      : buildUserPrompt(input),
                 },
               ],
               temperature: 0,
               maxCompletionTokens: reading ? 2400 : 1200,
               thinking: { effort: 'none' },
-              ...(reading
+              ...(parentTemplate
                 ? {
                     responseFormat: {
                       type: 'json',
-                      schema: {
-                        ...readingSchema,
-                        properties: {
-                          ...readingSchema.properties,
-                          items: {
-                            ...readingSchema.properties.items,
-                            minItems: input.requirements?.length ?? 1,
-                            maxItems: input.requirements?.length ?? 8,
+                      schema: parentTemplateSchema,
+                    },
+                  }
+                : reading
+                  ? {
+                      responseFormat: {
+                        type: 'json',
+                        schema: {
+                          ...readingSchema,
+                          properties: {
+                            ...readingSchema.properties,
                             items: {
-                              ...readingSchema.properties.items.items,
-                              properties: {
-                                ...readingSchema.properties.items.items
-                                  .properties,
-                                request: {
-                                  type: 'string',
-                                  enum: input.requirements,
+                              ...readingSchema.properties.items,
+                              minItems: input.requirements?.length ?? 1,
+                              maxItems: input.requirements?.length ?? 8,
+                              items: {
+                                ...readingSchema.properties.items.items,
+                                properties: {
+                                  ...readingSchema.properties.items.items
+                                    .properties,
+                                  request: {
+                                    type: 'string',
+                                    enum: input.requirements,
+                                  },
                                 },
                               },
                             },
                           },
                         },
                       },
-                    },
-                  }
-                : {}),
+                    }
+                  : {}),
             }),
           },
         );

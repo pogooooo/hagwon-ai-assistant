@@ -517,12 +517,12 @@ function revisionForm(ctx: PageContext, previous?: SourceDocumentInput) {
         <label>대상 학생 <select name="studentId">${targetOptions(students, previous?.studentId)}</select></label>
         <label>적용 시작 (한국시간) <input type="datetime-local" name="validFrom" value="${h(localDateTime(previous?.validFrom))}"></label>
         <label>적용 종료 (한국시간) <input type="datetime-local" name="validTo" value="${h(localDateTime(previous?.validTo))}"></label>
-        <label>파일 <input type="file" name="file" accept=".pdf,.docx,.hwpx,.txt,.md,.markdown${ctx.scanVision ? ',.png,.jpg,.jpeg' : ''}"></label>
+        <label>파일 <input type="file" name="file" accept=".pdf,.docx,.hwpx,.xlsx,.csv,.tsv,.pptx,.txt,.md,.markdown${ctx.scanVision ? ',.png,.jpg,.jpeg' : ''}"></label>
       </div>
       <label>직접 입력 또는 추출 내용 수정
         <textarea name="text" rows="7" maxlength="${DEFAULT_RAG_CONFIG.maxDocumentChars}">${h(previous?.text)}</textarea>
       </label>
-      <p class="muted">파일을 선택하면 파일의 텍스트를 읽습니다. 파일 없이 내용만 입력할 수도 있습니다.</p>
+      <p class="muted">PDF·Word·HWPX·Excel·CSV/TSV·PowerPoint·텍스트·Markdown 원본을 바로 올릴 수 있습니다. 시트·표·슬라이드의 위치를 함께 보관합니다. 구형 HWP·DOC·XLS·PPT는 HWPX·DOCX·XLSX·PPTX 또는 PDF로 저장해 주세요.</p>
       ${ctx.scanVision ? '<label class="check-label"><input type="checkbox" name="clovaScan" value="1">개인정보가 없는 스캔 또는 사진의 CLOVA 판독에 동의합니다.</label>' : ''}
       <button type="submit">검수 대기로 저장</button>
       <p role="status" data-document-progress hidden>파일을 판독하고 있습니다. 완료되면 검수 화면이 열립니다.</p>
@@ -901,7 +901,9 @@ async function submitDocument(ctx: PageContext, form: FormData) {
   }
   if (!prepared.document) {
     throw new OperationError(
-      '텍스트를 읽을 수 없습니다. 텍스트가 포함된 파일을 올리거나 확인한 내용을 입력해 주세요.',
+      prepared.parsed.error === 'unsupported_hwp_binary'
+        ? '구형 HWP·DOC·XLS 파일은 HWPX·DOCX·XLSX 또는 PDF로 저장한 뒤 올려 주세요.'
+        : '텍스트를 읽을 수 없습니다. 텍스트가 포함된 파일을 올리거나 확인한 내용을 입력해 주세요.',
     );
   }
   const input = prepared.document;

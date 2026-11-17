@@ -1094,6 +1094,77 @@ progress::-webkit-progress-value {
 }
 
 /* Service UI: compact navigation, readable lists and task-first mobile layout. */
+.parent-inbox-link {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: #46594e;
+}
+.parent-inbox-link svg {
+  width: 22px;
+  height: 22px;
+}
+.unread-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  right: 5px;
+  top: 5px;
+  border-radius: 50%;
+  background: #b44b30;
+}
+.parent-settings {
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+}
+.parent-message-tabs {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+.parent-message-tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 5px 0;
+  border-bottom: 2px solid transparent;
+  color: #606975;
+  font-size: 14px;
+  text-decoration: none;
+}
+.parent-message-tabs a[aria-current] {
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.parent-batch {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+  margin-top: 18px;
+}
+.parent-batch summary {
+  cursor: pointer;
+  padding-block: 10px;
+}
+.parent-recipient {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.parent-message-body {
+  line-height: 1.9;
+  margin-block: 15px;
+}
+@media (max-width: 780px) {
+  .parent-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .parent-inbox-link {
+    width: 31px;
+    height: 36px;
+  }
+}
 :root {
   --accent: #176d52;
   --accent-hover: #10533e;

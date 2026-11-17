@@ -144,6 +144,15 @@ for (const form of document.querySelectorAll('#makeup form')) {
 
 const documentUpload = document.querySelector('[data-document-upload]');
 if (documentUpload) {
+  documentUpload.elements
+    .namedItem('file')
+    .addEventListener('change', (event) => {
+      const title = documentUpload.elements.namedItem('title');
+      if (!title.value.trim() && event.target.files[0])
+        title.value = event.target.files[0].name
+          .replace(/\.[^.]+$/, '')
+          .slice(0, 200);
+    });
   documentUpload.addEventListener('submit', () => {
     const progress = documentUpload.querySelector('[data-document-progress]');
     if (documentUpload.elements.namedItem('file').files.length) {

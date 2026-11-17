@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createScanVisionFromEnv } from '../rag-consultation/server/ingest/parsers/clova-vision.ts';
 import { createOperationsServer } from './application.ts';
+import { startParentMessageScheduler } from './parent-message-scheduler.ts';
 import {
   configureOperationsGeneration,
   createOperationsGeneration,
@@ -40,3 +41,4 @@ server.listen(port, '127.0.0.1', () => {
     console.log(`AXR 학원 운영 http://127.0.0.1:${address.port}`);
   }
 });
+server.on('close', startParentMessageScheduler(db));
