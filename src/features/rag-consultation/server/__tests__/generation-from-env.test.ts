@@ -12,11 +12,11 @@ const input: GenerationInput = {
 };
 const callOptions = { timeoutMs: 1000, now: 0 };
 const clovaUrl =
-  'https://clovastudio.stream.ntruss.com/v1/openai/chat/completions';
+  'https://clovastudio.stream.ntruss.com/v3/chat-completions/HCX-007';
 const geminiUrl =
   'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
-test('자동 설정은 CLOVA가 준비되면 CLOVA, CLOVA 키가 없으면 Gemini를 선택한다', async () => {
+test('기본과 자동 설정은 네이버를 선택하고 명시적인 연구 공급자는 구분한다', async () => {
   for (const { env, endpoint, key, model } of [
     {
       env: {
@@ -26,16 +26,16 @@ test('자동 설정은 CLOVA가 준비되면 CLOVA, CLOVA 키가 없으면 Gemin
       },
       endpoint: clovaUrl,
       key: 'test-clova',
-      model: 'HCX-DASH-002',
+      model: 'HCX-007',
     },
     {
       env: {
         RAG_CLOVA_API_KEY: 'test-clova',
         RAG_GEMINI_API_KEY: 'test-gemini',
       },
-      endpoint: geminiUrl,
-      key: 'test-gemini',
-      model: 'gemini-3.5-flash-lite',
+      endpoint: clovaUrl,
+      key: 'test-clova',
+      model: 'HCX-007',
     },
     {
       env: {
@@ -57,14 +57,23 @@ test('자동 설정은 CLOVA가 준비되면 CLOVA, CLOVA 키가 없으면 Gemin
         'Bearer ' + key,
       );
       const body = JSON.parse(String(init?.body));
-      assert.equal(body.model, model);
-      assert.equal(body.max_tokens, 400);
+      if (endpoint === clovaUrl) {
+        assert.equal(body.maxCompletionTokens, 1200);
+        assert.equal(body.thinking.effort, 'none');
+      } else {
+        assert.equal(body.model, model);
+        assert.equal(body.max_tokens, 400);
+      }
       assert.equal(body.messages[0].role, 'system');
       assert.equal(
         JSON.parse(body.messages[1].content).question,
         input.question,
       );
-      return Response.json({ choices: [{ message: { content: 'example' } }] });
+      return Response.json({
+        status: { code: '20000' },
+        result: { finishReason: 'stop', message: { content: 'example' } },
+        choices: [{ message: { content: 'example' } }],
+      });
     };
     const provider = createGenerationProviderFromEnv(env, fetchStub);
     assert.equal(provider.isExternal, true);
@@ -81,6 +90,8 @@ test('자동 설정은 CLOVA가 준비되면 CLOVA, CLOVA 키가 없으면 Gemin
 test('키 없는 명시 설정, 공급자 미설정, 명시적 비활성은 외부 호출을 준비하지 않는다', () => {
   for (const env of [
     {},
+    { RAG_GEMINI_API_KEY: 'test-gemini' },
+    { RAG_GENERATION_PROVIDER: 'auto', RAG_GEMINI_API_KEY: 'test-gemini' },
     { RAG_GENERATION_PROVIDER: 'clova', RAG_GEMINI_API_KEY: 'test-gemini' },
     { RAG_GENERATION_PROVIDER: 'disabled', RAG_CLOVA_API_KEY: 'test-clova' },
   ]) {
@@ -161,6 +172,8 @@ test('공급자별 명시적 데이터 허용 설정과 호출 예산을 함께 
       async () => {
         calls++;
         return Response.json({
+          status: { code: '20000' },
+          result: { finishReason: 'stop', message: { content: '{}' } },
           choices: [
             {
               message: {

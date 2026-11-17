@@ -1,4 +1,34 @@
 const mobileMenu = document.querySelector('#mobile-menu');
+for (const suggestion of document.querySelectorAll('[data-question]')) {
+  suggestion.addEventListener('click', () => {
+    const question = document.querySelector(
+      '.chat-composer textarea[name="question"]',
+    );
+    if (!question) return;
+    question.value = suggestion.dataset.question;
+    question.dispatchEvent(new Event('input', { bubbles: true }));
+    question.focus();
+    question.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+}
+const composer = document.querySelector('.chat-composer');
+composer?.addEventListener('submit', (event) => {
+  if (composer.getAttribute('aria-busy') === 'true') {
+    event.preventDefault();
+    return;
+  }
+  composer.setAttribute('aria-busy', 'true');
+  // Keep the submitter enabled so its action=ask value is sent by the browser.
+  const status = composer.querySelector('.chat-progress');
+  if (status)
+    status.textContent =
+      '학원 자료에서 답변을 확인하고 있어요. 잠시 기다려 주세요.';
+});
+window.addEventListener('pageshow', () => {
+  composer?.removeAttribute('aria-busy');
+  const status = composer?.querySelector('.chat-progress');
+  if (status) status.textContent = '';
+});
 document
   .querySelector('[data-open-menu]')
   ?.addEventListener('click', () => mobileMenu?.showModal());

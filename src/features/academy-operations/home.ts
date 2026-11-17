@@ -120,8 +120,25 @@ export function renderHome(ctx: PageContext) {
       '아직 남긴 상담이 없습니다.',
     );
 
+  const shortcuts = `<nav class="home-shortcuts" aria-label="자주 사용하는 서비스">${[
+    ['/consultation', '학원 상담'],
+    ...(!visitor
+      ? [
+          ['/schedule', '수업 일정'],
+          ['/homework', staff ? '숙제 관리' : '숙제 확인'],
+          ['/learning', '학습 기록'],
+        ]
+      : []),
+    ['/documents', '학원 자료'],
+  ]
+    .map(
+      ([href, label]) =>
+        `<a href="${href}">${serviceIcon(href)}<span>${label}</span></a>`,
+    )
+    .join('')}</nav>`;
+  const search = `<section class="home-search" aria-label="학원에 물어보기"><div><h2>학원 생활, 무엇이 궁금하세요?</h2><form action="/consultation" method="get"><label class="visually-hidden" for="home-question">상담할 질문</label><input id="home-question" name="q" maxlength="500" required placeholder="궁금한 내용을 입력해 주세요" autocomplete="off"><button aria-label="상담 시작">${serviceIcon('/consultation')}</button></form><p>학원에서 확인한 자료를 바탕으로 안내해 드려요.</p></div><img src="/assets/${selectedCharacter(ctx)}.png" alt=""></section>${shortcuts}`;
   if (staff && homework) {
-    return `${heading}
+    return `${heading}${search}
       <section class="work-queue" aria-labelledby="work-queue-title">
         <h2 id="work-queue-title">처리할 업무</h2>
         <div class="queue-grid">
@@ -203,7 +220,7 @@ export function renderHome(ctx: PageContext) {
         })),
         '확정된 학습 기록이 없습니다.',
       );
-  return `${heading}<div class="dashboard-grid family-dashboard">
+  return `${heading}${search}<div class="dashboard-grid family-dashboard">
     <div class="dashboard-agenda">${agenda || documentList()}</div>
     <div class="dashboard-chat">${consultationCard(ctx)}</div>
     ${visitor ? '' : `<div class="dashboard-records">${homeworkPanel || ''}${learning}${documentList()}</div>`}

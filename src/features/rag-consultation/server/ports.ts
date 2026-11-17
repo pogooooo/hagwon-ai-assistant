@@ -168,6 +168,9 @@ export interface GenerationSourceInput {
 }
 
 export interface GenerationInput {
+  /** Internal server-selected task; never taken from user request fields. */
+  mode?: 'document-reading';
+  requirements?: readonly string[];
   requestId: string;
   question: string;
   facts: GenerationFactInput[];

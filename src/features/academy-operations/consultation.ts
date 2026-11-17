@@ -708,12 +708,12 @@ function renderMessage(
   ) {
     return '<article class="message answer"><strong>이전 답변</strong><p>자료 개정 또는 열람 범위가 변경되어 답변을 표시할 수 없습니다. 다시 질문해 주세요.</p></article>';
   }
-  return `<article class="message ${kind}">
+  return `<article class="message ${kind}"${answer ? ' data-answer-status="' + h(answer.status) + '"' : ''}>
     <strong>${kind === 'question' ? '질문' : kind === 'staff' ? '담당자 답변' : h(answer ? answerLabels[answer.status] : '답변')}</strong>
     <p class="preserve">${h(text)}</p>
     ${
       answer?.citations.length
-        ? `<ul class="citations">${answer.citations
+        ? `<details class="source-details"><summary>확인한 자료 ${answer.citations.length}개</summary><ul class="citations">${answer.citations
             .map((citation) => {
               const location = citation.location?.startsWith(citation.title)
                 ? citation.location
@@ -722,7 +722,7 @@ function renderMessage(
                 : citation.location;
               return `<li>${citation.documentId.startsWith('workbook-') ? `<a href="/homework?view=source&amp;publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : citation.documentId.startsWith('learning-') ? `<a href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${location ? ' · ' + h(location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`;
             })
-            .join('')}</ul>`
+            .join('')}</ul></details>`
         : ''
     }
   </article>`;
@@ -770,7 +770,7 @@ function renderConsultation(ctx: PageContext) {
   const hiddenThread = thread
     ? `<input type="hidden" name="id" value="${h(thread.id)}">`
     : '';
-  return `<div class="workspace-heading"><h1>상담 및 이력</h1>${thread || inbox || archive ? '<a class="button-link" href="/consultation">새 상담</a>' : ''}</div>
+  return `<div class="workspace-heading"><div><p class="eyebrow">학원과 연결되는 대화</p><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div>${thread || inbox || archive ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div>
     <div class="split consultation-layout">
       <aside class="panel consultation-history">
         <h2>상담 목록</h2>
@@ -792,17 +792,18 @@ function renderConsultation(ctx: PageContext) {
             ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
             : inbox || archive
               ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : ''}`
-              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>새 상담</h2><p>수업 일정, 수강료, 학습 기록에 대해 질문할 수 있어요.</p></div></div>`
+              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>궁금한 일을 편하게 물어보세요.</h2><p>수업부터 학원 생활까지, 확인된 자료로 안내해 드려요.</p></div></div><div class="question-suggestions" aria-label="질문 예시">${['학원 위치와 주차 안내가 궁금해요.', '상담 가능한 시간과 신청 방법은?', '자습실 위치와 이용 시간 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">↗</span></button>`).join('')}</div>`
         }
-        ${messages.map((message) => renderMessage(message, currentRevisions)).join('')}
+        <div class="conversation-messages">${messages.map((message) => renderMessage(message, currentRevisions)).join('')}</div>
         ${
           own && thread?.status !== 'closed' && (thread || !queue)
             ? `<form class="chat-composer" method="post" action="${h(link)}">
           ${hiddenThread}<input type="hidden" name="conversationId" value="${thread?.id ?? randomUUID()}">
           ${students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
-          <label>질문 <textarea name="question" rows="3" maxlength="500" required placeholder="예: 중2 내신반 휴강일과 보강 시간을 알려주세요."></textarea></label>
+          <label>질문 <textarea name="question" rows="3" maxlength="500" required placeholder="궁금한 내용을 입력해 주세요.">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
           <button name="action" value="ask">질문하기</button>
-          <p class="muted">답변에 필요한 자료가 부족하면 이 상담을 학원 담당자의 확인 목록에 등록합니다.</p>
+          <p class="chat-progress" role="status" aria-live="polite"></p>
+          <p class="muted composer-note">확인할 수 없는 내용은 학원 담당자가 이어서 안내합니다.</p>
         </form>`
             : ''
         }

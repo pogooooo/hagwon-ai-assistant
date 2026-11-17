@@ -23,7 +23,6 @@
   },
   "workers_dev": true,
   "preview_urls": false,
-  "services": [{ "binding": "GEMINI", "service": "axr-academy-gemini" }],
   "assets": {
     "directory": "../../.local/cloudflare-hosted-assets",
     "html_handling": "none",
@@ -31,9 +30,9 @@
   "vars": {
     "CLASSIFICATION_RUBRICS_DIR": "/bundle/rubrics",
     "AXR_OPERATIONS_PUBLIC_ORIGIN": "https://axr-academy-hosted.pogoo.workers.dev",
-    "RAG_GENERATION_PROVIDER": "gemini",
-    "RAG_GENERATION_DAILY_CALL_LIMIT": "20",
-    "RAG_GEMINI_ALLOW_PERSONAL_DATA": "false",
+    "RAG_GENERATION_PROVIDER": "clova",
+    "RAG_GENERATION_DAILY_CALL_LIMIT": "100",
+    "RAG_CLOVA_ALLOW_PERSONAL_DATA": "false",
   },
   "durable_objects": {
     "bindings": [{ "name": "ACADEMY", "class_name": "AcademyDemo" }],

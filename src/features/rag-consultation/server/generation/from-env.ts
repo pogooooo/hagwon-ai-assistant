@@ -3,6 +3,7 @@
  * 공급자는 인스턴스 생성 때 확정하며 요청 실패 시 다른 공급자로 전환하지 않는다.
  */
 import type { GenerationPort } from '../ports.ts';
+import { createClovaProvider } from './clova-provider.ts';
 import {
   createOpenAICompatibleProvider,
   DisabledGenerationProvider,
@@ -17,20 +18,9 @@ function externalOptions(
   env: GenerationEnv,
   provider: string,
 ): OpenAICompatibleOptions | undefined {
-  const clovaKey = env.RAG_CLOVA_API_KEY?.trim();
   const geminiKey = env.RAG_GEMINI_API_KEY?.trim();
-
-  if (clovaKey && (provider === 'auto' || provider === 'clova')) {
-    const model = env.RAG_CLOVA_MODEL?.trim() || 'HCX-DASH-002';
-    return {
-      providerId: `clova:${model}`,
-      baseUrl: 'https://clovastudio.stream.ntruss.com/v1/openai',
-      model,
-      apiKey: clovaKey,
-      personalDataApproved: env.RAG_CLOVA_ALLOW_PERSONAL_DATA === 'true',
-    };
-  }
-  if (geminiKey && (provider === 'auto' || provider === 'gemini')) {
+  // Explicit historical evaluation only. Operational servers force CLOVA.
+  if (geminiKey && provider === 'gemini') {
     const model = env.RAG_GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
     return {
       providerId: `gemini:${model}`,
@@ -62,7 +52,7 @@ export function createGenerationProviderFromEnv(
   env: GenerationEnv,
   fetchImpl?: typeof fetch,
 ): GenerationPort {
-  const provider = (env.RAG_GENERATION_PROVIDER ?? 'gemini').trim();
+  const provider = (env.RAG_GENERATION_PROVIDER ?? 'clova').trim();
   const dailyCallLimit = env.RAG_GENERATION_DAILY_CALL_LIMIT
     ? Number(env.RAG_GENERATION_DAILY_CALL_LIMIT)
     : undefined;
@@ -77,7 +67,23 @@ export function createGenerationProviderFromEnv(
     return new GuardedGenerationProvider(new MockGenerationProvider('ok'), {
       dailyCallLimit,
     });
-  const options = externalOptions(env, provider);
+  if (
+    (provider === 'clova' || provider === 'auto') &&
+    env.RAG_CLOVA_API_KEY?.trim()
+  )
+    return new GuardedGenerationProvider(
+      createClovaProvider({
+        apiKey: env.RAG_CLOVA_API_KEY.trim(),
+        personalDataApproved: env.RAG_CLOVA_ALLOW_PERSONAL_DATA === 'true',
+        fetchImpl,
+      }),
+      { dailyCallLimit },
+    );
+  // Auto never silently chooses a different data processor.
+  const options =
+    provider === 'auto' || provider === 'clova'
+      ? undefined
+      : externalOptions(env, provider);
   return options
     ? new GuardedGenerationProvider(
         createOpenAICompatibleProvider({ ...options, fetchImpl }),
