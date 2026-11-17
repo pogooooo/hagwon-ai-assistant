@@ -10,6 +10,7 @@ import {
   emptyState,
   studentSchedule,
   resourceConflicts,
+  suggestMakeups,
 } from '../makeup-schedule/model/schedule.ts';
 import {
   setAvailability,
@@ -24,6 +25,7 @@ import type {
 import { classOnDate } from '../makeup-schedule/model/timetable.ts';
 import { addDays, isDate } from '../makeup-schedule/model/time.ts';
 import { accessibleClasses, accessibleStudents } from './directory.ts';
+import { setupSchools, classExams, rankSchoolSuggestions } from './schools.ts';
 import {
   escapeHtml as h,
   field,
@@ -92,6 +94,7 @@ const staff = (ctx: PageContext) =>
   ['admin', 'teacher'].includes(ctx.actor.role);
 
 export function setupTeamSchedule(db: OperationsDatabase) {
+  setupSchools(db);
   db.exec(`CREATE TABLE IF NOT EXISTS op_team_schedule (academy_id TEXT PRIMARY KEY, version INTEGER NOT NULL, config TEXT NOT NULL, state TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS op_team_schedule_history (academy_id TEXT NOT NULL, version INTEGER NOT NULL, actor_id TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(academy_id, version));`);
 }
@@ -626,6 +629,59 @@ function render(ctx: PageContext) {
   const students = accessibleStudents(ctx.db, ctx.actor);
   const classes = accessibleClasses(ctx.db, ctx.actor);
   const hidden = `<input type="hidden" name="version" value="${row.version}">`;
+  const recommendation = (event: ScheduleEvent) => {
+    if (
+      !staff(ctx) ||
+      event.status === 'withdrawn' ||
+      (ctx.actor.role !== 'admin' && event.status !== 'draft')
+    )
+      return '';
+    const today = new Date(Date.now() + 32400000).toISOString().slice(0, 10);
+    const after = event.date < today ? addDays(today, -1) : event.date;
+    const suggestions = config.rooms
+      .flatMap((room) =>
+        suggestMakeups(
+          academy,
+          state,
+          {
+            classId: event.classId,
+            scope: event.scope,
+            studentId: event.studentId,
+            eventId: event.eventId,
+            classSnapshot: event.classSnapshot,
+            room,
+            after,
+          },
+          14,
+        ),
+      )
+      .filter(({ slot }) => {
+        try {
+          assertUnifiedSchedule(
+            ctx.db,
+            ctx.actor.academyId,
+            {
+              ...state,
+              events: state.events.map((e) =>
+                e.eventId === event.eventId
+                  ? { ...e, status: 'confirmed', makeup: slot }
+                  : e,
+              ),
+            },
+            academy,
+          );
+          return true;
+        } catch {
+          return false;
+        }
+      });
+    const ranked = rankSchoolSuggestions(
+      suggestions,
+      classExams(ctx.db, ctx.actor.academyId, event.classId),
+      event.date,
+    ).slice(0, 5);
+    return `<details><summary>학교 시험을 고려한 보강 추천</summary><p class="muted">확인된 시험 기간은 뒤로 배치합니다. 선택한 일정은 저장 시 충돌을 다시 검사합니다.</p>${ranked.map((s) => `<form method="post">${hidden}<input type="hidden" name="eventId" value="${h(event.eventId)}"><input type="hidden" name="makeupDate" value="${h(s.slot.date)}"><input type="hidden" name="makeupStart" value="${h(s.slot.start)}"><input type="hidden" name="room" value="${h(s.slot.room)}"><p>${h(s.slot.date)} ${h(s.slot.start)}~${h(s.slot.end)} · ${h(s.slot.room)} ${s.examConflicts.length ? ' · 시험 겹침: ' + h(s.examConflicts.join(', ')) : s.beforeExam ? ' · 시험 전 추천' : ''}</p><button name="action" value="change">이 시간으로 지정</button></form>`).join('') || '<p>현재 조건에 맞는 보강 후보가 없습니다.</p>'}</details>`;
+  };
   const options = (list: { id: string; name: string }[]) =>
     list
       .map((x) => `<option value="${h(x.id)}">${h(x.name)}</option>`)
@@ -633,7 +689,7 @@ function render(ctx: PageContext) {
   const eventCard = (
     event: ScheduleEvent,
   ) => `<article class="panel" id="event-${h(event.eventId)}"><div class="panel-heading"><h2>${h(academy.classes.find((c) => c.classId === event.classId)?.name)} ${event.scope === 'student' ? h(students.find((s) => s.id === event.studentId)?.name) + ' 결석' : '휴강'}</h2><span class="pill">${{ draft: '임시 저장', confirmed: '확정', withdrawn: '취소' }[event.status]}</span></div><p>${h(event.date)} · ${event.makeup ? `${h(event.makeup.date)} ${h(event.makeup.start)}~${h(event.makeup.end)} ${h(event.makeup.room)} 보강` : '보강 미정'}</p>
-    ${staff(ctx) && event.status !== 'withdrawn' && (ctx.actor.role === 'admin' || event.status === 'draft') ? `<form method="post">${hidden}<input type="hidden" name="eventId" value="${h(event.eventId)}"><div class="fields"><label>새 보강일<input type="date" name="makeupDate"></label><label>시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((r) => `<option>${h(r)}</option>`).join('')}</select></label></div><div class="actions"><button name="action" value="change">보강 지정·변경</button>${event.status === 'draft' && ctx.actor.role === 'admin' ? '<button name="action" value="confirm">일정 확정</button>' : ''}${event.makeup ? '<button class="secondary" name="action" value="clear">보강 취소</button>' : ''}<button class="secondary" name="action" value="withdraw">휴강·결석 취소</button></div></form>` : ''}</article>`;
+    ${staff(ctx) && event.status !== 'withdrawn' && (ctx.actor.role === 'admin' || event.status === 'draft') ? `<form method="post">${hidden}<input type="hidden" name="eventId" value="${h(event.eventId)}"><div class="fields"><label>새 보강일<input type="date" name="makeupDate"></label><label>시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((r) => `<option>${h(r)}</option>`).join('')}</select></label></div><div class="actions"><button name="action" value="change">보강 지정·변경</button>${event.status === 'draft' && ctx.actor.role === 'admin' ? '<button name="action" value="confirm">일정 확정</button>' : ''}${event.makeup ? '<button class="secondary" name="action" value="clear">보강 취소</button>' : ''}<button class="secondary" name="action" value="withdraw">휴강·결석 취소</button></div></form>` : ''}${recommendation(event)}</article>`;
   const today = new Date(Date.now() + 32400000).toISOString().slice(0, 10);
   const monthEnd = new Date(Date.now() + 31 * 86400000 + 32400000)
     .toISOString()

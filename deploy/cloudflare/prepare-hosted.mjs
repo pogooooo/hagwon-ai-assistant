@@ -19,6 +19,8 @@ for (const name of [
   'service-design.css',
   'service-ui.js',
   'workbook-ui.js',
+  'voice-ui.js',
+  'voice-worklet.js',
   'assets',
 ]) {
   cpSync(join(source, name), join(assets, name), { recursive: true });

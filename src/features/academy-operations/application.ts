@@ -6,6 +6,14 @@ import {
   type ServerResponse,
 } from 'node:http';
 import type { OperationsDatabase } from './database.ts';
+import {
+  createExternalServices,
+  type ExternalServices,
+} from './external-services.ts';
+import { publicDataModule } from './public-data.ts';
+import { knowledgeModule } from './knowledge.ts';
+import { schoolsModule } from './schools.ts';
+import { voiceModule, voiceAudio } from './voice.ts';
 
 import { consultationModule } from './consultation.ts';
 import {
@@ -50,6 +58,10 @@ const modules: OperationModule[] = [
   documentsModule,
   consultationModule,
   preferencesModule,
+  publicDataModule,
+  knowledgeModule,
+  schoolsModule,
+  voiceModule,
 ];
 const sessionSeconds = 8 * 60 * 60;
 const sessionCookie = 'axr_operations';
@@ -62,6 +74,10 @@ const menuOrder = [
   '/homework',
   '/directory',
   '/settings',
+  '/public-data',
+  '/knowledge',
+  '/schools',
+  '/voice',
 ];
 const menuIcons: Record<string, string> = {
   '/consultation': 'chat',
@@ -75,6 +91,7 @@ const menuIcons: Record<string, string> = {
 };
 
 export interface OperationsServerOptions {
+  services?: ExternalServices;
   db: OperationsDatabase;
   publicOrigin?: URL;
   demoPassword: string;
@@ -88,6 +105,7 @@ export interface OperationsServerOptions {
 }
 
 export function createOperationsServer({
+  services,
   db,
   publicOrigin,
   demoPassword,
@@ -99,6 +117,7 @@ export function createOperationsServer({
   maxDocumentBytes = defaultMaxDocumentBytes,
   scanVision,
 }: OperationsServerOptions) {
+  services ??= createExternalServices(process.env, fetch, db);
   if (
     publicOrigin &&
     (publicOrigin.protocol !== 'https:' ||
@@ -118,6 +137,8 @@ export function createOperationsServer({
       'service-design.css',
       'service-ui.js',
       'workbook-ui.js',
+      'voice-ui.js',
+      'voice-worklet.js',
       'assets/walnut.png',
       'assets/water.png',
       'assets/owl.png',
@@ -368,7 +389,7 @@ export function createOperationsServer({
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader(
       'Content-Security-Policy',
-      "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' blob:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     );
     const host = request.headers.host;
     const localPort = request.socket.localPort;
@@ -485,6 +506,7 @@ export function createOperationsServer({
         assertCurrentSession(request, sessionActor);
       assertCurrentAccess();
       const ctx = {
+        services,
         db,
         actor: sessionActor,
         url,
@@ -492,6 +514,17 @@ export function createOperationsServer({
         maxDocumentBytes,
         scanVision,
       };
+      if (
+        form &&
+        operation === voiceModule &&
+        field(form, 'action') === 'audio'
+      ) {
+        const bytes = await voiceAudio(ctx, form);
+        assertCurrentAccess();
+        response.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+        response.end(bytes);
+        return;
+      }
       if (
         form &&
         operation === homeworkModule &&
