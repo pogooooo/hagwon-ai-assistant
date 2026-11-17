@@ -1,10 +1,23 @@
-const menu = document.querySelector('.service-nav');
-const selectedMenu = menu?.querySelector('[aria-current="page"]');
-if (selectedMenu) {
-  const overflow =
-    selectedMenu.getBoundingClientRect().right -
-    menu.getBoundingClientRect().right;
-  if (overflow > 0) menu.scrollLeft += overflow + 16;
+const mobileMenu = document.querySelector('#mobile-menu');
+document
+  .querySelector('[data-open-menu]')
+  ?.addEventListener('click', () => mobileMenu?.showModal());
+mobileMenu?.addEventListener('click', (event) => {
+  if (event.target === mobileMenu) {
+    const box = mobileMenu.getBoundingClientRect();
+    if (
+      event.clientX < box.left ||
+      event.clientX > box.right ||
+      event.clientY < box.top ||
+      event.clientY > box.bottom
+    )
+      mobileMenu.close();
+  }
+});
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register('/service-worker.js').catch(() => {
+    // Installation is optional; normal online operation remains available.
+  });
 }
 
 // Restore only the failed schedule form; keep the server's fresh revision token.

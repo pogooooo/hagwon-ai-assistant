@@ -4,6 +4,7 @@ import { recentPublishedDocuments } from './documents.ts';
 import { homeworkOverview } from './homework.ts';
 import { recentLearningReports } from './learning.ts';
 import { selectedCharacter } from './preferences.ts';
+import { serviceIcon } from './service-navigation.ts';
 import { escapeHtml as h, type PageContext } from './shared.ts';
 
 interface DashboardItem {
@@ -87,7 +88,7 @@ export function renderHome(ctx: PageContext) {
   const today = new Date(now.getTime() + 9 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
-  const heading = `<div class="workspace-heading dashboard-heading"><div><h1>${staff ? '학원 운영' : '우리 학원'}</h1><time datetime="${today}">${h(date)}</time></div>${
+  const heading = `<div class="workspace-heading dashboard-heading"><div><p class="eyebrow">${staff ? '오늘의 운영' : '나의 학원 생활'}</p><h1>${h(actor.name)}님, 안녕하세요.</h1><time datetime="${today}">${h(date)}</time></div>${
     staff
       ? `<div class="actions">${actor.role === 'admin' ? '<a class="button-link subtle-link" href="/documents?view=create#document-edit">자료 등록</a>' : ''}<a class="button-link" href="/schedule?view=makeup">휴·보강 관리</a></div>`
       : ''
@@ -124,8 +125,8 @@ export function renderHome(ctx: PageContext) {
       <section class="work-queue" aria-labelledby="work-queue-title">
         <h2 id="work-queue-title">처리할 업무</h2>
         <div class="queue-grid">
-          <a href="/consultation?view=inbox"><span>처리 중인 상담</span><strong>${pending.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
-          <a href="/homework?view=review"><span>확인할 제출물</span><strong>${homework.review.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
+          <a href="/consultation?view=inbox"><span class="queue-label">${serviceIcon('/consultation')}처리 중인 상담</span><strong>${pending.length}<small>건</small></strong><span aria-hidden="true">↗</span></a>
+          <a href="/homework?view=review"><span class="queue-label">${serviceIcon('/homework')}확인할 제출물</span><strong>${homework.review.length}<small>건</small></strong><span aria-hidden="true">↗</span></a>
         </div>
       </section>
       <div class="dashboard-grid">
