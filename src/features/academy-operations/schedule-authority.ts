@@ -13,9 +13,20 @@ export function requestsOperationalSchedule(frame: Readonly<QueryFrame>) {
     frame.relativeDay !== null ||
     !!frame.relativeWeek ||
     frame.months.length > 0;
-  const schedule = frame.topics.some(
-    ({ id }) => id === 'schedule' || id === 'schedule_change',
-  );
+  // A temporal word is an attribute, not the subject. “언제/토요일”
+  // also occurs in public opening hours, collection and application policies.
+  // Only restrict the document port when the question actually targets lessons.
+  const lessonTarget =
+    frame.classIds.length > 0 ||
+    frame.matchedStudentIds.length > 0 ||
+    frame.subjects.length > 0 ||
+    frame.selfReference ||
+    /시간표|휴강|보강|휴원|개강|종강|수업|강의|등원/.test(q);
+  const schedule =
+    lessonTarget &&
+    frame.topics.some(
+      ({ id }) => id === 'schedule' || id === 'schedule_change',
+    );
   const makeup =
     frame.topics.some(({ id }) => id === 'makeup') &&
     (dated || /언제|몇\s*시|시간표|일정|요일/.test(q));
