@@ -136,7 +136,7 @@ export function renderHome(ctx: PageContext) {
         `<a href="${href}">${serviceIcon(href)}<span>${label}</span></a>`,
     )
     .join('')}</nav>`;
-  const search = `<section class="home-search" aria-label="학원에 물어보기"><div><h2>학원 생활, 무엇이 궁금하세요?</h2><form action="/consultation" method="get"><label class="visually-hidden" for="home-question">상담할 질문</label><input id="home-question" name="q" maxlength="500" required placeholder="궁금한 내용을 입력해 주세요" autocomplete="off"><button aria-label="상담 시작">${serviceIcon('/consultation')}</button></form><p>학원에서 확인한 자료를 바탕으로 안내해 드려요.</p></div><img src="/assets/${selectedCharacter(ctx)}.png" alt=""></section>${shortcuts}`;
+  const search = `<section class="home-search" aria-label="학원에 물어보기"><div class="home-search-copy"><p class="hero-eyebrow"><span aria-hidden="true"></span>우리 학원과 더 가까이</p><h2>궁금한 순간,<br><strong>편하게 물어보세요.</strong></h2><form action="/consultation" method="get"><label class="visually-hidden" for="home-question">상담할 질문</label><input id="home-question" name="q" maxlength="500" required placeholder="학원에 궁금한 내용을 물어보세요" autocomplete="off"><button aria-label="상담 시작"><span>질문하기</span><span aria-hidden="true">↗</span></button></form><p class="hero-note">학원에서 확인한 자료를 바탕으로 안내해 드려요.</p></div><div class="home-search-art" aria-hidden="true"><span class="hero-bubble">함께 알아볼까요?</span><div class="character-stage"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""></div><span class="hero-orbit hero-orbit-chat">${serviceIcon('/consultation')}</span><span class="hero-orbit hero-orbit-calendar">${serviceIcon('/schedule')}</span></div></section>${shortcuts}`;
   if (staff && homework) {
     return `${heading}${search}
       <section class="work-queue" aria-labelledby="work-queue-title">
