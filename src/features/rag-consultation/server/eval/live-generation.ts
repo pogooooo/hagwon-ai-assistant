@@ -5,7 +5,8 @@ import {
 } from '../generation/from-env.ts';
 import type { GenerationPort } from '../ports.ts';
 
-export type LiveGenerationMode = 'gemini' | 'gemini-synthetic';
+export type LiveGenerationMode =
+  'gemini' | 'gemini-synthetic' | 'clova' | 'clova-synthetic';
 
 export function createEvalGemini(
   mode: LiveGenerationMode,
@@ -21,8 +22,9 @@ export function createEvalGemini(
   let transportFailures = 0;
   let budgetBlocks = 0;
   let authorizationFailed = false;
+  const name = mode.startsWith('clova') ? 'clova' : 'gemini';
   const client = createGenerationProviderFromEnv(
-    { ...env, RAG_GENERATION_PROVIDER: 'gemini' },
+    { ...env, RAG_GENERATION_PROVIDER: name },
     async (url, options) => {
       if (liveRequests >= maxLiveCalls)
         return new Response(null, { status: 402 });
@@ -41,10 +43,14 @@ export function createEvalGemini(
       }
     },
   );
-  if (!client.isExternal || !client.providerId.startsWith('gemini:'))
-    throw new Error('Gemini evaluation requires RAG_GEMINI_API_KEY');
+  if (!client.isExternal || !client.providerId.startsWith(name + ':'))
+    throw new Error(
+      name === 'clova'
+        ? 'CLOVA evaluation requires RAG_CLOVA_API_KEY'
+        : 'Gemini evaluation requires RAG_GEMINI_API_KEY',
+    );
 
-  const synthetic = mode === 'gemini-synthetic';
+  const synthetic = mode.endsWith('-synthetic');
   const provider: GenerationPort = {
     providerId: client.providerId,
     isExternal: true,

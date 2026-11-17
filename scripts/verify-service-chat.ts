@@ -6,7 +6,7 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createOperationsServer } from '../src/features/academy-operations/application.ts';
 import { getActor } from '../src/features/academy-operations/directory.ts';
@@ -31,12 +31,24 @@ mkdirSync(out, { recursive: true });
 let externalCalls = 0,
   externalFailures = 0,
   generationAttempts = 0;
+const apiResponses: unknown[] = [];
 const provider = createOperationsGeneration(
   process.env,
   async (url, options) => {
     externalCalls++;
     const response = await fetch(url, options);
     if (!response.ok) externalFailures++;
+    apiResponses.push({
+      httpStatus: response.status,
+      body: await response
+        .clone()
+        .json()
+        .catch(() => null),
+    });
+    writeFileSync(
+      resolve(out, 'api-responses.json'),
+      JSON.stringify(apiResponses, null, 2),
+    );
     return response;
   },
 );
@@ -50,7 +62,7 @@ configureOperationsGeneration({
     return provider.generateGroundedAnswer(input, options);
   },
 });
-const sources = [
+let sources = [
   [
     'address',
     '주소',
@@ -282,6 +294,12 @@ for (const [actor, studentId] of [
       claims: [],
       sources: [],
     });
+const fixtureAt = process.argv.indexOf('--definition');
+if (fixtureAt >= 0) {
+  const frozen = JSON.parse(readFileSync(process.argv[fixtureAt + 1], 'utf8'));
+  sources = frozen.sources;
+  cases.splice(0, cases.length, ...frozen.cases);
+}
 const definition = JSON.stringify({ sources, cases }, null, 2);
 writeFileSync(resolve(out, 'definition.json'), definition);
 const definitionSha256 = createHash('sha256').update(definition).digest('hex');
@@ -338,6 +356,9 @@ const rows: (Challenge & {
 })[] = [];
 const compact = (s: string) => s.normalize('NFKC').replace(/\s/g, '');
 for (const c of cases) {
+  const interval = Number(process.env.AXR_EVAL_INTERVAL_MS ?? '0');
+  if (interval > 0)
+    await new Promise((resolve) => setTimeout(resolve, interval));
   const id = randomUUID(),
     started = performance.now();
   try {
@@ -431,6 +452,10 @@ const report = {
   rows,
 };
 writeFileSync(resolve(out, 'results.json'), JSON.stringify(report, null, 2));
+writeFileSync(
+  resolve(out, 'api-responses.json'),
+  JSON.stringify(apiResponses, null, 2),
+);
 console.log(
   JSON.stringify({ ...report, rows: undefined, sourceIds: undefined }, null, 2),
 );

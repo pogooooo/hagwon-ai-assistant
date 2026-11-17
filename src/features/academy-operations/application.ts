@@ -254,9 +254,9 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · AXR</title><meta name="theme-color" content="#13664d"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=4"><link rel="stylesheet" href="/service-design.css?v=4"></head><body data-account="' +
+      ' · AXR</title><meta name="theme-color" content="#13664d"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=5"><link rel="stylesheet" href="/service-design.css?v=5"></head><body data-account="' +
       h(actor?.id ?? '') +
-      '"><script src="/service-ui.js?v=4" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=5" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName

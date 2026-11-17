@@ -6,6 +6,10 @@
  *       → 인용·숫자·대상 사후 검사 → 답변/보류/확인/거부/담당자 연결
  */
 import type { RagAnswer, RagCitation } from '../contract.ts';
+import {
+  answerPublicDocuments,
+  isPublicDocumentQuestion,
+} from './answer/document-reading.ts';
 import { collectEvidence, validateEvidence } from './answer/evidence-bundle.ts';
 import { answerWeeklyRefund } from './answer/refund-evidence.ts';
 import {
@@ -1561,6 +1565,22 @@ export function createRagConsultationService(
               deps.engine === 'planned',
             );
             let draft: AnswerDraft;
+            const publicReading =
+              deps.engine === 'planned' &&
+              deps.generation.providerId.startsWith('clova:') &&
+              !input.studentIdHint &&
+              !(
+                namedTeacher(frame.normalized) &&
+                frame.topics.some((t) => t.id === 'contact')
+              ) &&
+              !(
+                ctx.studentClassIds.length &&
+                (frame.subjects.length > 0 ||
+                  /수업|강사|선생|(?:^|\s)(?:(?:우리|저희)\s*)?반(?:$|\s|[은는이가을를의에])/.test(
+                    question,
+                  ))
+              ) &&
+              isPublicDocumentQuestion(frame);
             if (plan.requests.length > 1) {
               const drafts: AnswerDraft[] = [];
               for (const [index, request] of plan.requests.entries()) {
@@ -1655,6 +1675,30 @@ export function createRagConsultationService(
                     ).draft
                   : proposal;
             }
+            // Identity, permission and specialized evidence decisions run first.
+            // Do not replace a fact/cell-bound result with a looser prose answer.
+            const bound =
+              draft.usedFacts.length > 0 ||
+              draft.citations.some(
+                (c) =>
+                  c.kind === 'chunk' &&
+                  (c.tableColumns?.length ||
+                    c.chunk.location.kind === 'table_row' ||
+                    ['announcement', 'schedule'].includes(
+                      c.chunk.documentType,
+                    )),
+              );
+            if (
+              publicReading &&
+              trace.intent !== 'teacher_personal_contact' &&
+              (draft.status === 'answered' ||
+                draft.status === 'partial' ||
+                (draft.status === 'abstained' &&
+                  draft.reasonCode === 'INSUFFICIENT_EVIDENCE')) &&
+              !bound &&
+              trace.generationCalls === 0
+            )
+              draft = (await answerPublicDocuments(ctx, draft)) ?? draft;
             final = await finalize(ctx, draft);
             if (
               consultedSupervisor &&

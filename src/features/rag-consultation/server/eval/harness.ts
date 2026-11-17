@@ -256,7 +256,12 @@ export interface CaseResult {
   generationCalls: number;
   liveRequests?: number;
   generationPolicyBlocked?: boolean;
-  generationMode?: 'gemini' | 'gemini-synthetic' | 'simulated_failure';
+  generationMode?:
+    | 'gemini'
+    | 'gemini-synthetic'
+    | 'clova'
+    | 'clova-synthetic'
+    | 'simulated_failure';
   clova?: {
     requests: number;
     tokens: number;

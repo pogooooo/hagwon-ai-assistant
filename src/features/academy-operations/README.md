@@ -79,27 +79,24 @@ Node 24.19.0에서 `npm ci`, `npm run dev`를 실행합니다. 기본 주소는 
 - 기존 시간표 변경에는 적용일이 필요합니다. 오늘 이전 또는 마지막 개정판보다 이른 변경은 거부합니다. 이전 기간을 보존하고 휴·보강에는 등록 당시 수업 정보를 저장하므로 원래 시각·길이·인용이 바뀌지 않습니다.
 - 안내문은 DB 발송 대기함에 저장합니다. 실제 문자·알림톡은 발송하지 않습니다. 모든 운영 반을 등록해야 전체 자원 충돌을 확인할 수 있습니다.
 
-## Gemini와 이후 네이버 AI 전환
+## 네이버 AI 연결
 
-현재 로컬 `.env.local`은 Gemini로 연결했습니다. 키는 서버에서만 읽고 Git·화면·로그에 포함하지 않습니다.
+운영 서버와 Cloudflare는 네이버 CLOVA Studio HCX-007을 사용합니다. 일반 안내는 질문 항목별 원문 선택을, 학습 방향은 승인된 지도 근거에 제한한 문장 구성을 요청합니다. 반·원생·정형 시간표·비용은 기존 권한 조회와 전용 엔진을 유지합니다. 운영 설정에 Gemini가 남아 있어도 Google로 전송하지 않습니다. 과거 비교 실험용 공급자만 독립 평가 코드에 보존합니다.
 
 ```dotenv
-RAG_GENERATION_PROVIDER=gemini
-RAG_GEMINI_MODEL=gemini-3.5-flash-lite
-RAG_GEMINI_API_KEY=발급받은_키
-RAG_GEMINI_ALLOW_PERSONAL_DATA=false
+RAG_GENERATION_PROVIDER=clova
+RAG_CLOVA_API_KEY=
+RAG_CLOVA_ALLOW_PERSONAL_DATA=false
 RAG_GENERATION_DAILY_CALL_LIMIT=100
 ```
 
-가상 학습 자료로 실제 연동을 검증한 로컬 DB만 `RAG_GEMINI_ALLOW_PERSONAL_DATA=true`를 사용했습니다. 저장소 예제는 false입니다. 실제 학생 자료를 외부로 처리하는 설정은 운영 정책에 맞춰 별도로 지정해야 합니다.
+키는 서버 환경 또는 Cloudflare Secret에 등록합니다. 개인 학습 기록의 외부 처리는 별도 허용 전 차단합니다. 일반 안내 AI는 승인된 학원 공개 문단을 읽습니다. 학생·반에 귀속된 자료, 표, 판독 불확실 OCR은 AI 입력에서 제외합니다. 공통 규정 표를 포함한 표 답변은 기존 행·열 선택과 검증 경로에서 처리합니다. 기존의 대상 확인·접근 제한·정형 사실·시간표·차량별 셔틀·공지 조회를 먼저 수행합니다. 그 뒤 일반 문서 해석이 필요한 질문 전체와 요구 항목을 함께 보내고, 반환 항목의 누락·추가·중복, 원문 변조, 문서 ID, 마지막 승인 버전을 검사합니다. 일부만 확인되면 partial, 확인된 내용이 없거나 모델이 실패하면 보류합니다. 문장이 실제 질문에 답하는지는 모델 판단도 포함하므로 원문 일치 검사만으로 의미 정확성 전체를 보증하지는 않습니다.
 
-확정 정답률·수강료·일정 조회는 생성 호출 없이 답합니다. 근거가 있는 학습 방향 요약에 Gemini를 사용하고, 수치·출처·다른 학생 ID·근거 없는 원인 단정을 검사합니다. 생성이 실패하거나 검증을 통과하지 않으면 담당자 확인으로 전환합니다. 근거가 없는데 AI로 답을 채우는 구조가 아닙니다.
+최종 문항별 결과와 평가 기준은 [네이버 상담 검증](../../../docs/naver-consultation-verification-2026-11-17/README.md)을 참고합니다.
 
-한 서버가 공급자 인스턴스와 호출 한도를 공유합니다. 직접 호출에서도 한도·장애 차단을 검사합니다. UTC 하루 기준이며 **프로세스 재시작 시 카운터는 초기화**됩니다. 공급자 계정의 과금 한도와 동일한 장치가 아닙니다.
+로컬 운영 서버와 Cloudflare의 호출 횟수는 SQLite의 `op_external_usage`에 저장됩니다. UTC 일자당 기본 100건이며 재시작해도 초기화되지 않습니다. 실패한 네트워크 호출도 한 건으로 계산합니다. 재시도·타 공급자 전환은 하지 않습니다. 이 횟수 제한은 네이버 계정 전체의 원화 과금 한도가 아닙니다. 사진 판독·음성 서비스에는 각각 별도 설정과 한도가 있습니다.
 
-`npm run ai:check`는 고정 가상 안내 1건을 실제 API로 보내고 출처·시각을 검사합니다. 이후 `RAG_GENERATION_PROVIDER=clova`, `RAG_CLOVA_API_KEY`, 계정에서 사용 가능한 `RAG_CLOVA_MODEL`, `RAG_CLOVA_ALLOW_PERSONAL_DATA`를 설정하고 서버를 재시작하면 같은 어댑터 계약으로 전환합니다. 실패 시 다른 공급자로 자동 재전송하지 않습니다. 이번에는 실제 CLOVA 호출을 검증하지 않았습니다.
-
-공급자 연결은 [Gemini 공식 호환 API 문서](https://ai.google.dev/gemini-api/docs/openai)와 [CLOVA Studio 공식 호환 API 문서](https://api.ncloud-docs.com/docs/clovastudio-openaicompatibility)를 기준으로 확인했습니다.
+`npm run ai:check`는 공개 합성 안내 한 건으로 연결을 확인합니다. 현재 API는 [CLOVA v3 Structured Outputs](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3-so)입니다. 사진 판독은 기존 CLOVA 연결을 유지합니다. 음성 인식·합성도 네이버용 어댑터이며 전용 키가 없으면 비활성 상태입니다.
 
 ## 2026-11-13 통합 검증
 
@@ -124,15 +121,14 @@ RAG_GENERATION_DAILY_CALL_LIMIT=100
 
 [AXR 가상 학원](https://axr-academy-hosted.pogoo.workers.dev/login)은 Cloudflare Workers에서 요청을 받고 Durable Objects에서 앱과 SQLite를 실행합니다. 기존 Cloudflare 주소는 새 주소로 연결됩니다. 클라우드 데모는 저장소에 있는 가상 학원 자료로 초기화하며, 로컬 데모 DB와 별도로 저장합니다.
 
-저장소 루트에서 아래 순서로 배포합니다. 데모 Worker에 `AXR_HOSTED_DEMO_PASSWORD`와 `RAG_GEMINI_API_KEY`를 시크릿으로 등록합니다. `RAG_GEMINI_MODEL`로 모델을 지정할 수 있습니다.
+저장소 루트에서 아래 순서로 배포합니다. 데모 Worker에 `AXR_HOSTED_DEMO_PASSWORD`와 `RAG_CLOVA_API_KEY`를 시크릿으로 등록합니다.
 
 ```sh
 node deploy/cloudflare/prepare-hosted.mjs
-wrangler deploy --config deploy/cloudflare/wrangler.gemini.jsonc
 wrangler deploy --config deploy/cloudflare/wrangler.hosted.jsonc
 ```
 
-데모는 미국 동부 배치 힌트를 설정한 비공개 Worker에 서비스 바인딩으로 Gemini 요청을 보냅니다. 관리자 계정으로 로그인한 뒤 [설정](https://axr-academy-hosted.pogoo.workers.dev/settings)의 **가상 안내로 연결 확인**을 누르면 실제 모델이 운영 시작 시각을 14시로 답하고 가상 안내를 인용했는지 확인합니다. 공개 데모에서는 학생 자료의 외부 AI 전송을 차단합니다. 확정 수치와 일정은 저장된 근거를 조회해 답합니다.
+데모는 서버에서 네이버 CLOVA Studio로 직접 요청합니다. 이전 Gemini 중계 Worker 연결은 제거했습니다. 관리자 계정으로 로그인한 뒤 [설정](https://axr-academy-hosted.pogoo.workers.dev/settings)의 **가상 안내로 연결 확인**을 누르면 실제 모델이 운영 시작 시각을 14시로 답하고 가상 안내를 인용했는지 확인합니다. 공개 데모에서는 학생 자료의 외부 AI 전송을 차단합니다. 확정 수치와 일정은 저장된 근거를 조회해 답합니다.
 
 클라우드 데모의 문서 업로드는 최대 5MB입니다. 텍스트 PDF를 파싱하고 원본을 내려받을 수 있습니다.
 
@@ -140,4 +136,4 @@ wrangler deploy --config deploy/cloudflare/wrangler.hosted.jsonc
 
 새 교재 숙제의 승인 분석은 `숙제 → 학생별 분석 → 상담 공개`에서 학생·반·마감 월별로 별도 공개합니다. 교사 승인만으로 상담에 자동 공개되지 않습니다. 최종 정오답이나 승인 버전이 바뀌면 이전 근거를 즉시 제외하고, 확인 후 재공개해야 새 결과로 답합니다. 공개된 자료는 상담 답변의 인용 링크에서 쪽수·번호·승인 버전을 확인할 수 있습니다. DB 스키마 변경 없이 이미 반영된 교재·배정·승인 테이블과 기존 공개 기록 테이블을 사용합니다. 자세한 집계·권한·정정 규칙과 검증 범위는 [분석·상담 연결 기록](../../../docs/homework-learning-integration-handoff.md#2026-11-16-분석상담-연결-반영)에 있습니다.
 
-로컬 SQLite·가상 계정에서 구현·검증했습니다. 실제 팀 채점/분류 산출물 연결, 외부 인증·운영 DB/호스팅, 문자·알림톡 발송, 실제 CLOVA 계정 검증은 외부 시스템/자료가 필요합니다. 운영 업로드는 텍스트 PDF·DOCX·HWPX·TXT·Markdown을 읽습니다. 스캔 전용 PDF의 운영 업로드 OCR은 연결하지 않았고 확인된 텍스트를 별도로 입력합니다. RAG 자체 OCR과 원본 평가 경로는 보존했습니다. AI로 학습 원인·태도·미래 성적을 임의 진단하지 않습니다.
+로컬 SQLite·가상 계정에서 구현·검증했습니다. 실제 팀 채점/분류 산출물 연결, 외부 인증·운영 DB/호스팅, 문자·알림톡 발송, 음성 서비스의 실제 계정 검증에는 별도 키가 필요합니다. CLOVA Studio 텍스트 호출은 합성 문항으로 검증합니다. 운영 업로드는 텍스트 PDF·DOCX·HWPX·TXT·Markdown을 읽습니다. 스캔 전용 PDF의 운영 업로드 OCR은 연결하지 않았고 확인된 텍스트를 별도로 입력합니다. RAG 자체 OCR과 원본 평가 경로는 보존했습니다. AI로 학습 원인·태도·미래 성적을 임의 진단하지 않습니다.

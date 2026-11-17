@@ -1,12 +1,15 @@
 /**
  * Explicit single-request integration check. Sends only fixed synthetic content.
- * Run manually with a configured CLOVA or Gemini server key.
+ * Run manually with a configured NAVER CLOVA server key.
  */
 import type { GenerationInput } from '../ports.ts';
 import { createGenerationProviderFromEnv } from './from-env.ts';
 import { validateGeneratedOutput } from './validate-output.ts';
 
-const provider = createGenerationProviderFromEnv(process.env);
+const provider = createGenerationProviderFromEnv({
+  ...process.env,
+  RAG_GENERATION_PROVIDER: 'clova',
+});
 const sourceId = 'SYNTHETIC_PUBLIC_NOTICE';
 const input: GenerationInput = {
   requestId: 'synthetic-generation-smoke',
@@ -23,8 +26,8 @@ const input: GenerationInput = {
   containsPersonalData: false,
 };
 
-if (!/^(clova|gemini):/.test(provider.providerId)) {
-  console.error('CLOVA 또는 Gemini의 서버 환경 변수를 설정해 주세요.');
+if (!provider.providerId.startsWith('clova:')) {
+  console.error('네이버 CLOVA 서버 환경 변수를 설정해 주세요.');
   process.exitCode = 1;
 } else {
   const result = await provider.generateGroundedAnswer(input, {

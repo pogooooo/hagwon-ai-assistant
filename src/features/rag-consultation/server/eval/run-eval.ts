@@ -133,11 +133,15 @@ const generationMode = option('generation', 'mock');
 if (
   generationMode !== 'mock' &&
   generationMode !== 'gemini' &&
-  generationMode !== 'gemini-synthetic'
+  generationMode !== 'gemini-synthetic' &&
+  generationMode !== 'clova' &&
+  generationMode !== 'clova-synthetic'
 )
-  throw new Error('--generation must be mock, gemini, or gemini-synthetic');
+  throw new Error(
+    '--generation must be mock, clova, clova-synthetic, gemini, or gemini-synthetic',
+  );
 const liveMode = generationMode !== 'mock';
-if (generationMode === 'gemini-synthetic' && holdoutOption)
+if (generationMode.endsWith('-synthetic') && holdoutOption)
   throw new Error('gemini-synthetic only accepts repository synthetic suites');
 if (liveMode && (!option('out') || option('out')?.startsWith('--')))
   throw new Error('Gemini evaluation requires an explicit --out directory');
@@ -348,7 +352,7 @@ const syntheticAcademies = new Set([
 for (const suiteName of suites) {
   const suite = externalSuite ?? loadSuite(suiteName);
   if (
-    (generationMode === 'gemini-synthetic' || (clova && !externalSuite)) &&
+    (generationMode.endsWith('-synthetic') || (clova && !externalSuite)) &&
     (!suite.cases.length ||
       suite.dataset.academies.some(
         ({ academy_id }) => !syntheticAcademies.has(academy_id),
@@ -444,6 +448,9 @@ for (const suiteName of suites) {
         result.liveRequests = live.report().liveRequests - requestsBefore;
         result.generationMode =
           c.apiState === 'ok' ? generationMode : 'simulated_failure';
+        // Pace between complete questions, outside the production timeout.
+        if (generationMode.startsWith('clova') && result.liveRequests)
+          await new Promise((resolve) => setTimeout(resolve, 3500));
       }
       if (clova && beforeQuestion) {
         const after = clova.usage();
@@ -606,7 +613,7 @@ for (const suiteName of suites) {
         `위반 ${summary.violations}`,
         `생성 ${summary.generationCalls}`,
         ...(summary.generation
-          ? [`Gemini 요청 ${summary.generation.liveRequests}`]
+          ? [`외부 AI 요청 ${summary.generation.liveRequests}`]
           : []),
         `p50/p95 ${summary.latencyMs.p50}/${summary.latencyMs.p95}ms`,
         `RSS ${summary.resources.rssPeakMb}MB`,

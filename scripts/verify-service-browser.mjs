@@ -12,6 +12,15 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { createOperationsServer } from '../src/features/academy-operations/application.ts';
 import { prepareQADemo } from '../src/features/academy-operations/qa-demo.ts';
+import {
+  createKnowledgeDraft,
+  knowledgeModule,
+} from '../src/features/academy-operations/knowledge.ts';
+import { getActor } from '../src/features/academy-operations/directory.ts';
+import {
+  configureOperationsGeneration,
+  createOperationsGeneration,
+} from '../src/features/academy-operations/runtime-generation.ts';
 
 const at = process.argv.indexOf('--out');
 if (at < 0 || !process.argv[at + 1]) throw new Error('Use --out <folder>');
@@ -27,6 +36,37 @@ const { default: AxeBuilder } = await import(
 const db = new DatabaseSync(':memory:'),
   password = randomUUID();
 const server = createOperationsServer({ db, demoPassword: password });
+const livePublic = process.argv.includes('--live-public');
+if (livePublic) {
+  if (!process.env.RAG_CLOVA_API_KEY)
+    throw new Error('Live browser check needs a NAVER server key');
+  configureOperationsGeneration(
+    createOperationsGeneration(process.env, fetch, db),
+  );
+  const context = {
+    db,
+    actor: getActor(db, 'TA_DIRECTOR'),
+    url: new URL('http://localhost/'),
+  };
+  const id = createKnowledgeDraft(context, {
+    kind: 'registration',
+    title: '합성 검증 휴게 라운지',
+    question: '라운지 이용',
+    body: '## 휴게 라운지\n휴게 라운지는 6층 602호입니다. 이용 시간은 평일 12:30~17:30입니다.',
+    provenance: '가상 브라우저 검증',
+  });
+  const form = new FormData();
+  for (const [k, v] of Object.entries({
+    action: 'approve',
+    id,
+    version: '1',
+    visibility: 'academy_public',
+    from: '2020-01-01',
+    until: '2030-12-31',
+  }))
+    form.set(k, v);
+  await knowledgeModule.submit(context, form);
+}
 await prepareQADemo(db);
 server.listen(0, '127.0.0.1');
 await once(server, 'listening');
@@ -130,7 +170,26 @@ try {
       pass: true,
     });
     if (role === 'guardian') {
-      await page.goto(origin + '/consultation');
+      await page.goto(origin + '/');
+      await page.locator('#home-question').fill('자습실 위치와 이용 시간은?');
+      await Promise.all([
+        page.waitForURL(/consultation\?q=/),
+        page.getByRole('button', { name: '상담 시작', exact: true }).click(),
+      ]);
+      assert.equal(
+        await page.locator('[name=question]').inputValue(),
+        '자습실 위치와 이용 시간은?',
+      );
+      await page.locator('[data-question]').first().click();
+      assert.equal(
+        await page.locator('[name=question]').inputValue(),
+        '학원 위치와 주차 안내가 궁금해요.',
+      );
+      results.interactions.push({
+        role,
+        check: 'home question transfer and editable suggestion',
+        pass: true,
+      });
       await page
         .locator('[name=question]')
         .fill('초등 수학반 시간표 알려주세요.');
@@ -143,11 +202,47 @@ try {
         /16:00/,
       );
       assert.ok(await page.locator('.citations').count());
+      await page.locator('.source-details summary').click();
+      assert.equal(await page.locator('.citations').isVisible(), true);
       results.interactions.push({
         role,
         check: 'submit question, saved answer, schedule and citation',
         pass: true,
       });
+      if (livePublic) {
+        await page.goto(origin + '/consultation');
+        await page
+          .locator('[name=question]')
+          .fill('휴게 라운지 위치와 이용 시간을 알려주세요.');
+        await page
+          .getByRole('button', { name: '질문하기', exact: true })
+          .click({ noWaitAfter: true });
+        await page.waitForURL(/id=/, { timeout: 35000 });
+        const answer = await page.locator('.message.answer').textContent();
+        assert.match(answer, /602호/);
+        assert.match(answer, /12:30/);
+        assert.match(answer, /17:30/);
+        await page.locator('.source-details summary').click();
+        assert.equal(await page.locator('.citations').isVisible(), true);
+        assert.equal(
+          db
+            .prepare(
+              "SELECT calls FROM op_external_usage WHERE kind='clova-consultation'",
+            )
+            .get().calls,
+          1,
+        );
+        await page.screenshot({
+          path: resolve(out, 'guardian-live-naver.png'),
+          fullPage: true,
+        });
+        results.interactions.push({
+          role,
+          check:
+            'live NAVER HTTP consultation: two requirements, source and persisted call count',
+          pass: true,
+        });
+      }
       await page.evaluate(async () => {
         await navigator.serviceWorker.ready;
       });
