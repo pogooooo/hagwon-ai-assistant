@@ -14,7 +14,10 @@ export const supervisorTools = {
   handoff: '원장 또는 담당자에게 연결',
 } as const;
 
+const selectorName = 'select_tool';
+const names = Object.keys(supervisorTools) as SupervisorTool[];
 const toolArguments = z.strictObject({
+  tool: z.enum(names),
   classId: z.string().optional(),
   studentId: z.string().optional(),
 });
@@ -25,7 +28,7 @@ const resultSchema = z.object({
         z.object({
           type: z.literal('function'),
           function: z.object({
-            name: z.enum(Object.keys(supervisorTools) as SupervisorTool[]),
+            name: z.literal(selectorName),
             arguments: z.union([
               toolArguments,
               z.string().transform((value, ctx) => {
@@ -100,7 +103,7 @@ export function selectClovaTool(
               {
                 role: 'system',
                 content:
-                  '상담 질문의 담당 도구 하나만 호출하라. 답이나 값을 생성하지 말고, 질문에서 명확한 대상만 등록된 ID로 지정하라. 해석이 불가능하면 handoff를 호출하라.',
+                  'select_tool을 한 번 호출해 담당 도구를 고르세요. 답이나 값을 생성하지 말고, 질문의 명확한 대상만 등록된 ID로 지정하세요. 해석이 불가능하면 handoff를 선택하세요.',
               },
               {
                 role: 'user',
@@ -111,27 +114,35 @@ export function selectClovaTool(
                 }),
               },
             ],
-            tools: Object.entries(supervisorTools).map(
-              ([name, description]) => ({
+            tools: [
+              {
                 type: 'function',
                 function: {
-                  name,
-                  description,
+                  name: selectorName,
+                  description: Object.entries(supervisorTools)
+                    .map(([name, description]) => `${name}(${description})`)
+                    .join(', '),
                   parameters: {
                     type: 'object',
-                    properties: name === 'handoff' ? {} : ids,
+                    properties: {
+                      tool: { type: 'string', enum: names },
+                      ...ids,
+                    },
+                    required: ['tool'],
                     additionalProperties: false,
                   },
                 },
-              }),
-            ),
-            toolChoice: 'auto',
+              },
+            ],
+            toolChoice: { type: 'function', function: { name: selectorName } },
+            thinking: { effort: 'none' },
             maxCompletionTokens: 1024,
           },
           AbortSignal.timeout(timeLeft),
         ),
       );
-      const { name, arguments: args } = result.message.toolCalls[0].function;
+      const { tool: name, ...args } =
+        result.message.toolCalls[0].function.arguments;
       if (
         performance.now() > deadline ||
         (args.classId &&

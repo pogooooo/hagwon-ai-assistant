@@ -22,9 +22,11 @@ import type { RagChunk } from '../types.ts';
 
 const success = (result: unknown) =>
   Response.json({ status: { code: '20000' }, result });
-const toolResult = (name: string, args: unknown) => ({
+const toolResult = (args: unknown) => ({
   message: {
-    toolCalls: [{ type: 'function', function: { name, arguments: args } }],
+    toolCalls: [
+      { type: 'function', function: { name: 'select_tool', arguments: args } },
+    ],
   },
   usage: { totalTokens: 8 },
 });
@@ -40,9 +42,17 @@ test('CLOVA supervisor admits known tools and bound IDs, limits calls, discards 
   const records: string[] = [];
   const api = createClovaApi('fixture', async (_url, init) => {
     const body = JSON.parse(String(init?.body));
-    assert.equal(body.tools.length, 5);
+    assert.equal(body.tools.length, 1);
+    assert.deepEqual(body.tools[0].function.parameters.properties.tool.enum, [
+      'schedule',
+      'tuition_timetable',
+      'documents',
+      'learning',
+      'handoff',
+    ]);
+    assert.deepEqual(body.thinking, { effort: 'none' });
     assert.ok(init?.signal);
-    return success(toolResult('schedule', '{"classId":"c1"}'));
+    return success(toolResult('{"tool":"schedule","classId":"c1"}'));
   });
   const choose = selectClovaTool(api, (name) => records.push(name));
   for (let i = 0; i < 4; i++) assert.equal(await choose(routing), 'schedule');
@@ -51,7 +61,7 @@ test('CLOVA supervisor admits known tools and bound IDs, limits calls, discards 
   assert.deepEqual(api.usage(), { requests: 4, tokens: 32, unreported: 0 });
 
   const forbidden = createClovaApi('fixture', async () =>
-    success(toolResult('learning', { studentId: 'other' })),
+    success(toolResult({ tool: 'learning', studentId: 'other' })),
   );
   assert.equal(
     await selectClovaTool(forbidden, () => assert.fail())(routing),
@@ -150,6 +160,10 @@ test('HCX-005 reads only scan pages in a mixed PDF and leaves conflicting cells 
     assert.match(String(url), /HCX-005$/);
     const input = JSON.parse(String(init?.body));
     assert.equal(input.messages[1].content[0].type, 'image_url');
+    assert.match(
+      input.messages[1].content[0].dataUri.data,
+      /^data:image\/png;base64,/,
+    );
     assert.ok(input.messages[1].content[0].dataUri.data.length > 500);
     const rows = [
       ['반', '수강료'],
@@ -158,7 +172,10 @@ test('HCX-005 reads only scan pages in a mixed PDF and leaves conflicting cells 
     return success({
       finishReason: 'stop',
       message: {
-        content: JSON.stringify([{ kind: 'table', rows }]),
+        content:
+          reads === 1
+            ? JSON.stringify([{ kind: 'table', rows }])
+            : '| **반** | **수강료** |\n| --- | --- |\n| 수학 | 28만원 |',
       },
     });
   });
