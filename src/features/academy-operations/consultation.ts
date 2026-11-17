@@ -1,4 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { setupKnowledge, knowledgeEvidence } from './knowledge.ts';
+import {
+  setupSchools,
+  schoolEvidence,
+  schoolQuerySelection,
+} from './schools.ts';
 import { operationsGeneration } from './runtime-generation.ts';
 import { workbookEvidence } from './workbook-publication.ts';
 import { selectedCharacter } from './preferences.ts';
@@ -24,6 +30,7 @@ import {
   createRagConsultationService,
   InMemoryHandoffStore,
   SystemClock,
+  InMemoryRagStore,
   type AcademyCatalog,
   type ConversationState,
 } from '../rag-consultation/server/index.ts';
@@ -92,6 +99,8 @@ interface Message {
 }
 
 function setupConsultation(db: OperationsDatabase) {
+  setupKnowledge(db);
+  setupSchools(db);
   setupLearning(db);
   setupTeamSchedule(db);
   db.exec(`
@@ -150,7 +159,7 @@ function canViewThread(ctx: PageContext, thread: Thread) {
   );
 }
 
-function loadThread(ctx: PageContext, id: string) {
+export function loadThread(ctx: PageContext, id: string) {
   const thread = one<Thread>(
     ctx.db,
     'SELECT * FROM op_consultation_threads WHERE academy_id = ? AND id = ?',
@@ -338,6 +347,8 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
   const team = teamScheduleEvidence(db, academyId);
   return {
     documents: [
+      ...knowledgeEvidence(db, academyId),
+      ...schoolEvidence(db, academyId),
       ...scheduleDocuments(db, academyId),
       ...team.map((x) => x.document),
       ...regularScheduleDocuments(db, academyId),
@@ -353,7 +364,7 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
   };
 }
 
-async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
+export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
   const { db, actor } = ctx;
   if (
     existing &&
@@ -395,20 +406,34 @@ async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
     notices,
     noticeFacts,
   );
+  const schoolSelection = schoolQuerySelection(ctx, question, studentId);
+  const schoolStore = schoolSelection ? new InMemoryRagStore() : undefined;
+  if (schoolStore && schoolSelection)
+    for (const document of schoolSelection.documents)
+      await schoolStore.upsertIndexedRevision({
+        document,
+        facts: [],
+        approve: true,
+      });
   const service = createRagConsultationService({
+    config: schoolSelection?.config,
     facts: store,
     documents: store,
-    selectEvidence: await scheduleAuthority(
-      [
-        ...scheduleDocuments(db, actor.academyId),
-        ...teamScheduleEvidence(db, actor.academyId).map((x) => x.document),
-        ...regularScheduleDocuments(db, actor.academyId),
-      ],
-      [
-        ...scheduleFacts(db, actor.academyId),
-        ...teamScheduleEvidence(db, actor.academyId).flatMap((x) => x.facts),
-      ],
-    ),
+    selectEvidence: schoolStore
+      ? () => ({ documents: schoolStore, facts: schoolStore })
+      : await scheduleAuthority(
+          [
+            ...scheduleDocuments(db, actor.academyId),
+            ...teamScheduleEvidence(db, actor.academyId).map((x) => x.document),
+            ...regularScheduleDocuments(db, actor.academyId),
+          ],
+          [
+            ...scheduleFacts(db, actor.academyId),
+            ...teamScheduleEvidence(db, actor.academyId).flatMap(
+              (x) => x.facts,
+            ),
+          ],
+        ),
     catalog: { getAcademyCatalog: async () => catalog },
     generation: operationsGeneration(),
     handoff: new InMemoryHandoffStore(),
@@ -427,6 +452,15 @@ async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
     studentIdHint: studentId || undefined,
     access,
   });
+  if (schoolSelection?.clarify?.length && answer.status !== 'denied') {
+    answer.status = 'clarify';
+    answer.answer =
+      '확인된 시험 일정이 여러 기간에 있습니다. 어느 시험의 날짜인지 선택해 주세요.';
+    answer.citations = [];
+    answer.clarifyOptions = schoolSelection.clarify;
+    answer.missingFields = ['시험 적용 기간'];
+    delete answer.handoff;
+  }
   const at = new Date().toISOString();
   transaction(db, () => {
     ctx.assertCurrentAccess?.();
@@ -638,7 +672,7 @@ function submitThreadAction(
   throw new OperationError('이 상담에서 실행할 수 없는 작업입니다.', 403);
 }
 
-function currentCitationRevisions(ctx: PageContext) {
+export function currentCitationRevisions(ctx: PageContext) {
   const access = consultationAccess(ctx);
   const revisions = currentDocumentRevisions(ctx);
   for (const notice of supplementaryEvidence(ctx.db, ctx.actor.academyId)

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { handleAsNodeRequest } from 'cloudflare:node';
 import { DurableObject } from 'cloudflare:workers';
+import { createExternalServices } from '../../src/features/academy-operations/external-services.ts';
 import { createOperationsServer } from '../../src/features/academy-operations/application.ts';
 import {
   configureOperationsGeneration,
@@ -71,6 +72,7 @@ export class AcademyDemo extends DurableObject {
       ),
     );
     const server = createOperationsServer({
+      services: createExternalServices(env, fetch, database(ctx.storage)),
       db: database(ctx.storage),
       publicOrigin: new URL(env.AXR_OPERATIONS_PUBLIC_ORIGIN),
       demoPassword: env.AXR_HOSTED_DEMO_PASSWORD,

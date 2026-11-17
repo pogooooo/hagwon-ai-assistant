@@ -13,6 +13,7 @@ export interface Actor {
 }
 
 export interface PageContext {
+  services?: import('./external-services.ts').ExternalServices;
   db: OperationsDatabase;
   actor: Actor;
   url: URL;
