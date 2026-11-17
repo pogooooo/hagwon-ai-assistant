@@ -144,16 +144,22 @@ export function createOperationsServer({
       'assets/owl.png',
       'assets/app-192.png',
       'assets/app-512.png',
+      'assets/fonts/noto-korean-400.woff2',
+      'assets/fonts/noto-korean-700.woff2',
+      'assets/fonts/noto-latin-400.woff2',
+      'assets/fonts/noto-latin-700.woff2',
     ]) {
-      const contentType = path.endsWith('.css')
-        ? 'text/css; charset=utf-8'
-        : path.endsWith('.json')
-          ? 'application/json; charset=utf-8'
-          : path.endsWith('.webmanifest')
-            ? 'application/manifest+json; charset=utf-8'
-            : path.endsWith('.js')
-              ? 'text/javascript; charset=utf-8'
-              : 'image/png';
+      const contentType = path.endsWith('.woff2')
+        ? 'font/woff2'
+        : path.endsWith('.css')
+          ? 'text/css; charset=utf-8'
+          : path.endsWith('.json')
+            ? 'application/json; charset=utf-8'
+            : path.endsWith('.webmanifest')
+              ? 'application/manifest+json; charset=utf-8'
+              : path.endsWith('.js')
+                ? 'text/javascript; charset=utf-8'
+                : 'image/png';
       staticFiles.set('/' + path, {
         contentType,
         bytes: readFileSync(new URL(path, assetsRoot)),
@@ -260,8 +266,12 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · AXR</title><meta name="theme-color" content="#ffffff"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=8"><link rel="stylesheet" href="/service-design.css?v=8"></head><body data-account="' +
+      ' · AXR</title><meta name="theme-color" content="#ffffff"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=9"><link rel="stylesheet" href="/service-design.css?v=9"></head><body data-account="' +
       h(actor?.id ?? '') +
+      '" data-page="' +
+      h(current ?? 'login') +
+      '" data-role="' +
+      h(actor?.role ?? 'guest') +
       '"><script src="/service-ui.js?v=7" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
@@ -299,7 +309,7 @@ export function createOperationsServer({
       ['보호자', 'TA_GUARDIAN_E_MATH'],
       ['방문자', 'TA_VISITOR'],
     ];
-    return `<div class="sign-in-layout"><div class="sign-in-content"><section class="panel sign-in-form">
+    return `<div class="sign-in-layout"><section class="sign-in-story" aria-label="AXR 학원"><p class="story-label">AXR ACADEMY</p><h2>학원의 하루,<br>함께 이어가요.</h2><p>상담부터 수업 일정, 학습 기록까지.<br>학원과 가정을 잇는 가장 가까운 공간.</p><div class="story-art" aria-hidden="true"><span class="story-orbit orbit-one"></span><span class="story-orbit orbit-two"></span><img src="/assets/walnut.png" alt=""><span class="story-caption">오늘도 반가워요!</span></div><div class="story-footer"><span>학원 상담</span><i></i><span>수업 일정</span><i></i><span>학습 기록</span></div></section><div class="sign-in-content"><section class="panel sign-in-form">
     <div class="sign-in-heading"><img src="/assets/walnut.png" alt=""><h1>학원 로그인</h1><p>학원에서 발급받은 계정으로 로그인하세요.</p></div>
     ${message ? `<p class="notice" role="alert">${h(message)}</p>` : ''}
     <form method="post" action="/login">
@@ -389,7 +399,7 @@ export function createOperationsServer({
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader(
       'Content-Security-Policy',
-      "default-src 'none'; style-src 'self'; script-src 'self'; worker-src 'self'; manifest-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "default-src 'none'; style-src 'self'; font-src 'self'; script-src 'self'; worker-src 'self'; manifest-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     );
     const host = request.headers.host;
     const localPort = request.socket.localPort;

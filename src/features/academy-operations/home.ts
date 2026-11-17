@@ -21,7 +21,7 @@ function records(items: DashboardItem[], empty: string) {
     .map(
       ({ href, title, meta, date, kind }) =>
         `<li><a href="${h(href)}">
-          ${date ? `<time datetime="${date}">${Number(date.slice(5, 7))}.${date.slice(8)}</time>` : ''}
+          ${date ? `<time datetime="${date}"><strong>${Number(date.slice(8))}</strong><small>${Number(date.slice(5, 7))}월</small></time>` : ''}
           <span class="record-copy">${kind ? `<i class="event-dot calendar-${h(kind)}" aria-hidden="true"></i>` : ''}<strong>${h(title)}</strong>${meta ? `<small>${h(meta)}</small>` : ''}</span>
           <span class="record-arrow" aria-hidden="true">›</span>
         </a></li>`,
@@ -36,7 +36,7 @@ function panel(
   empty: string,
   linkLabel = '전체 보기',
 ) {
-  return `<section class="panel dashboard-panel">
+  return `<section class="panel dashboard-panel${items.length ? '' : ' is-empty'}">
     <div class="panel-heading"><h2>${title}</h2><a href="${href}">${linkLabel}</a></div>
     ${records(items, empty)}
   </section>`;
@@ -128,16 +128,20 @@ export function renderHome(ctx: PageContext) {
         `<a href="${href}">${serviceIcon(href)}<span>${label}</span></a>`,
     )
     .join('')}</nav>`;
-  const search = `<section class="home-search" aria-label="학원에 물어보기"><div class="home-search-heading"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>학원에 물어보기</h2><p>궁금한 내용을 남겨 주세요.</p></div></div><form action="/consultation" method="get"><label class="visually-hidden" for="home-question">상담할 질문</label><input id="home-question" name="q" maxlength="500" required placeholder="질문을 입력해 주세요" autocomplete="off"><button aria-label="상담 시작"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button></form><a class="home-consultation-link" href="/consultation">이전 상담 보기 <span aria-hidden="true">›</span></a></section>`;
+  const search = `<section class="home-search" aria-label="학원에 물어보기">
+    <div class="home-search-heading"><div><p class="home-search-kicker">우리 학원 상담</p><h2>궁금한 건<br>편하게 물어보세요.</h2><p>학원에서 확인한 자료로 안내해 드려요.</p></div><img src="/assets/${selectedCharacter(ctx)}.png" alt=""></div>
+    <form action="/consultation" method="get"><label class="visually-hidden" for="home-question">상담할 질문</label><input id="home-question" name="q" maxlength="500" required placeholder="궁금한 내용을 입력하세요" autocomplete="off"><button aria-label="상담 시작"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></form>
+    <div class="home-search-bottom"><span>일정 · 수강료 · 학원 안내</span><a class="home-consultation-link" href="/consultation">상담 내역 <span aria-hidden="true">↗</span></a></div>
+  </section>`;
   if (staff && homework) {
     return `${heading}
-      <section class="work-queue" aria-labelledby="work-queue-title">
-        <h2 id="work-queue-title" class="visually-hidden">처리할 업무</h2>
+      <div class="home-overview is-staff"><section class="work-queue" aria-labelledby="work-queue-title">
+        <div class="work-queue-heading"><span class="work-status-dot" aria-hidden="true"></span><h2 id="work-queue-title">오늘 확인할 업무</h2></div>
         <div class="queue-grid">
-          <a href="/consultation?view=inbox"><span class="queue-label">처리 중인 상담</span><strong>${pending.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
-          <a href="/homework?view=review"><span class="queue-label">확인할 제출물</span><strong>${homework.review.length}<small>건</small></strong><span aria-hidden="true">›</span></a>
+          <a href="/consultation?view=inbox"><span class="queue-label">${serviceIcon('/consultation')}처리 중인 상담</span><strong>${pending.length}<small>건</small></strong><span class="queue-action">상담 확인 <span aria-hidden="true">↗</span></span></a>
+          <a href="/homework?view=review"><span class="queue-label">${serviceIcon('/homework')}확인할 제출물</span><strong>${homework.review.length}<small>건</small></strong><span class="queue-action">숙제 확인 <span aria-hidden="true">↗</span></span></a>
         </div>
-      </section>
+      </section>${search}</div>
       ${shortcuts}<div class="home-columns">
         <div class="home-primary">${agenda}${panel(
           '상담 요청',
@@ -171,7 +175,6 @@ export function renderHome(ctx: PageContext) {
             ),
           '확인할 제출물이 없습니다.',
         )}</div>
-        <div class="home-help">${search}</div>
         <div class="home-secondary">${documentList()}${recentConsultations()}</div>
       </div>`;
   }
@@ -213,9 +216,9 @@ export function renderHome(ctx: PageContext) {
         })),
         '확정된 학습 기록이 없습니다.',
       );
-  return `${heading}${shortcuts}<div class="home-columns">
+  return `${heading}${visitor ? `<div class="home-overview">${search}</div>` : ''}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
     <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
-    <div class="home-help">${search}</div>
+    ${visitor ? '' : `<div class="home-help">${search}</div>`}
     <div class="home-secondary">${visitor ? '' : documentList()}${recentConsultations()}</div>
   </div>`;
 }
