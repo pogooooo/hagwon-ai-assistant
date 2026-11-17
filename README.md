@@ -17,6 +17,10 @@ npm run dev
 
 학원 운영 화면은 `npm run academy:dev`로 실행합니다. 접속 주소와 가상 계정은 [학원 운영 실행 안내](src/features/academy-operations/README.md)를 참고하세요.
 
+현재 기능의 실사용 판정, 실패 질문, 실제 Gemini 결과와 모바일 화면 검증은 [서비스 검증 체크리스트](docs/service-verification-2026-11-17/README.md)에 정리했습니다. 운영 웹은 홈 화면 설치용 manifest와 모바일 메뉴를 제공합니다. 아래 Capacitor 설정은 기존 프로토타입이며, 운영 모바일 웹앱과 별개입니다.
+
+운영 모바일 웹을 여는 Android 테스트 APK의 빌드·서명·검증 범위는 [Android 안내](docs/android-preview.md)를 참고하세요.
+
 ## 준비한 라이브러리
 
 | 용도             | 라이브러리                           | 현재 상태                                          |

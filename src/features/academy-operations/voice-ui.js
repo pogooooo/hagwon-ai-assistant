@@ -8,14 +8,19 @@
     node,
     timer,
     chunks = [],
-    recording = false;
+    recording = false,
+    starting = false,
+    captureEpoch = 0;
   const cleanup = () => {
+    captureEpoch++;
+    starting = false;
     recording = false;
     clearTimeout(timer);
     stream?.getTracks().forEach((track) => track.stop());
     node?.disconnect();
     if (context && context.state !== 'closed') void context.close();
     if (start) start.hidden = false;
+    if (start) start.disabled = false;
     if (stop) stop.hidden = true;
   };
   function wav(samples, rate) {
@@ -75,18 +80,28 @@
     form.requestSubmit();
   };
   start?.addEventListener('click', async () => {
+    if (starting || recording) return;
+    starting = true;
+    start.disabled = true;
+    const epoch = ++captureEpoch;
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
         throw new Error();
-      stream = await navigator.mediaDevices.getUserMedia({
+      const nextStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
         },
       });
+      if (epoch !== captureEpoch) {
+        nextStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      stream = nextStream;
       context = new AudioContext();
       await context.audioWorklet.addModule('/voice-worklet.js');
+      if (epoch !== captureEpoch) return;
       node = new AudioWorkletNode(context, 'axr-voice-recorder');
       chunks = [];
       recording = true;
@@ -101,11 +116,14 @@
         .connect(mute)
         .connect(context.destination);
       await context.resume();
+      if (epoch !== captureEpoch) return;
+      starting = false;
       start.hidden = true;
       stop.hidden = false;
       status.textContent = '말씀해 주세요. 최대 60초 후 자동 종료됩니다.';
       timer = setTimeout(finish, 60000);
     } catch {
+      if (epoch !== captureEpoch) return;
       cleanup();
       status.textContent =
         '마이크를 사용할 수 없습니다. 질문을 글로 입력해 주세요.';

@@ -37,6 +37,7 @@ import { briefingModule } from './briefing.ts';
 import { calendarModule } from './calendar.ts';
 import { previewTeamSchedule } from './team-schedule.ts';
 import { renderHome } from './home.ts';
+import { serviceNavigation } from './service-navigation.ts';
 import { preferencesModule, selectedCharacter } from './preferences.ts';
 import {
   escapeHtml as h,
@@ -79,16 +80,6 @@ const menuOrder = [
   '/schools',
   '/voice',
 ];
-const menuIcons: Record<string, string> = {
-  '/consultation': 'chat',
-  '/schedule': 'calendar',
-  '/documents': 'files',
-  '/learning': 'chart',
-  '/briefing': 'chart',
-  '/homework': 'check',
-  '/directory': 'people',
-  '/settings': 'settings',
-};
 
 export interface OperationsServerOptions {
   services?: ExternalServices;
@@ -136,18 +127,27 @@ export function createOperationsServer({
       'operations.css',
       'service-design.css',
       'service-ui.js',
+      'app.webmanifest',
+      '.well-known/assetlinks.json',
+      'service-worker.js',
       'workbook-ui.js',
       'voice-ui.js',
       'voice-worklet.js',
       'assets/walnut.png',
       'assets/water.png',
       'assets/owl.png',
+      'assets/app-192.png',
+      'assets/app-512.png',
     ]) {
       const contentType = path.endsWith('.css')
         ? 'text/css; charset=utf-8'
-        : path.endsWith('.js')
-          ? 'text/javascript; charset=utf-8'
-          : 'image/png';
+        : path.endsWith('.json')
+          ? 'application/json; charset=utf-8'
+          : path.endsWith('.webmanifest')
+            ? 'application/manifest+json; charset=utf-8'
+            : path.endsWith('.js')
+              ? 'text/javascript; charset=utf-8'
+              : 'image/png';
       staticFiles.set('/' + path, {
         contentType,
         bytes: readFileSync(new URL(path, assetsRoot)),
@@ -247,26 +247,16 @@ export function createOperationsServer({
     const pages = actor ? serviceMenu(actor) : [];
     const staff = actor?.role === 'admin' || actor?.role === 'teacher';
     const character = actor ? selectedCharacter({ db, actor }) : 'walnut';
-    const nav = (path: string, label: string, href = path) =>
-      '<a href="' +
-      h(href) +
-      '"' +
-      (current === path ? ' aria-current="page"' : '') +
-      '>' +
-      '<span class="nav-icon icon-' +
-      (menuIcons[path] ?? 'home') +
-      '" aria-hidden="true"></span>' +
-      h(label) +
-      '</a>';
+    const navigation = serviceNavigation(pages, current, staff);
     const brand = `<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">A</span><span>AXR 학원</span></a>`;
     const title =
       pages.find((p) => p.path === current)?.label ?? (actor ? '홈' : '로그인');
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · AXR</title><link rel="stylesheet" href="/operations.css?v=3"><link rel="stylesheet" href="/service-design.css?v=3"></head><body data-account="' +
+      ' · AXR</title><meta name="theme-color" content="#13664d"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=4"><link rel="stylesheet" href="/service-design.css?v=4"></head><body data-account="' +
       h(actor?.id ?? '') +
-      '"><script src="/service-ui.js?v=3" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=4" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName
@@ -285,7 +275,7 @@ export function createOperationsServer({
       '</div>' +
       '</header>' +
       (actor
-        ? `<div class="shell signed-in"><aside class="sidebar"><nav class="service-nav" aria-label="학원 메뉴">${nav('/', '홈')}${pages.map((p) => nav(p.path, p.path === '/consultation' ? '상담' : p.label, staff && p.path === '/consultation' ? '/consultation?view=inbox' : p.path)).join('')}</nav></aside><main class="workspace" id="main-content">${content}</main></div>`
+        ? `<div class="shell signed-in">${navigation.sidebar}<main class="workspace" id="main-content" tabindex="-1">${content}</main></div>${navigation.mobile}`
         : `<main class="sign-in" id="main-content">${content}</main>`) +
       '</body></html>'
     );
@@ -389,7 +379,7 @@ export function createOperationsServer({
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader(
       'Content-Security-Policy',
-      "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      "default-src 'none'; style-src 'self'; script-src 'self'; worker-src 'self'; manifest-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     );
     const host = request.headers.host;
     const localPort = request.socket.localPort;

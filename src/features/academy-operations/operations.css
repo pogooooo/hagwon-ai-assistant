@@ -3,16 +3,16 @@
   font-family:
     'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui,
     sans-serif;
-  background: #f5f6f8;
+  background: #f6f8fa;
   color: #1e2024;
-  --accent: #008550;
-  --accent-hover: #006f42;
+  --accent: #13664d;
+  --accent-hover: #0b4e3a;
   --green: #03c75a;
   --accent-soft: #eaf9f1;
   --surface: #fff;
-  --border: #e3e6ea;
-  --muted: #606773;
-  --radius: 12px;
+  --border: #e2e7ec;
+  --muted: #5c6675;
+  --radius: 16px;
   --gutter: clamp(16px, 3.5vw, 36px);
 }
 
@@ -34,6 +34,16 @@ a {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+input[type='checkbox'],
+input[type='radio'] {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.check-label {
+  min-height: 44px;
+}
 
 button,
 input,
@@ -49,10 +59,10 @@ button,
   gap: 9px;
   width: fit-content;
   max-width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 15px;
   border: 1px solid var(--accent);
-  border-radius: 7px;
+  border-radius: 9px;
   background: var(--accent);
   color: white;
   font-weight: 700;
