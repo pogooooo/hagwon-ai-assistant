@@ -11,13 +11,13 @@ npm ci
 npm run dev
 ```
 
-[http://127.0.0.1:8791](http://127.0.0.1:8791)에서 확인합니다. 가상 계정 `TA_DIRECTOR` / `axr-demo`를 사용합니다. `.env.example`을 `.env.local`로 복사해 Gemini 키·모델·포트를 설정할 수 있습니다. `.env.local`은 Git에서 제외됩니다.
+[http://127.0.0.1:8791](http://127.0.0.1:8791)에서 확인합니다. 가상 계정 `TA_DIRECTOR` / `axr-demo`를 사용합니다. `.env.example`을 `.env.local`로 복사해 네이버 CLOVA 키와 포트를 설정할 수 있습니다. `.env.local`은 Git에서 제외됩니다.
 
 운영 경로·팀 결과 수신·AI 변경 방법·검증 결과는 [운영 서비스 안내](src/features/academy-operations/README.md)를 참조합니다. Next 프로토타입은 `npm run dev:prototype`으로 3000번 포트에서 실행합니다. `build`/`start`/Capacitor는 그 프로토타입 전용이며 운영 서버·DB를 정적 파일에 포함하지 않습니다.
 
 학원 운영 화면은 `npm run academy:dev`로 실행합니다. 접속 주소와 가상 계정은 [학원 운영 실행 안내](src/features/academy-operations/README.md)를 참고하세요.
 
-현재 기능의 실사용 판정, 실패 질문, 실제 Gemini 결과와 모바일 화면 검증은 [서비스 검증 체크리스트](docs/service-verification-2026-11-17/README.md)에 정리했습니다. 운영 웹은 홈 화면 설치용 manifest와 모바일 메뉴를 제공합니다. 아래 Capacitor 설정은 기존 프로토타입이며, 운영 모바일 웹앱과 별개입니다.
+현재 네이버 AI 연결, 복합 질문 개선, 새 문항 결과와 화면 검증은 [네이버 상담 검증](docs/naver-consultation-verification-2026-11-17/README.md)에 정리했습니다. 개선 전 결과는 [서비스 검증 체크리스트](docs/service-verification-2026-11-17/README.md)에 보존합니다. 운영 웹은 홈 화면 설치용 manifest와 모바일 메뉴를 제공합니다. 아래 Capacitor 설정은 기존 프로토타입이며, 운영 모바일 웹앱과 별개입니다.
 
 운영 모바일 웹을 여는 Android 테스트 APK의 빌드·서명·검증 범위는 [Android 안내](docs/android-preview.md)를 참고하세요.
 

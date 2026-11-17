@@ -1,0 +1,762 @@
+{
+  "operational60": [
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"학원 주소 알려주세요.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"학원 주소 알려주세요.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-4c880426-cba8-450d-9859-818618912c1e:r2:body\",\n                    \"quote\": \"주소: 아산시 새마루로 73, 4층.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 701,
+        "completionTokens": 110,
+        "totalTokens": 811
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"학원 어디로 가면 돼요?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"학원 어디로 가면 돼요\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 618,
+        "completionTokens": 55,
+        "totalTokens": 673
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"찾아가는 주소가 뭐예요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"찾아가는 주소가 뭐예요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-4c880426-cba8-450d-9859-818618912c1e:r2:body\",\n                    \"quote\": \"주소: 아산시 새마루로 73, 4층.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 608,
+        "completionTokens": 118,
+        "totalTokens": 726
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"주차 위치랑 무료 시간 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"주차 위치랑 무료 시간 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-fdc840f3-3404-4d64-ae6b-0615f653f957:r2:body\",\n                    \"quote\": \"주차: 건물 뒤 제2주차장, 차량 1대당 90분 무료.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1021,
+        "completionTokens": 128,
+        "totalTokens": 1149
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"주차는 어디서 하고 몇 분 무료인가요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"주차는 어디서\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-fdc840f3-3404-4d64-ae6b-0615f653f957:r2:body\",\n                    \"quote\": \"주차: 건물 뒤 제2주차장\"\n                }\n            ]\n        },\n        {\n            \"request\": \"몇 분 무료인가요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-fdc840f3-3404-4d64-ae6b-0615f653f957:r2:body\",\n                    \"quote\": \"차량 1대당 90분 무료.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 625,
+        "completionTokens": 198,
+        "totalTokens": 823
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"학원 주차장과 무료 이용시간은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"학원 주차장\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-fdc840f3-3404-4d64-ae6b-0615f653f957:r2:body\",\n                    \"quote\": \"주차: 건물 뒤 제2주차장\"\n                }\n            ]\n        },\n        {\n            \"request\": \"무료 이용시간은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-fdc840f3-3404-4d64-ae6b-0615f653f957:r2:body\",\n                    \"quote\": \"차량 1대당 90분 무료.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1137,
+        "completionTokens": 195,
+        "totalTokens": 1332
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"와이파이는 어떻게 이용해요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"와이파이는 어떻게 이용해요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5c7958e-6ed6-4340-adc8-3edfe3e91b7d:r2:body\",\n                    \"quote\": \"와이파이: 접수대에서 당일 접속권을 받습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 815,
+        "completionTokens": 118,
+        "totalTokens": 933
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"무선인터넷 접속 방법 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"무선인터넷 접속 방법 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5c7958e-6ed6-4340-adc8-3edfe3e91b7d:r2:body\",\n                    \"quote\": \"와이파이: 접수대에서 당일 접속권을 받습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 614,
+        "completionTokens": 120,
+        "totalTokens": 734
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"wifi 어떻게 써요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"wifi 어떻게 써요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5c7958e-6ed6-4340-adc8-3edfe3e91b7d:r2:body\",\n                    \"quote\": \"와이파이: 접수대에서 당일 접속권을 받습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 601,
+        "completionTokens": 112,
+        "totalTokens": 713
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자습실 위치와 이용 시간은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"자습실 위치\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8e7dd6a4-92e3-4597-93a9-90491a091aba:r2:body\",\n                    \"quote\": \"자습실: 5층 503호.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"이용 시간은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8e7dd6a4-92e3-4597-93a9-90491a091aba:r2:body\",\n                    \"quote\": \"이용 시간은 평일 15:00~20:00입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1121,
+        "completionTokens": 198,
+        "totalTokens": 1319
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자습실 몇 호고 몇 시까지 열어요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"자습실 몇 호고 몇 시까지 열어요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8e7dd6a4-92e3-4597-93a9-90491a091aba:r2:body\",\n                    \"quote\": \"자습실: 5층 503호. 이용 시간은 평일 15:00~20:00입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 842,
+        "completionTokens": 138,
+        "totalTokens": 980
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자습 공간이 어디고 언제 이용해요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"자습 공간이 어디고 언제 이용해요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8e7dd6a4-92e3-4597-93a9-90491a091aba:r2:body\",\n                    \"quote\": \"자습실: 5층 503호. 이용 시간은 평일 15:00~20:00입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 725,
+        "completionTokens": 132,
+        "totalTokens": 857
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"환불 접수 방법과 처리 기간은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"환불 접수 방법\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-95d07843-61a5-4b52-925f-5e24732b9dc3:r2:body\",\n                    \"quote\": \"환불 신청: 방문 접수 또는 학원 앱 신청서.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"처리 기간은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-95d07843-61a5-4b52-925f-5e24732b9dc3:r2:body\",\n                    \"quote\": \"처리 기간은 접수 후 5영업일입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1728,
+        "completionTokens": 198,
+        "totalTokens": 1926
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"환불 신청 어디서 하고 얼마나 걸려요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"환불 신청 어디서\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-95d07843-61a5-4b52-925f-5e24732b9dc3:r2:body\",\n                    \"quote\": \"환불 신청: 방문 접수 또는 학원 앱 신청서.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"얼마나 걸려요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-95d07843-61a5-4b52-925f-5e24732b9dc3:r2:body\",\n                    \"quote\": \"처리 기간은 접수 후 5영업일입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 934,
+        "completionTokens": 202,
+        "totalTokens": 1136
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"환급은 어떻게 신청하고 며칠 걸려요?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"환급은 어떻게 신청\",\n            \"complete\": false,\n            \"quotes\": []\n        },\n        {\n            \"request\": \"며칠 걸려요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-95d07843-61a5-4b52-925f-5e24732b9dc3:r2:body\",\n                    \"quote\": \"처리 기간은 접수 후 5영업일입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 932,
+        "completionTokens": 140,
+        "totalTokens": 1072
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"셔틀 신청 마감과 운행 노선 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"셔틀 신청 마감\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ad96e66f-d583-43f5-8750-e9aab3fb2a3a:r2:body\",\n                    \"quote\": \"셔틀 신청: 전날 18:00까지 접수대에 신청합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"운행 노선 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ad96e66f-d583-43f5-8750-e9aab3fb2a3a:r2:body\",\n                    \"quote\": \"운행 노선은 새마루1단지와 솔빛도서관입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1036,
+        "completionTokens": 210,
+        "totalTokens": 1246
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"통학버스는 몇 시까지 신청하고 어디로 가나요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"통학버스는 몇 시까지 신청\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ad96e66f-d583-43f5-8750-e9aab3fb2a3a:r2:body\",\n                    \"quote\": \"셔틀 신청: 전날 18:00까지 접수대에 신청합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"어디로 가나요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ad96e66f-d583-43f5-8750-e9aab3fb2a3a:r2:body\",\n                    \"quote\": \"운행 노선은 새마루1단지와 솔빛도서관입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1254,
+        "completionTokens": 213,
+        "totalTokens": 1467
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"셔틀버스 신청 시간과 노선은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"셔틀버스 신청 시간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ad96e66f-d583-43f5-8750-e9aab3fb2a3a:r2:body\",\n                    \"quote\": \"셔틀 신청: 전날 18:00까지 접수대에 신청합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"노선은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ad96e66f-d583-43f5-8750-e9aab3fb2a3a:r2:body\",\n                    \"quote\": \"운행 노선은 새마루1단지와 솔빛도서관입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1236,
+        "completionTokens": 201,
+        "totalTokens": 1437
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n  \"question\": \"도서 대여 몇 권이고 며칠인가요? 반납 장소도 알려줘.\",\n  \"ambiguous\": false,\n  \"items\": [\n    {\n      \"request\": \"도서 대여 몇 권이고 며칠인가요\",\n      \"complete\": true,\n      \"quotes\": [\n        {\n          \"sourceId\": \"knowledge-826832d2-1315-4658-8c10-320ca6d0e5a8:r2:body\",\n          \"quote\": \"도서 대여: 1인당 2권, 대여 기간 7일.\"\n        }\n      ]\n    },\n    {\n      \"request\": \"반납 장소도 알려줘.\",\n      \"complete\": true,\n      \"quotes\": [\n        {\n          \"sourceId\": \"knowledge-826832d2-1315-4658-8c10-320ca6d0e5a8:r2:body\",\n          \"quote\": \"반납 장소는 4층 안내 데스크입니다.\"\n        }\n      ]\n    }\n  ]\n}",
+      "usage": {
+        "promptTokens": 765,
+        "completionTokens": 222,
+        "totalTokens": 987
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"책은 몇 권 빌리고 언제 어디로 반납해요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"책은 몇 권 빌리고 언제 어디로 반납해요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-826832d2-1315-4658-8c10-320ca6d0e5a8:r2:body\",\n                    \"quote\": \"도서 대여: 1인당 2권, 대여 기간 7일. 반납 장소는 4층 안내 데스크입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 644,
+        "completionTokens": 146,
+        "totalTokens": 790
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"도서 대여 한도와 기간 및 반납 장소는?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"도서 대여 한도\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-826832d2-1315-4658-8c10-320ca6d0e5a8:r2:body\",\n                    \"quote\": \"도서 대여: 1인당 2권\"\n                }\n            ]\n        },\n        {\n            \"request\": \"기간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-826832d2-1315-4658-8c10-320ca6d0e5a8:r2:body\",\n                    \"quote\": \"대여 기간 7일.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"반납 장소는\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-826832d2-1315-4658-8c10-320ca6d0e5a8:r2:body\",\n                    \"quote\": \"반납 장소는 4층 안내 데스크입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1739,
+        "completionTokens": 281,
+        "totalTokens": 2020
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"분실물 어디서 며칠 동안 보관해요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"분실물 어디서 며칠 동안 보관해요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-423e57e1-52ff-4b9a-a19d-2bc9e033ae91:r2:body\",\n                    \"quote\": \"분실물: 4층 안내 데스크에서 14일간 보관합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 619,
+        "completionTokens": 125,
+        "totalTokens": 744
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"물건 잃어버렸는데 어디로 가고 보관기간은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"물건 잃어버렸는데 어디로 가고 보관기간은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-423e57e1-52ff-4b9a-a19d-2bc9e033ae91:r2:body\",\n                    \"quote\": \"분실물: 4층 안내 데스크에서 14일간 보관합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1743,
+        "completionTokens": 135,
+        "totalTokens": 1878
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"분실물 보관 장소와 기간 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"분실물 보관 장소\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-423e57e1-52ff-4b9a-a19d-2bc9e033ae91:r2:body\",\n                    \"quote\": \"분실물: 4층 안내 데스크에서 14일간 보관합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"기간 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-423e57e1-52ff-4b9a-a19d-2bc9e033ae91:r2:body\",\n                    \"quote\": \"분실물: 4층 안내 데스크에서 14일간 보관합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1732,
+        "completionTokens": 213,
+        "totalTokens": 1945
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"체험 수업 시간과 비용은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"체험 수업 시간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5563194-f595-4e95-b2ec-ebb3df33d089:r2:body\",\n                    \"quote\": \"체험 수업: 1회 40분\"\n                }\n            ]\n        },\n        {\n            \"request\": \"비용은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5563194-f595-4e95-b2ec-ebb3df33d089:r2:body\",\n                    \"quote\": \"체험 수업: 1회 40분, 비용 12,000원.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 922,
+        "completionTokens": 187,
+        "totalTokens": 1109
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"체험은 몇 분 하고 얼마예요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"체험은 몇 분\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5563194-f595-4e95-b2ec-ebb3df33d089:r2:body\",\n                    \"quote\": \"체험 수업: 1회 40분\"\n                }\n            ]\n        },\n        {\n            \"request\": \"얼마예요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5563194-f595-4e95-b2ec-ebb3df33d089:r2:body\",\n                    \"quote\": \"체험 수업: 1회 40분, 비용 12,000원.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 615,
+        "completionTokens": 191,
+        "totalTokens": 806
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"체험수업 소요 시간과 금액 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"체험수업 소요 시간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5563194-f595-4e95-b2ec-ebb3df33d089:r2:body\",\n                    \"quote\": \"체험 수업: 1회 40분, 비용 12,000원. 사전 신청이 필요합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"금액 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5563194-f595-4e95-b2ec-ebb3df33d089:r2:body\",\n                    \"quote\": \"체험 수업: 1회 40분, 비용 12,000원. 사전 신청이 필요합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 929,
+        "completionTokens": 208,
+        "totalTokens": 1137
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"사물함 월 이용료와 보증금 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"사물함 월 이용료\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ed26b354-f98e-444d-8021-f7350f9cdb15:r2:body\",\n                    \"quote\": \"사물함: 월 이용료 8,000원, 열쇠 보증금 3,000원입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"보증금 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ed26b354-f98e-444d-8021-f7350f9cdb15:r2:body\",\n                    \"quote\": \"사물함: 월 이용료 8,000원, 열쇠 보증금 3,000원입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 735,
+        "completionTokens": 219,
+        "totalTokens": 954
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"사물함 한 달 얼마고 보증금도 있어요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"사물함 한 달 얼마고 보증금도 있어요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ed26b354-f98e-444d-8021-f7350f9cdb15:r2:body\",\n                    \"quote\": \"사물함: 월 이용료 8,000원, 열쇠 보증금 3,000원입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 628,
+        "completionTokens": 132,
+        "totalTokens": 760
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"사물함 비용과 열쇠 보증금은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"사물함 비용\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ed26b354-f98e-444d-8021-f7350f9cdb15:r2:body\",\n                    \"quote\": \"사물함: 월 이용료 8,000원\"\n                }\n            ]\n        },\n        {\n            \"request\": \"열쇠 보증금은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ed26b354-f98e-444d-8021-f7350f9cdb15:r2:body\",\n                    \"quote\": \"사물함: 월 이용료 8,000원, 열쇠 보증금 3,000원입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 718,
+        "completionTokens": 204,
+        "totalTokens": 922
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"결석 연락은 언제 어떻게 하나요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"결석 연락은 언제 어떻게 하나요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8bf28ed4-5267-492e-972e-b6af2e10eb0d:r2:body\",\n                    \"quote\": \"결석 연락: 수업 시작 2시간 전까지 앱의 결석 신청서를 제출합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 619,
+        "completionTokens": 125,
+        "totalTokens": 744
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"못 가게 되면 언제까지 어디에 알려야 해요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"못 가게 되면 언제까지 어디에 알려야 해요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8bf28ed4-5267-492e-972e-b6af2e10eb0d:r2:body\",\n                    \"quote\": \"결석 연락: 수업 시작 2시간 전까지 앱의 결석 신청서를 제출합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 730,
+        "completionTokens": 127,
+        "totalTokens": 857
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"결석 신청 기한과 방법은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"결석 신청 기한\",\n            \"complete\": false,\n            \"quotes\": []\n        },\n        {\n            \"request\": \"방법은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8bf28ed4-5267-492e-972e-b6af2e10eb0d:r2:body\",\n                    \"quote\": \"수업 시작 2시간 전까지 앱의 결석 신청서를 제출합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 926,
+        "completionTokens": 140,
+        "totalTokens": 1066
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"상담 몇 시부터 몇 시까지 돼요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"상담 몇 시부터 몇 시까지 돼요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-d860c9a5-93c2-4596-ad2f-e1070bdbf2f0:r2:body\",\n                    \"quote\": \"상담 운영시간: 화요일~토요일 13:00~19:00. 일요일과 월요일은 상담하지 않습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1048,
+        "completionTokens": 136,
+        "totalTokens": 1184
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"상담 운영 시간이 어떻게 돼요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"상담 운영 시간이 어떻게 돼요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-d860c9a5-93c2-4596-ad2f-e1070bdbf2f0:r2:body\",\n                    \"quote\": \"상담 운영시간: 화요일~토요일 13:00~19:00. 일요일과 월요일은 상담하지 않습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1039,
+        "completionTokens": 130,
+        "totalTokens": 1169
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"상담 가능한 시간 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"상담 가능한 시간 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-d860c9a5-93c2-4596-ad2f-e1070bdbf2f0:r2:body\",\n                    \"quote\": \"상담 운영시간: 화요일~토요일 13:00~19:00. 일요일과 월요일은 상담하지 않습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1037,
+        "completionTokens": 128,
+        "totalTokens": 1165
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"학원 주소와 주차 무료 시간은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"학원 주소\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-4c880426-cba8-450d-9859-818618912c1e:r2:body\",\n                    \"quote\": \"주소: 아산시 새마루로 73, 4층.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"주차 무료 시간은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-fdc840f3-3404-4d64-ae6b-0615f653f957:r2:body\",\n                    \"quote\": \"주차: 건물 뒤 제2주차장, 차량 1대당 90분 무료.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1121,
+        "completionTokens": 205,
+        "totalTokens": 1326
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자습실 위치와 와이파이 이용 방법 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"자습실 위치\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8e7dd6a4-92e3-4597-93a9-90491a091aba:r2:body\",\n                    \"quote\": \"자습실: 5층 503호.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"와이파이 이용 방법 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5c7958e-6ed6-4340-adc8-3edfe3e91b7d:r2:body\",\n                    \"quote\": \"와이파이: 접수대에서 당일 접속권을 받습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 918,
+        "completionTokens": 206,
+        "totalTokens": 1124
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"환불 처리 기간이랑 셔틀 신청 마감은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"환불 처리 기간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-95d07843-61a5-4b52-925f-5e24732b9dc3:r2:body\",\n                    \"quote\": \"처리 기간은 접수 후 5영업일입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"셔틀 신청 마감은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ad96e66f-d583-43f5-8750-e9aab3fb2a3a:r2:body\",\n                    \"quote\": \"셔틀 신청: 전날 18:00까지 접수대에 신청합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1737,
+        "completionTokens": 204,
+        "totalTokens": 1941
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"체험 수업 비용하고 사물함 보증금 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"체험 수업 비용\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-b5563194-f595-4e95-b2ec-ebb3df33d089:r2:body\",\n                    \"quote\": \"체험 수업: 1회 40분, 비용 12,000원.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"사물함 보증금 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ed26b354-f98e-444d-8021-f7350f9cdb15:r2:body\",\n                    \"quote\": \"사물함: 월 이용료 8,000원, 열쇠 보증금 3,000원입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 823,
+        "completionTokens": 211,
+        "totalTokens": 1034
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"분실물 보관 기간과 도서 대여 기간은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"분실물 보관 기간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-423e57e1-52ff-4b9a-a19d-2bc9e033ae91:r2:body\",\n                    \"quote\": \"분실물: 4층 안내 데스크에서 14일간 보관합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"도서 대여 기간은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-826832d2-1315-4658-8c10-320ca6d0e5a8:r2:body\",\n                    \"quote\": \"도서 대여: 1인당 2권, 대여 기간 7일. 반납 장소는 4층 안내 데스크입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1734,
+        "completionTokens": 228,
+        "totalTokens": 1962
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"상담 운영시간과 학원 주소는?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"상담 운영시간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-d860c9a5-93c2-4596-ad2f-e1070bdbf2f0:r2:body\",\n                    \"quote\": \"상담 운영시간: 화요일~토요일 13:00~19:00. 일요일과 월요일은 상담하지 않습니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"학원 주소는\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-4c880426-cba8-450d-9859-818618912c1e:r2:body\",\n                    \"quote\": \"주소: 아산시 새마루로 73, 4층.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1242,
+        "completionTokens": 211,
+        "totalTokens": 1453
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"셔틀 노선과 자습실 이용시간은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"셔틀 노선\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ad96e66f-d583-43f5-8750-e9aab3fb2a3a:r2:body\",\n                    \"quote\": \"운행 노선은 새마루1단지와 솔빛도서관입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"자습실 이용시간은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8e7dd6a4-92e3-4597-93a9-90491a091aba:r2:body\",\n                    \"quote\": \"이용 시간은 평일 15:00~20:00입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1248,
+        "completionTokens": 208,
+        "totalTokens": 1456
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"결석 연락 방법과 환불 신청 방법은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"결석 연락 방법\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8bf28ed4-5267-492e-972e-b6af2e10eb0d:r2:body\",\n                    \"quote\": \"결석 연락: 수업 시작 2시간 전까지 앱의 결석 신청서를 제출합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"환불 신청 방법은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-95d07843-61a5-4b52-925f-5e24732b9dc3:r2:body\",\n                    \"quote\": \"환불 신청: 방문 접수 또는 학원 앱 신청서. 처리 기간은 접수 후 5영업일입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 933,
+        "completionTokens": 220,
+        "totalTokens": 1153
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"원장님 개인 휴대폰 번호 알려줘.\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"원장님 개인 휴대폰 번호 알려줘.\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1726,
+        "completionTokens": 57,
+        "totalTokens": 1783
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자습실에서 음식을 먹어도 되나요?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"자습실에서 음식을 먹어도 되나요\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 818,
+        "completionTokens": 59,
+        "totalTokens": 877
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"주차 90분 이후 추가 요금은?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"주차 90분 이후 추가 요금은\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 712,
+        "completionTokens": 59,
+        "totalTokens": 771
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"셔틀이 오후 9시에도 운행하나요?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"셔틀이 오후 9시에도 운행하나요\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 849,
+        "completionTokens": 73,
+        "totalTokens": 922
+      }
+    }
+  ],
+  "operational40": [
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"휴게실 위치와 이용 가능한 시간, 음식 규정을 알려주세요.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"휴게실 위치\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-3e523afa-b57d-42c1-b70d-3335df5875ad:r2:body\",\n                    \"quote\": \"휴게실은 별관 207호이며\"\n                }\n            ]\n        },\n        {\n            \"request\": \"이용 가능한 시간, 음식 규정을 알려주세요.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-3e523afa-b57d-42c1-b70d-3335df5875ad:r2:body\",\n                    \"quote\": \"화요일부터 금요일까지 13:30~18:30 이용합니다. 음식물 반입은 금지하며 물만 허용합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 767,
+        "completionTokens": 218,
+        "totalTokens": 985
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"휴게실에 먹을 것을 가져가도 되나요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"휴게실에 먹을 것을 가져가도 되나요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-3e523afa-b57d-42c1-b70d-3335df5875ad:r2:body\",\n                    \"quote\": \"음식물 반입은 금지하며 물만 허용합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 752,
+        "completionTokens": 120,
+        "totalTokens": 872
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"귀가 동행은 언제까지 어디에서 신청하고 어디로 가면 돼요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"귀가 동행은 언제까지 어디에서 신청\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8f53dd01-4b93-4d82-aff3-3ad7287932f6:r2:body\",\n                    \"quote\": \"귀가 동행 신청은 수업 당일 11:00까지 학원 앱에서 접수합니다.\"\n                },\n                {\n                    \"sourceId\": \"knowledge-8f53dd01-4b93-4d82-aff3-3ad7287932f6:r2:body\",\n                    \"quote\": \"만나는 장소는 북문 앞 안내소입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"어디로 가면 돼요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8f53dd01-4b93-4d82-aff3-3ad7287932f6:r2:body\",\n                    \"quote\": \"만나는 장소는 북문 앞 안내소입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1116,
+        "completionTokens": 279,
+        "totalTokens": 1395
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"귀가 동행 만나는 장소와 접수 마감은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"귀가 동행 만나는 장소\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8f53dd01-4b93-4d82-aff3-3ad7287932f6:r2:body\",\n                    \"quote\": \"만나는 장소는 북문 앞 안내소입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"접수 마감은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8f53dd01-4b93-4d82-aff3-3ad7287932f6:r2:body\",\n                    \"quote\": \"귀가 동행 신청은 수업 당일 11:00까지 학원 앱에서 접수합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 872,
+        "completionTokens": 211,
+        "totalTokens": 1083
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"인쇄실 위치와 컬러 장당 가격 알려주세요.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"인쇄실 위치\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ddc0adf7-cc01-4a67-8451-16f39210b2d7:r2:body\",\n                    \"quote\": \"인쇄실은 1층 행정실 옆입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"컬러 장당 가격 알려주세요.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ddc0adf7-cc01-4a67-8451-16f39210b2d7:r2:body\",\n                    \"quote\": \"흑백 인쇄는 장당 80원이고 컬러 인쇄는 장당 350원입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 642,
+        "completionTokens": 214,
+        "totalTokens": 856
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"흑백 인쇄 한 장의 요금은 얼마인가요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"흑백 인쇄 한 장의 요금은 얼마인가요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ddc0adf7-cc01-4a67-8451-16f39210b2d7:r2:body\",\n                    \"quote\": \"흑백 인쇄는 장당 80원이고\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 754,
+        "completionTokens": 126,
+        "totalTokens": 880
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"우산 보증금과 반납 장소, 기한이 궁금합니다.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"우산 보증금\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-25d6ea4f-7db6-4697-aef8-426b56146a33:r2:body\",\n                    \"quote\": \"우산은 1인 1개 대여하며 보증금은 4,000원입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"반납 장소, 기한이 궁금합니다.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-25d6ea4f-7db6-4697-aef8-426b56146a33:r2:body\",\n                    \"quote\": \"3일 안에 경비실로 반납합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1442,
+        "completionTokens": 214,
+        "totalTokens": 1656
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"우산은 몇 개까지 빌릴 수 있어요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"우산은 몇 개까지 빌릴 수 있어요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-25d6ea4f-7db6-4697-aef8-426b56146a33:r2:body\",\n                    \"quote\": \"우산은 1인 1개 대여하며 보증금은 4,000원입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1093,
+        "completionTokens": 128,
+        "totalTokens": 1221
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"출입증 재발급은 어디서 하고 언제 받아요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"출입증 재발급은 어디서\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-abd9c376-722e-44b2-91f5-a8728437f1a1:r2:body\",\n                    \"quote\": \"출입증 재발급은 행정실에서 신청합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"언제 받아요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-abd9c376-722e-44b2-91f5-a8728437f1a1:r2:body\",\n                    \"quote\": \"재발급 비용은 6,000원이고 신청 다음 영업일에 수령합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 640,
+        "completionTokens": 211,
+        "totalTokens": 851
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"출입증 재발급 얼마예요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"출입증 재발급 얼마예요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-abd9c376-722e-44b2-91f5-a8728437f1a1:r2:body\",\n                    \"quote\": \"재발급 비용은 6,000원이고 신청 다음 영업일에 수령합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 626,
+        "completionTokens": 122,
+        "totalTokens": 748
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자전거를 어디에 두고 몇 시까지 이용할 수 있나요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"자전거를 어디에 두고 몇 시까지 이용할 수 있나요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-22c86a4c-35a3-4377-b662-d99bda4f7eeb:r2:body\",\n                    \"quote\": \"자전거 보관대는 동문 오른쪽입니다. 평일 08:00~22:00 무료로 이용합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1213,
+        "completionTokens": 141,
+        "totalTokens": 1354
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자전거를 밤새 두어도 되나요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"자전거를 밤새 두어도 되나요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-22c86a4c-35a3-4377-b662-d99bda4f7eeb:r2:body\",\n                    \"quote\": \"야간 보관은 불가능합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 637,
+        "completionTokens": 118,
+        "totalTokens": 755
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"교재 택배 어디서 받고 얼마나 보관해요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"교재 택배 어디서 받고 얼마나 보관해요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-a613734e-796e-4e37-a8cd-ed1b17d50610:r2:body\",\n                    \"quote\": \"교재 택배는 2층 접수처에서 수령합니다. 도착 후 9일간 보관하며, 토요일에는 수령할 수 없습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 749,
+        "completionTokens": 137,
+        "totalTokens": 886
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"교재 택배 토요일에도 찾아갈 수 있나요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"교재 택배 토요일에도 찾아갈 수 있나요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-a613734e-796e-4e37-a8cd-ed1b17d50610:r2:body\",\n                    \"quote\": \"토요일에는 수령할 수 없습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 985,
+        "completionTokens": 119,
+        "totalTokens": 1104
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"주말 상담 시간과 예약 방법은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"주말 상담 시간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-20288b8e-d412-4b9d-8cb8-8bacad384883:r2:body\",\n                    \"quote\": \"주말 상담은 토요일 10:00~14:00에 진행합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"예약 방법은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-20288b8e-d412-4b9d-8cb8-8bacad384883:r2:body\",\n                    \"quote\": \"예약은 금요일 17:00까지 전화로 접수합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1090,
+        "completionTokens": 203,
+        "totalTokens": 1293
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"주말 상담 예약은 언제까지 받나요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"주말 상담 예약은 언제까지 받나요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-20288b8e-d412-4b9d-8cb8-8bacad384883:r2:body\",\n                    \"quote\": \"예약은 금요일 17:00까지 전화로 접수합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 872,
+        "completionTokens": 122,
+        "totalTokens": 994
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"휴게실 위치와 출입증 재발급 비용 알려주세요.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"휴게실 위치\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-3e523afa-b57d-42c1-b70d-3335df5875ad:r2:body\",\n                    \"quote\": \"휴게실은 별관 207호이며\"\n                }\n            ]\n        },\n        {\n            \"request\": \"출입증 재발급 비용 알려주세요.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-abd9c376-722e-44b2-91f5-a8728437f1a1:r2:body\",\n                    \"quote\": \"재발급 비용은 6,000원이고\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 761,
+        "completionTokens": 202,
+        "totalTokens": 963
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"컬러 인쇄 비용이랑 우산 보증금은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"컬러 인쇄 비용\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ddc0adf7-cc01-4a67-8451-16f39210b2d7:r2:body\",\n                    \"quote\": \"흑백 인쇄는 장당 80원이고 컬러 인쇄는 장당 350원입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"우산 보증금은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-25d6ea4f-7db6-4697-aef8-426b56146a33:r2:body\",\n                    \"quote\": \"우산은 1인 1개 대여하며 보증금은 4,000원입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 854,
+        "completionTokens": 216,
+        "totalTokens": 1070
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"귀가 동행 신청 마감과 주말 상담 예약 마감은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"귀가 동행 신청 마감\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8f53dd01-4b93-4d82-aff3-3ad7287932f6:r2:body\",\n                    \"quote\": \"귀가 동행 신청은 수업 당일 11:00까지 학원 앱에서 접수합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"주말 상담 예약 마감은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-20288b8e-d412-4b9d-8cb8-8bacad384883:r2:body\",\n                    \"quote\": \"예약은 금요일 17:00까지 전화로 접수합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 878,
+        "completionTokens": 218,
+        "totalTokens": 1096
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"교재 택배 보관 기간과 우산 반납 기한을 각각 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"교재 택배 보관 기간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-a613734e-796e-4e37-a8cd-ed1b17d50610:r2:body\",\n                    \"quote\": \"교재 택배는 2층 접수처에서 수령합니다. 도착 후 9일간 보관하며, 토요일에는 수령할 수 없습니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"우산 반납 기한을 각각 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-25d6ea4f-7db6-4697-aef8-426b56146a33:r2:body\",\n                    \"quote\": \"우산은 1인 1개 대여하며 보증금은 4,000원입니다. 3일 안에 경비실로 반납합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1454,
+        "completionTokens": 250,
+        "totalTokens": 1704
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자전거 보관 장소, 휴게실 이용 시간, 인쇄실 위치 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"자전거 보관 장소, 휴게실 이용 시간, 인쇄실 위치 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-22c86a4c-35a3-4377-b662-d99bda4f7eeb:r2:body\",\n                    \"quote\": \"자전거 보관대는 동문 오른쪽입니다.\"\n                },\n                {\n                    \"sourceId\": \"knowledge-3e523afa-b57d-42c1-b70d-3335df5875ad:r2:body\",\n                    \"quote\": \"휴게실은 별관 207호이며, 화요일부터 금요일까지 13:30~18:30 이용합니다.\"\n                },\n                {\n                    \"sourceId\": \"knowledge-ddc0adf7-cc01-4a67-8451-16f39210b2d7:r2:body\",\n                    \"quote\": \"인쇄실은 1층 행정실 옆입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1109,
+        "completionTokens": 260,
+        "totalTokens": 1369
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"출입증 수령 시점과 택배 수령 장소는?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"출입증 수령 시점\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-abd9c376-722e-44b2-91f5-a8728437f1a1:r2:body\",\n                    \"quote\": \"출입증 재발급은 행정실에서 신청합니다. 재발급 비용은 6,000원이고 신청 다음 영업일에 수령합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"택배 수령 장소는\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-a613734e-796e-4e37-a8cd-ed1b17d50610:r2:body\",\n                    \"quote\": \"교재 택배는 2층 접수처에서 수령합니다. 도착 후 9일간 보관하며, 토요일에는 수령할 수 없습니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 864,
+        "completionTokens": 238,
+        "totalTokens": 1102
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"우산은 어디에 반납하고 귀가 동행은 어디서 만나요?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"우산은 어디에 반납\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-25d6ea4f-7db6-4697-aef8-426b56146a33:r2:body\",\n                    \"quote\": \"우산은 1인 1개 대여하며 보증금은 4,000원입니다. 3일 안에 경비실로 반납합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"귀가 동행은 어디서 만나요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-8f53dd01-4b93-4d82-aff3-3ad7287932f6:r2:body\",\n                    \"quote\": \"만나는 장소는 북문 앞 안내소입니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 767,
+        "completionTokens": 228,
+        "totalTokens": 995
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"주말 상담 시간하고 휴게실 음식 규정은?\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"주말 상담 시간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-20288b8e-d412-4b9d-8cb8-8bacad384883:r2:body\",\n                    \"quote\": \"주말 상담은 토요일 10:00~14:00에 진행합니다. 예약은 금요일 17:00까지 전화로 접수합니다. 일요일에는 상담하지 않습니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"휴게실 음식 규정은\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-3e523afa-b57d-42c1-b70d-3335df5875ad:r2:body\",\n                    \"quote\": \"음식물 반입은 금지하며 물만 허용합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1101,
+        "completionTokens": 228,
+        "totalTokens": 1329
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"자전거 밤샘 보관 가능해요? 출입증 재발급 방법도 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"자전거 밤샘 보관 가능해요\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-22c86a4c-35a3-4377-b662-d99bda4f7eeb:r2:body\",\n                    \"quote\": \"야간 보관은 불가능합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"출입증 재발급 방법도 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-abd9c376-722e-44b2-91f5-a8728437f1a1:r2:body\",\n                    \"quote\": \"출입증 재발급은 행정실에서 신청합니다. 재발급 비용은 6,000원이고 신청 다음 영업일에 수령합니다.\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 879,
+        "completionTokens": 230,
+        "totalTokens": 1109
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"택배 토요일 수령 가능 여부와 흑백 인쇄 가격 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"택배 토요일 수령 가능 여부\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-a613734e-796e-4e37-a8cd-ed1b17d50610:r2:body\",\n                    \"quote\": \"토요일에는 수령할 수 없습니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"흑백 인쇄 가격 알려줘.\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ddc0adf7-cc01-4a67-8451-16f39210b2d7:r2:body\",\n                    \"quote\": \"흑백 인쇄는 장당 80원이고\"\n                }\n            ]\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1218,
+        "completionTokens": 203,
+        "totalTokens": 1421
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"인쇄실 위치와 인쇄 결제 카드 종류 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"인쇄실 위치\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-ddc0adf7-cc01-4a67-8451-16f39210b2d7:r2:body\",\n                    \"quote\": \"인쇄실은 1층 행정실 옆입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"인쇄 결제 카드 종류 알려줘.\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 642,
+        "completionTokens": 146,
+        "totalTokens": 788
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"우산 보증금과 우산을 잃어버렸을 때 배상액 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"우산 보증금\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-25d6ea4f-7db6-4697-aef8-426b56146a33:r2:body\",\n                    \"quote\": \"우산은 1인 1개 대여하며 보증금은 4,000원입니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"우산을 잃어버렸을 때 배상액 알려줘.\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 651,
+        "completionTokens": 158,
+        "totalTokens": 809
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"휴게실 이용 시간과 휴게실 와이파이 비밀번호 알려줘.\",\n    \"ambiguous\": false,\n    \"items\": [\n        {\n            \"request\": \"휴게실 이용 시간\",\n            \"complete\": true,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-3e523afa-b57d-42c1-b70d-3335df5875ad:r2:body\",\n                    \"quote\": \"휴게실은 별관 207호이며, 화요일부터 금요일까지 13:30~18:30 이용합니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"휴게실 와이파이 비밀번호 알려줘.\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 887,
+        "completionTokens": 162,
+        "totalTokens": 1049
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"주말 상담 시간과 상담 담당자 이름 알려줘.\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"주말 상담 시간\",\n            \"complete\": false,\n            \"quotes\": [\n                {\n                    \"sourceId\": \"knowledge-20288b8e-d412-4b9d-8cb8-8bacad384883:r2:body\",\n                    \"quote\": \"주말 상담은 토요일 10:00~14:00에 진행합니다. 예약은 금요일 17:00까지 전화로 접수합니다. 일요일에는 상담하지 않습니다.\"\n                }\n            ]\n        },\n        {\n            \"request\": \"상담 담당자 이름 알려줘.\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 1101,
+        "completionTokens": 170,
+        "totalTokens": 1271
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"인쇄실에서 스캔도 할 수 있나요?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"인쇄실에서 스캔도 할 수 있나요\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 968,
+        "completionTokens": 63,
+        "totalTokens": 1031
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"우산 대여 시 신분증을 맡겨야 하나요?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"우산 대여 시 신분증을 맡겨야 하나요\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 644,
+        "completionTokens": 67,
+        "totalTokens": 711
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"택배 보관 기한이 지나면 추가 비용이 얼마인가요?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"택배 보관 기한이 지나면 추가 비용이 얼마인가요\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 870,
+        "completionTokens": 71,
+        "totalTokens": 941
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"휴게실에 컴퓨터가 몇 대 있나요?\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"휴게실에 컴퓨터가 몇 대 있나요\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 749,
+        "completionTokens": 61,
+        "totalTokens": 810
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n  \"question\": \"출입증 재발급 비용을 환불받을 수 있나요?\",\n  \"ambiguous\": true,\n  \"items\": [\n    {\n      \"request\": \"출입증 재발급 비용을 환불받을 수 있나요\",\n      \"complete\": false,\n      \"quotes\": []\n    }\n  ]\n}",
+      "usage": {
+        "promptTokens": 753,
+        "completionTokens": 69,
+        "totalTokens": 822
+      }
+    },
+    {
+      "httpStatus": 200,
+      "selection": "{\n    \"question\": \"귀가 동행 차량 운전자 연락처 알려줘.\",\n    \"ambiguous\": true,\n    \"items\": [\n        {\n            \"request\": \"귀가 동행 차량 운전자 연락처 알려줘.\",\n            \"complete\": false,\n            \"quotes\": []\n        }\n    ]\n}",
+      "usage": {
+        "promptTokens": 762,
+        "completionTokens": 65,
+        "totalTokens": 827
+      }
+    }
+  ]
+}

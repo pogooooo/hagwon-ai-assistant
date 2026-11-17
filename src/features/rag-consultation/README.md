@@ -4,7 +4,7 @@
 3·5·7·8·9번 기능이 없어도 합성 데이터와 mock 어댑터로 전체 흐름을 실행하고 테스트할 수 있습니다.
 
 > ⚠️ 모든 테스트 데이터는 완전한 가상 데이터입니다. 합성 데이터에서 테스트가 통과했다고 실제 원생 개인정보를 다루는 운영 환경이 안전하다는 뜻은 아닙니다.
-> CLOVA Studio와 Gemini의 생성 공급자를 서버 설정으로 선택할 수 있습니다. Gemini 실호출은 합성 자료로 확인했습니다. 실제 원생 자료의 외부 전송은 별도 승인 설정 없이 차단합니다.
+> 운영 서비스의 AI는 네이버 CLOVA Studio HCX-007 전용입니다. 일반 안내의 요구 항목별 근거 읽기를 추가했습니다. 과거 Gemini 실험 기록과 명시적 평가 어댑터는 비교 재현용으로만 보존합니다. 실제 원생 자료의 외부 전송은 별도 승인 설정 없이 차단합니다.
 
 | 문서                                             | 내용                                                                            |
 | ------------------------------------------------ | ------------------------------------------------------------------------------- |
@@ -26,12 +26,12 @@
 | 답변      | 정형 사실(수강료·재료비·시간표·강사·모집·휴보강·정답률) 코드 조회, 운영 문서 절·표 칸 인용, 리포트 원문 세부(과제별 기록·제출 횟수·채점 수정 이유) — 생성 0회                     |
 | 해석      | 규칙 우선 → 규칙이 약하면 원문 검색 근거의 자리로 경로 결정(계층적 라우팅), 답 유형(금액·날짜·마감·인원…) 충분성 검사, 반·날짜·요일·기간 바인딩, 후속 질문, 질문 분해             |
 | 안전      | 다른 학원·전체 명단·권한 밖 원생 거부, 등수·성적 통계 보류, 원인·태도·예측 보류, 인용 재조회·숫자 검사·다른 원생 이름 차단, 미승인 초안 제외, OCR 불확실 숫자 사용 금지           |
-| 생성      | 강사 확인 학습 방향은 인용(0회), 없을 때만 최대 1회 생성. 실제 Gemini 합성 호출을 검증했으며, 근거 없는 방법을 생성하지 않고 보류하는 사례가 있음                                 |
+| 생성      | 네이버 CLOVA HCX-007: 일반 공개 문서의 요구 항목별 근거 선택, 승인된 지도 근거에 제한한 학습 방향 구성. 정형 조회는 0회, 필요한 질문은 최대 1회                                   |
 | 개발 화면 | `npm run rag:dev` → `http://127.0.0.1:8787/dev` (문서 선택·업로드·파싱 보기·검색 순위·단계별 시간·전략·생성 종류)                                                                 |
 
-현재 운영 통합은 `src/features/academy-operations/`의 DB·로그인·승인·상담 이력과 Cloudflare 배포에서 별도로 제공한다. 이 문서의 독립 엔진 설명과 운영 연결 여부를 구분해야 한다. Gemini 실제 호출도 확인했지만 모든 질문이 생성 모델을 통과하는 구조는 아니다.
+현재 운영 통합은 `src/features/academy-operations/`의 DB·로그인·승인·상담 이력과 Cloudflare 배포에서 제공한다. 운영 AI는 네이버만 사용하며 모든 질문이 생성 모델을 통과하는 구조는 아니다. 정형 조회·대상 확인·권한 판단을 먼저 보존한다.
 
-구형 HWP(바이너리), 실제 운영 장기 부하·복구, 다양한 실제 스캔 문서의 판독 성능은 미완료/미검증이다. 운영 업로드와 독립 엔진의 OCR 설정도 다르다. 현재의 기능별 체크리스트·새 질문 실패·실제 Gemini 결과는 [2026-11-17 서비스 검증](../../../docs/service-verification-2026-11-17/README.md)을 참고한다.
+구형 HWP(바이너리), 실제 운영 장기 부하·복구, 다양한 실제 스캔 문서의 판독 성능은 미완료/미검증이다. 운영 업로드와 독립 엔진의 OCR 설정도 다르다. 현재 결과는 [네이버 상담 검증](../../../docs/naver-consultation-verification-2026-11-17/README.md), 개선 전 기준은 [서비스 검증](../../../docs/service-verification-2026-11-17/README.md)에 보존한다.
 
 ---
 
@@ -138,8 +138,8 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 
 | 이름                                                                        | 의미                                                                    | 기본값                    |
 | --------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------- |
-| `RAG_GENERATION_PROVIDER`                                                   | `auto` / `clova` / `gemini` / `disabled` / `mock` / `openai-compatible` | Gemini (키 없으면 비활성) |
-| `RAG_CLOVA_API_KEY`, `RAG_CLOVA_MODEL`                                      | CLOVA Studio 키와 모델                                                  | 서버 환경 변수            |
+| `RAG_GENERATION_PROVIDER`                                                   | `auto` / `clova` / `gemini` / `disabled` / `mock` / `openai-compatible` | CLOVA (키 없으면 비활성)  |
+| `RAG_CLOVA_API_KEY`                                                         | CLOVA Studio 키 (HCX-007)                                               | 서버 환경 변수            |
 | `RAG_GEMINI_API_KEY`, `RAG_GEMINI_MODEL`                                    | Gemini API 키와 모델                                                    | 서버 환경 변수            |
 | `RAG_GENERATION_BASE_URL`, `RAG_GENERATION_MODEL`, `RAG_GENERATION_API_KEY` | OpenAI 호환 공급자 연결 정보(하나라도 없으면 disabled)                  | 없음                      |
 | `RAG_GENERATION_ALLOW_PERSONAL_DATA`                                        | 약관·미성년 이용·국외 처리 검토 완료 시에만 `true`                      | `false`                   |
@@ -233,7 +233,7 @@ node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultatio
 
 ### 생성 공급자 설정
 
-PowerShell에서 같은 터미널로 실행합니다. 기본 공급자는 Gemini입니다. `auto`를 명시하면 시작할 때 CLOVA Studio 키가 있으면 CLOVA Studio, 없고 Gemini 키가 있으면 Gemini를 선택합니다. 네이버 계정이나 키를 사용할 수 없으면 Gemini를 명시할 수 있습니다.
+PowerShell에서 같은 터미널로 실행합니다. 기본 공급자는 CLOVA입니다. `auto`도 네이버 키만 사용하며 키가 없으면 비활성입니다. 아래 Gemini 예제는 과거 연구를 재현하는 독립 엔진 전용이고 운영 서버에는 적용되지 않습니다.
 
 ```powershell
 $env:RAG_GENERATION_PROVIDER = 'clova'
