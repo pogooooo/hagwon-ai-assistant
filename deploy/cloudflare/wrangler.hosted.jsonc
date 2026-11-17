@@ -33,6 +33,7 @@
     "RAG_GENERATION_PROVIDER": "clova",
     "RAG_GENERATION_DAILY_CALL_LIMIT": "100",
     "RAG_CLOVA_ALLOW_PERSONAL_DATA": "false",
+    "AXR_CLOVA_SCAN_ENABLED": "true",
   },
   "durable_objects": {
     "bindings": [{ "name": "ACADEMY", "class_name": "AcademyDemo" }],

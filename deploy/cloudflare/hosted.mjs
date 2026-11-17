@@ -6,6 +6,7 @@ import { createOperationsServer } from '../../src/features/academy-operations/ap
 import {
   configureOperationsGeneration,
   createOperationsGeneration,
+  createOperationsScanVision,
 } from '../../src/features/academy-operations/runtime-generation.ts';
 import { configurePdfRuntime } from '../../src/features/rag-consultation/server/ingest/parsers/pdf.ts';
 import { runParentMessageJobs } from '../../src/features/academy-operations/parent-messages-model.ts';
@@ -73,6 +74,8 @@ export class AcademyDemo extends DurableObject {
     );
     const server = createOperationsServer({
       services: createExternalServices(env, fetch, database(ctx.storage)),
+      scanVision: createOperationsScanVision(env, fetch, database(ctx.storage)),
+      scanPdfAvailable: false,
       db: database(ctx.storage),
       publicOrigin: new URL(env.AXR_OPERATIONS_PUBLIC_ORIGIN),
       demoPassword: env.AXR_HOSTED_DEMO_PASSWORD,

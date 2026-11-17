@@ -97,6 +97,7 @@ export interface OperationsServerOptions {
   documentsRoot?: string;
   maxDocumentBytes?: number;
   scanVision?: import('../rag-consultation/server/ingest/parsers/types.ts').ScanVision;
+  scanPdfAvailable?: boolean;
 }
 
 export function createOperationsServer({
@@ -111,6 +112,7 @@ export function createOperationsServer({
   documentsRoot,
   maxDocumentBytes = defaultMaxDocumentBytes,
   scanVision,
+  scanPdfAvailable = true,
 }: OperationsServerOptions) {
   services ??= createExternalServices(process.env, fetch, db);
   if (
@@ -260,7 +262,7 @@ export function createOperationsServer({
       h(title) +
       ' · AXR</title><meta name="theme-color" content="#ffffff"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=8"><link rel="stylesheet" href="/service-design.css?v=8"></head><body data-account="' +
       h(actor?.id ?? '') +
-      '"><script src="/service-ui.js?v=6" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=7" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName
@@ -511,6 +513,7 @@ export function createOperationsServer({
         assertCurrentAccess,
         maxDocumentBytes,
         scanVision,
+        scanPdfAvailable,
       };
       if (
         form &&

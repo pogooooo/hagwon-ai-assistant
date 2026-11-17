@@ -9,6 +9,7 @@ import { parseDelimited, parseXlsx, parsePptx } from './business-office.ts';
 import { createTesseractOcr } from './ocr.ts';
 import { toMarkdown } from './layout.ts';
 import { parsePdf } from './pdf.ts';
+import { imageMime } from './image.ts';
 import { maskPersonalData } from './pii.ts';
 import {
   DEFAULT_PARSE_LIMITS,
@@ -23,7 +24,7 @@ import {
 export * from './types.ts';
 
 /** 파서 동작이 바뀌면 올린다(파싱 결과 캐시 무효화). */
-export const PARSER_VERSION = 'parsers-2026-11-18.1';
+export const PARSER_VERSION = 'parsers-2026-11-18.2';
 export { createTesseractOcr } from './ocr.ts';
 export { PII_MASK } from './pii.ts';
 
@@ -43,11 +44,7 @@ export function detectFormat(
   bytes: Uint8Array,
   fileName: string,
 ): SourceFormat | 'hwp_binary' | 'zip_unknown' | 'unknown' {
-  if (
-    startsWith(bytes, [0xff, 0xd8, 0xff]) ||
-    startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-  )
-    return 'image';
+  if (imageMime(bytes)) return 'image';
   if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46])) return 'pdf'; // %PDF
   if (startsWith(bytes, [0xd0, 0xcf, 0x11, 0xe0])) return 'hwp_binary'; // OLE 복합 문서(구형 HWP/DOC)
   if (startsWith(bytes, [0x50, 0x4b, 0x03, 0x04])) {
@@ -66,6 +63,8 @@ export function detectFormat(
     if (/\.docx$/i.test(fileName)) return 'docx';
     return 'zip_unknown';
   }
+  if (/\.(png|jpe?g|webp|bmp|gif|tiff?|heic|heif|svg)$/i.test(fileName))
+    return 'unknown';
   if (/\.(md|markdown)$/i.test(fileName)) return 'markdown';
   if (/\.csv$/i.test(fileName)) return 'csv';
   if (/\.tsv$/i.test(fileName)) return 'tsv';
