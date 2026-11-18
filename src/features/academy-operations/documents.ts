@@ -928,7 +928,7 @@ async function submitDocument(ctx: PageContext, form: FormData) {
   if (!prepared.document) {
     throw new OperationError(
       prepared.parsed.error === 'unsupported_hwp_binary'
-        ? '구형 HWP·DOC·XLS 파일은 HWPX·DOCX·XLSX 또는 PDF로 저장한 뒤 올려 주세요.'
+        ? '구형 HWP·DOC·XLS·PPT 파일은 HWPX·DOCX·XLSX·PPTX 또는 PDF로 저장한 뒤 올려 주세요.'
         : '텍스트를 읽을 수 없습니다. 텍스트가 포함된 파일을 올리거나 확인한 내용을 입력해 주세요.',
     );
   }

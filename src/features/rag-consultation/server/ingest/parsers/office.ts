@@ -271,7 +271,7 @@ function extractBlocks(
 export function parseDocx(
   bytes: Uint8Array,
   limits: ParseLimits,
-): { text: string; tables: number } {
+): { text: string; tables: number; needsReview: boolean } {
   const files = readZip(bytes, limits, (name) => name === 'word/document.xml');
   const xml = files['word/document.xml'];
   if (!xml) throw new Error('word/document.xml 없음');
@@ -299,13 +299,16 @@ export function parseDocx(
   return {
     text: blocks.length ? toMarkdown(blocks) : '',
     tables: blocks.filter((b) => b.kind === 'table').length,
+    needsReview: /<(?:w:drawing|w:pict|w:object|w:altChunk|v:imagedata)\b/.test(
+      xml,
+    ),
   };
 }
 
 export function parseHwpx(
   bytes: Uint8Array,
   limits: ParseLimits,
-): { text: string; tables: number } {
+): { text: string; tables: number; needsReview: boolean } {
   const files = readZip(bytes, limits, (name) =>
     /^Contents\/section\d+\.xml$/i.test(name),
   );
@@ -343,5 +346,12 @@ export function parseHwpx(
   return {
     text: blocks.length ? toMarkdown(blocks) : '',
     tables: blocks.filter((b) => b.kind === 'table').length,
+    needsReview: sections.some(
+      (name) =>
+        /<hp:(?:pic|ole|equation|chart)\b/.test(files[name]) ||
+        /<hp:cellSpan\b[^>]*\b(?:colSpan|rowSpan)=["'](?!1["'])/.test(
+          files[name],
+        ),
+    ),
   };
 }

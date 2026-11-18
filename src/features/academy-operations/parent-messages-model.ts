@@ -335,54 +335,104 @@ export function prepareMonthlyMessages(
   now = Date.now(),
   refreshDrafts = false,
 ) {
+  return transaction(db, () =>
+    buildMonthlyMessages(
+      db,
+      academy,
+      period,
+      policy,
+      now,
+      refreshDrafts ? 'refresh' : 'keep',
+    ),
+  );
+}
+
+function buildMonthlyMessages(
+  db: OperationsDatabase,
+  academy: string,
+  period: string,
+  policy: ParentPolicy,
+  now: number,
+  mode: 'keep' | 'refresh' | 'adopt',
+) {
   month(period);
   validateParentTemplate(policy.template);
   const list = recipients(db, academy, policy.class_id),
     evidence = monthlyEvidence(db, academy),
-    batch = `monthly:${academy}:${period}${refreshDrafts ? ':' + randomUUID() : ''}`;
+    batch = `monthly:${academy}:${period}${mode === 'refresh' ? ':' + randomUUID() : ''}`;
   const academyName =
     one<{ name: string }>(db, 'SELECT name FROM academies WHERE id=?', academy)
       ?.name ?? '학원';
   let created = 0,
     missing = 0;
-  transaction(db, () => {
-    for (const r of list) {
-      const report = monthlyReport(db, academy, r.student, period, evidence);
-      if (!report) {
-        missing++;
-        continue;
-      }
-      if (refreshDrafts)
-        db.prepare(
-          "DELETE FROM op_parent_messages WHERE academy_id=? AND kind='monthly' AND period=? AND student_id=? AND guardian_id=? AND state IN('draft','cancelled')",
-        ).run(academy, period, r.student, r.guardian);
-      created += store(db, {
-        id: randomUUID(),
-        academy_id: academy,
-        batch_id: batch,
-        guardian_id: r.guardian,
-        target_class_id: policy.class_id,
-        student_id: r.student,
-        kind: 'monthly',
-        period,
-        title: `${r.name} · ${period} 월간 학습 리포트`,
-        body: fillParentTemplate(policy.template, {
-          학생명: r.name,
-          학원명: academyName,
-          분석월: period,
-          학습요약: report.summary,
-        }),
-        fingerprint: report.fingerprint,
-        sources: JSON.stringify(report.sources),
-        state: 'draft',
-        scheduled_at: new Date(now).toISOString(),
-        created_at: new Date(now).toISOString(),
-        delivered_at: null,
-        read_at: null,
-      });
+  const eligibleIds: string[] = [];
+  for (const r of list) {
+    const report = monthlyReport(db, academy, r.student, period, evidence);
+    if (!report) {
+      missing++;
+      continue;
     }
-  });
-  return { batch, created, missing, recipients: list.length };
+    if (mode === 'refresh')
+      db.prepare(
+        "DELETE FROM op_parent_messages WHERE academy_id=? AND kind='monthly' AND period=? AND student_id=? AND guardian_id=? AND state IN('draft','cancelled')",
+      ).run(academy, period, r.student, r.guardian);
+    const message: ParentMessage = {
+      id: randomUUID(),
+      academy_id: academy,
+      batch_id: batch,
+      guardian_id: r.guardian,
+      target_class_id: policy.class_id,
+      student_id: r.student,
+      kind: 'monthly',
+      period,
+      title: `${r.name} · ${period} 월간 학습 리포트`,
+      body: fillParentTemplate(policy.template, {
+        학생명: r.name,
+        학원명: academyName,
+        분석월: period,
+        학습요약: report.summary,
+      }),
+      fingerprint: report.fingerprint,
+      sources: JSON.stringify(report.sources),
+      state: 'draft',
+      scheduled_at: new Date(now).toISOString(),
+      created_at: new Date(now).toISOString(),
+      delivered_at: null,
+      read_at: null,
+    };
+    const previous =
+      mode === 'adopt'
+        ? one<ParentMessage>(
+            db,
+            "SELECT * FROM op_parent_messages WHERE academy_id=? AND kind='monthly' AND period=? AND student_id=? AND guardian_id=?",
+            academy,
+            period,
+            r.student,
+            r.guardian,
+          )
+        : undefined;
+    if (previous?.state === 'draft') {
+      // A preview is the same monthly delivery, not a separate send. Refresh
+      // its current evidence while preserving its existing preview/history URL.
+      db.prepare(
+        "UPDATE op_parent_messages SET target_class_id=?,title=?,body=?,fingerprint=?,sources=?,scheduled_at=? WHERE id=? AND state='draft'",
+      ).run(
+        policy.class_id,
+        message.title,
+        message.body,
+        message.fingerprint,
+        message.sources,
+        message.scheduled_at,
+        previous.id,
+      );
+      eligibleIds.push(previous.id);
+    } else {
+      const inserted = store(db, message);
+      created += inserted;
+      if (inserted) eligibleIds.push(message.id);
+    }
+  }
+  return { batch, created, missing, recipients: list.length, eligibleIds };
 }
 export function createParentNotice(
   ctx: PageContext,
@@ -500,7 +550,12 @@ export function deliverParentMessages(db: OperationsDatabase, now: number) {
   });
   return delivered;
 }
-export function runParentMessageJobs(db: OperationsDatabase, now = Date.now()) {
+export function runParentMessageJobs(
+  db: OperationsDatabase,
+  now = Date.now(),
+  onPolicyError: (academyId: string) => void = () =>
+    console.error('AXR parent report preparation failed; policy will retry.'),
+) {
   const kst = new Date(now + 9 * 3600000),
     period = previousReportMonth(now);
   for (const p of rows<ParentPolicy>(
@@ -512,31 +567,51 @@ export function runParentMessageJobs(db: OperationsDatabase, now = Date.now()) {
       (kst.getUTCDate() === p.day && kst.getUTCHours() < p.hour)
     )
       continue;
-    if (
-      one(
-        db,
-        'SELECT period FROM op_parent_runs WHERE academy_id=? AND period=?',
-        p.academy_id,
-        period,
-      )
-    )
-      continue;
-    const result = prepareMonthlyMessages(db, p.academy_id, period, p, now);
-    transaction(db, () => {
-      if (p.automatic)
-        db.prepare(
-          "UPDATE op_parent_messages SET state='queued' WHERE academy_id=? AND batch_id=? AND state='draft'",
-        ).run(p.academy_id, result.batch);
-      // Late-approved reports can be picked up on the next tick. Unique message
-      // keys prevent repeats after a restart or a crash between these writes.
-      if (result.recipients && result.missing === 0)
-        db.prepare('INSERT OR IGNORE INTO op_parent_runs VALUES(?,?,?,?)').run(
+    try {
+      transaction(db, () => {
+        const completed = one(
+          db,
+          'SELECT period FROM op_parent_runs WHERE academy_id=? AND period=?',
           p.academy_id,
           period,
-          p.version,
-          new Date(now).toISOString(),
         );
-    });
+        // Enabling automatic delivery must also pick up an existing preview.
+        // Previously delivered or explicitly cancelled messages are never reset.
+        if (
+          completed &&
+          !(
+            p.automatic &&
+            one(
+              db,
+              "SELECT id FROM op_parent_messages WHERE academy_id=? AND period=? AND kind='monthly' AND state='draft' LIMIT 1",
+              p.academy_id,
+              period,
+            )
+          )
+        )
+          return;
+        const result = buildMonthlyMessages(
+          db,
+          p.academy_id,
+          period,
+          p,
+          now,
+          p.automatic ? 'adopt' : 'keep',
+        );
+        if (p.automatic)
+          db.prepare(
+            "UPDATE op_parent_messages SET state='queued' WHERE academy_id=? AND state='draft' AND id IN (SELECT value FROM json_each(?))",
+          ).run(p.academy_id, JSON.stringify(result.eligibleIds));
+        // Late-approved reports can be picked up on the next tick. Unique message
+        // keys prevent repeats after a restart or a crash between these writes.
+        if (result.recipients && result.missing === 0)
+          db.prepare(
+            'INSERT OR IGNORE INTO op_parent_runs VALUES(?,?,?,?)',
+          ).run(p.academy_id, period, p.version, new Date(now).toISOString());
+      });
+    } catch {
+      onPolicyError(p.academy_id);
+    }
   }
   return deliverParentMessages(db, now);
 }
