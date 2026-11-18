@@ -191,6 +191,16 @@ test('a monthly preview prepared before the due time is delivered automatically 
   const messages = visibleParentMessages(s.ctx());
   assert.ok(messages.length > 0);
   assert.ok(messages.every((m) => m.state === 'delivered'));
+  assert.ok(messages.every((m) => m.batch_id === preview.batch));
+  assert.match(
+    await parentMessagesModule.render(
+      s.ctx(
+        'TA_DIRECTOR',
+        '/messages?view=history&batch=' + encodeURIComponent(preview.batch),
+      ),
+    ),
+    /전달됨/,
+  );
   assert.ok(messages.every((m) => messageCurrent(s.db, m)));
   runParentMessageJobs(s.db, due + 60000);
   assert.equal(visibleParentMessages(s.ctx()).length, messages.length);

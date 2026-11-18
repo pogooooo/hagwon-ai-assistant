@@ -413,11 +413,10 @@ function buildMonthlyMessages(
         : undefined;
     if (previous?.state === 'draft') {
       // A preview is the same monthly delivery, not a separate send. Refresh
-      // its current evidence and move it into the scheduler's atomic batch.
+      // its current evidence while preserving its existing preview/history URL.
       db.prepare(
-        "UPDATE op_parent_messages SET batch_id=?,target_class_id=?,title=?,body=?,fingerprint=?,sources=?,scheduled_at=? WHERE id=? AND state='draft'",
+        "UPDATE op_parent_messages SET target_class_id=?,title=?,body=?,fingerprint=?,sources=?,scheduled_at=? WHERE id=? AND state='draft'",
       ).run(
-        batch,
         policy.class_id,
         message.title,
         message.body,
@@ -601,8 +600,8 @@ export function runParentMessageJobs(
         );
         if (p.automatic)
           db.prepare(
-            "UPDATE op_parent_messages SET state='queued' WHERE academy_id=? AND batch_id=? AND state='draft' AND id IN (SELECT value FROM json_each(?))",
-          ).run(p.academy_id, result.batch, JSON.stringify(result.eligibleIds));
+            "UPDATE op_parent_messages SET state='queued' WHERE academy_id=? AND state='draft' AND id IN (SELECT value FROM json_each(?))",
+          ).run(p.academy_id, JSON.stringify(result.eligibleIds));
         // Late-approved reports can be picked up on the next tick. Unique message
         // keys prevent repeats after a restart or a crash between these writes.
         if (result.recipients && result.missing === 0)
