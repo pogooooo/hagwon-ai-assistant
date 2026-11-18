@@ -24,7 +24,7 @@ import {
 export * from './types.ts';
 
 /** 파서 동작이 바뀌면 올린다(파싱 결과 캐시 무효화). */
-export const PARSER_VERSION = 'parsers-2026-11-18.2';
+export const PARSER_VERSION = 'parsers-2026-11-18.3';
 export { createTesseractOcr } from './ocr.ts';
 export { PII_MASK } from './pii.ts';
 
@@ -210,7 +210,7 @@ export async function parseSourceFile(input: ParseInput): Promise<ParsedFile> {
         warnings.push({
           code: 'office_review',
           detail:
-            '수식·표시 형식·병합 셀 또는 이미지 포함. 추출 내용과 원본을 비교해 주세요.',
+            '수식·표시 형식·병합 셀 또는 이미지 포함. 이미지·차트·개체의 내용은 자동으로 읽지 않으므로 추출 내용과 원본을 비교해 주세요.',
         });
       result = {
         format: detected,

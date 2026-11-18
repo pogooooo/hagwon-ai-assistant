@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import { createOperationsServer } from './application.ts';
 import { getActor } from './directory.ts';
@@ -22,6 +22,8 @@ import {
   deliverParentMessages,
   visibleParentMessages,
   messageCurrent,
+  previousReportMonth,
+  createParentNotice,
 } from './parent-messages-model.ts';
 import {
   createParentTemplate,
@@ -160,6 +162,221 @@ test('monthly scheduler uses KST and previous month; repeated ticks and restarts
     true,
   );
   assert.equal(visibleParentMessages(s.ctx()).length, count);
+});
+
+test('a monthly preview prepared before the due time is delivered automatically exactly once', async (t) => {
+  const s = setup(t);
+  await s.publish();
+  saveParentPolicy(s.ctx(), {
+    ...parentPolicy(s.db, 'AC_TEST_A'),
+    enabled: 1,
+    automatic: 1,
+    day: 5,
+    hour: 10,
+    class_id: 'TA_E_MATH',
+  });
+  const policy = parentPolicy(s.db, 'AC_TEST_A');
+  const preview = prepareMonthlyMessages(
+    s.db,
+    'AC_TEST_A',
+    '2026-11',
+    policy,
+    Date.parse('2026-12-04T10:00:00+09:00'),
+    true,
+  );
+  assert.ok(preview.created > 0);
+  assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
+  const due = Date.parse('2026-12-05T10:00:00+09:00');
+  runParentMessageJobs(s.db, due);
+  const messages = visibleParentMessages(s.ctx());
+  assert.ok(messages.length > 0);
+  assert.ok(messages.every((m) => m.state === 'delivered'));
+  assert.ok(messages.every((m) => messageCurrent(s.db, m)));
+  runParentMessageJobs(s.db, due + 60000);
+  assert.equal(visibleParentMessages(s.ctx()).length, messages.length);
+});
+
+test('a broken academy policy cannot prevent other academies or queued notices from delivering', async (t) => {
+  const s = setup(t);
+  await s.publish();
+  const due = Date.parse('2026-12-05T10:00:00+09:00');
+  const notice = createParentNotice(s.ctx(), {
+    requestId: randomUUID(),
+    title: '예약 안내',
+    template: '확인된 학원 안내입니다.',
+    classId: 'TA_E_MATH',
+    scheduledAt: new Date(due).toISOString(),
+  });
+  s.db
+    .prepare("UPDATE op_parent_messages SET state='queued' WHERE batch_id=?")
+    .run(notice);
+  s.db
+    .prepare('INSERT INTO op_parent_policies VALUES(?,?,?,?,?,?,?,?)')
+    .run(
+      'AC_TEST_B',
+      1,
+      1,
+      1,
+      5,
+      10,
+      'deleted-class',
+      parentPolicy(s.db, 'AC_TEST_A').template,
+    );
+  saveParentPolicy(s.ctx(), {
+    ...parentPolicy(s.db, 'AC_TEST_A'),
+    enabled: 1,
+    automatic: 1,
+    day: 5,
+    hour: 10,
+    class_id: 'TA_E_MATH',
+  });
+  assert.doesNotThrow(() =>
+    runParentMessageJobs(s.db, Date.parse('2026-12-05T10:00:00+09:00')),
+  );
+  assert.ok(
+    visibleParentMessages(s.ctx()).some((m) => m.state === 'delivered'),
+  );
+  assert.ok(
+    visibleParentMessages(s.ctx())
+      .filter((m) => m.batch_id === notice)
+      .every((m) => m.state === 'delivered'),
+  );
+  assert.equal(
+    s.db
+      .prepare('SELECT * FROM op_parent_runs WHERE academy_id=?')
+      .get('AC_TEST_B'),
+    undefined,
+  );
+});
+
+test('enabling automatic delivery after a scheduled draft run sends the existing preview, not another report', async (t) => {
+  const s = setup(t);
+  await s.publish();
+  saveParentPolicy(s.ctx(), {
+    ...parentPolicy(s.db, 'AC_TEST_A'),
+    enabled: 1,
+    automatic: 0,
+    class_id: 'TA_E_MATH',
+  });
+  const due = Date.parse('2026-12-05T10:00:00+09:00');
+  runParentMessageJobs(s.db, due);
+  const ids = visibleParentMessages(s.ctx()).map((m) => m.id);
+  assert.ok(ids.length > 0);
+  saveParentPolicy(s.ctx(), {
+    ...parentPolicy(s.db, 'AC_TEST_A'),
+    automatic: 1,
+  });
+  runParentMessageJobs(s.db, due + 60000);
+  assert.deepEqual(
+    visibleParentMessages(s.ctx()).map((m) => m.id),
+    ids,
+  );
+  assert.ok(
+    visibleParentMessages(s.ctx()).every((m) => m.state === 'delivered'),
+  );
+});
+
+test('an explicitly cancelled preview never becomes an automatic resend', async (t) => {
+  const s = setup(t);
+  await s.publish();
+  saveParentPolicy(s.ctx(), {
+    ...parentPolicy(s.db, 'AC_TEST_A'),
+    enabled: 1,
+    automatic: 1,
+    class_id: 'TA_E_MATH',
+  });
+  const r = prepareMonthlyMessages(
+    s.db,
+    'AC_TEST_A',
+    '2026-11',
+    parentPolicy(s.db, 'AC_TEST_A'),
+    Date.now(),
+    true,
+  );
+  await s.submit({ action: 'cancel', batch: r.batch });
+  runParentMessageJobs(s.db, Date.parse('2026-12-05T10:00:00+09:00'));
+  assert.ok(
+    visibleParentMessages(s.ctx()).every((m) => m.state === 'cancelled'),
+  );
+  assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
+});
+
+test('withdrawn evidence in an old preview is not queued at the monthly due time', async (t) => {
+  const s = setup(t);
+  await s.publish();
+  saveParentPolicy(s.ctx(), {
+    ...parentPolicy(s.db, 'AC_TEST_A'),
+    enabled: 1,
+    automatic: 1,
+    class_id: 'TA_E_MATH',
+  });
+  prepareMonthlyMessages(
+    s.db,
+    'AC_TEST_A',
+    '2026-11',
+    parentPolicy(s.db, 'AC_TEST_A'),
+    Date.now(),
+    true,
+  );
+  await s.result('withdraw', '2');
+  runParentMessageJobs(s.db, Date.parse('2026-12-05T10:00:00+09:00'));
+  assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
+  assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
+});
+
+test('a failure between draft creation and run recording rolls back and a later tick delivers once', async (t) => {
+  const s = setup(t);
+  await s.publish();
+  saveParentPolicy(s.ctx(), {
+    ...parentPolicy(s.db, 'AC_TEST_A'),
+    enabled: 1,
+    automatic: 1,
+    class_id: 'TA_E_MATH',
+  });
+  let fail = true;
+  const errors: string[] = [];
+  const flaky = {
+    exec: (sql: string) => {
+      s.db.exec(sql);
+    },
+    prepare: (sql: string) => {
+      const st = s.db.prepare(sql);
+      return {
+        all: (...args: SQLInputValue[]) => st.all(...args),
+        get: (...args: SQLInputValue[]) => st.get(...args),
+        run: (...args: SQLInputValue[]) => {
+          if (fail && sql.includes('INSERT OR IGNORE INTO op_parent_runs')) {
+            fail = false;
+            throw new Error('synthetic storage interruption');
+          }
+          return st.run(...args);
+        },
+      };
+    },
+  };
+  const due = Date.parse('2026-12-05T10:00:00+09:00');
+  runParentMessageJobs(flaky, due, (id) => errors.push(id));
+  assert.deepEqual(errors, ['AC_TEST_A']);
+  assert.equal(visibleParentMessages(s.ctx()).length, 0);
+  runParentMessageJobs(flaky, due + 60000, (id) => errors.push(id));
+  const delivered = visibleParentMessages(s.ctx()).length;
+  assert.ok(delivered > 0);
+  assert.ok(
+    visibleParentMessages(s.ctx()).every((m) => m.state === 'delivered'),
+  );
+  runParentMessageJobs(flaky, due + 120000);
+  assert.equal(visibleParentMessages(s.ctx()).length, delivered);
+});
+
+test('monthly report period follows KST across the year boundary', () => {
+  assert.equal(
+    previousReportMonth(Date.parse('2026-12-31T23:59:59+09:00')),
+    '2026-11',
+  );
+  assert.equal(
+    previousReportMonth(Date.parse('2027-01-01T00:00:00+09:00')),
+    '2026-12',
+  );
 });
 test('approved workbook results join the monthly report only after explicit analysis publication', async (t) => {
   const s = setup(t),
