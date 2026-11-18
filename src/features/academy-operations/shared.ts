@@ -19,6 +19,7 @@ export interface PageContext {
   url: URL;
   maxDocumentBytes?: number;
   scanVision?: ScanVision;
+  scanPdfAvailable?: boolean;
   assertCurrentAccess?: () => void;
   submittedForm?: FormData;
   formError?: string;

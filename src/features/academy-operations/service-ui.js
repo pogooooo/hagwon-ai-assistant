@@ -144,6 +144,84 @@ for (const form of document.querySelectorAll('#makeup form')) {
 
 const documentUpload = document.querySelector('[data-document-upload]');
 if (documentUpload) {
+  const uploadButton = documentUpload.querySelector('button[type="submit"]');
+  let imageVersion = 0;
+  documentUpload.elements
+    .namedItem('file')
+    .addEventListener('change', async (event) => {
+      const input = event.target,
+        file = input.files[0],
+        version = ++imageVersion;
+      const status = documentUpload.querySelector('[data-image-status]');
+      input.setCustomValidity('');
+      status.textContent = '';
+      const title = documentUpload.elements.namedItem('title');
+      if (!title.value.trim() && file)
+        title.value = file.name.replace(/\.[^.]+$/, '').slice(0, 200);
+      if (!file || !/\.(png|jpe?g|webp|bmp)$/i.test(file.name)) {
+        uploadButton.disabled = false;
+        return;
+      }
+      uploadButton.disabled = true;
+      input.setCustomValidity('사진을 준비하고 있습니다.');
+      status.textContent = '사진을 준비하고 있습니다…';
+      let bitmap;
+      try {
+        if (file.size > 20 * 1024 * 1024)
+          throw new Error('사진은 20MB 이하로 골라 주세요.');
+        bitmap = await createImageBitmap(file, {
+          imageOrientation: 'from-image',
+        });
+        if (version !== imageVersion) return;
+        if (
+          Math.min(bitmap.width, bitmap.height) < 4 ||
+          Math.max(bitmap.width / bitmap.height, bitmap.height / bitmap.width) >
+            5
+        )
+          throw new Error(
+            '너무 길거나 작은 사진은 읽기 어렵습니다. 문서 영역을 나눠 찍어 주세요.',
+          );
+        const scale = Math.min(1, 2240 / Math.max(bitmap.width, bitmap.height));
+        if (scale < 1 || file.size > 4 * 1024 * 1024) {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(4, Math.round(bitmap.width * scale));
+          canvas.height = Math.max(4, Math.round(bitmap.height * scale));
+          const context = canvas.getContext('2d');
+          context.fillStyle = '#ffffff';
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise((resolve) =>
+            canvas.toBlob(resolve, 'image/jpeg', 0.94),
+          );
+          if (version !== imageVersion) return;
+          if (!blob)
+            throw new Error(
+              '사진을 준비하지 못했습니다. JPG 또는 PNG로 저장해 주세요.',
+            );
+          const files = new DataTransfer();
+          files.items.add(
+            new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
+              type: 'image/jpeg',
+            }),
+          );
+          input.files = files.files;
+          status.textContent =
+            '등록용 사진을 자동으로 줄였습니다. 기기의 원본은 그대로 유지됩니다.';
+        } else status.textContent = '사진을 등록할 수 있습니다.';
+        input.setCustomValidity('');
+      } catch (error) {
+        if (version !== imageVersion) return;
+        const message =
+          error instanceof Error && !/decode|source|bitmap/i.test(error.message)
+            ? error.message
+            : '사진을 열 수 없습니다. JPG·PNG·WEBP·BMP로 저장해 주세요.';
+        input.setCustomValidity(message);
+        status.textContent = message;
+      } finally {
+        bitmap?.close();
+        if (version === imageVersion) uploadButton.disabled = false;
+      }
+    });
   documentUpload.addEventListener('submit', () => {
     const progress = documentUpload.querySelector('[data-document-progress]');
     if (documentUpload.elements.namedItem('file').files.length) {

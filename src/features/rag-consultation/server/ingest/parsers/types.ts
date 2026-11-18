@@ -1,5 +1,5 @@
 /**
- * 문서 파서 공통 타입. 모든 형식(PDF·스캔 PDF·DOCX·HWPX·TXT·Markdown)은 같은 "정규화 Markdown + 페이지 품질" 으로 바뀐다.
+ * 문서 파서 공통 타입. PDF·Office·CSV/TSV·텍스트는 같은 "정규화 Markdown + 페이지 품질"로 바뀐다.
  * 정규화 Markdown 규칙(청크 생성기가 읽는 형식):
  *   - `<!-- page N -->` 페이지 시작(표 안에도 올 수 있음: 여러 페이지에 걸친 표)
  *   - `# 제목`, `## 절`, 문단(빈 줄 구분), `| 칸 | 칸 |` 표(첫 행 = 헤더, 다음 줄 구분선)
@@ -15,7 +15,16 @@ export interface ScanVision {
 }
 
 export type SourceFormat =
-  'image' | 'pdf' | 'docx' | 'hwpx' | 'txt' | 'markdown';
+  | 'image'
+  | 'pdf'
+  | 'docx'
+  | 'hwpx'
+  | 'txt'
+  | 'markdown'
+  | 'xlsx'
+  | 'csv'
+  | 'tsv'
+  | 'pptx';
 
 export type ExtractionMethod = 'text' | 'ocr' | 'empty';
 
@@ -36,6 +45,7 @@ export type ExtractionStatus = 'ok' | 'needs_review' | 'partial' | 'failed';
 
 export interface ParseWarning {
   code:
+    | 'office_review'
     | 'vision_review'
     | 'ocr_used'
     | 'ocr_low_confidence'

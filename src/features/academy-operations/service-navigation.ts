@@ -1,6 +1,7 @@
 import { escapeHtml as h } from './shared.ts';
 
 const symbols: Record<string, [string, string]> = {
+  '/messages': ['chat', '<path d="M3 5h18v14H3Z"/><path d="m3 6 9 7 9-7"/>'],
   '/': [
     'home',
     '<path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>',
@@ -78,7 +79,10 @@ export function serviceNavigation(
     return `<a href="${h(href)}"${current === p.path ? ' aria-current="page"' : ''}>${serviceIcon(p.path)}<span>${h(label)}</span></a>`;
   };
   const groups = [
-    ['학원 생활', ['/', '/consultation', '/voice', '/schedule', '/homework']],
+    [
+      '학원 생활',
+      ['/', '/messages', '/consultation', '/voice', '/schedule', '/homework'],
+    ],
     ['기록과 자료', ['/learning', '/briefing', '/documents']],
     [
       '운영 관리',

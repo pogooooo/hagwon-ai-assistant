@@ -6,8 +6,10 @@ import { createOperationsServer } from '../../src/features/academy-operations/ap
 import {
   configureOperationsGeneration,
   createOperationsGeneration,
+  createOperationsScanVision,
 } from '../../src/features/academy-operations/runtime-generation.ts';
 import { configurePdfRuntime } from '../../src/features/rag-consultation/server/ingest/parsers/pdf.ts';
+import { runParentMessageJobs } from '../../src/features/academy-operations/parent-messages-model.ts';
 
 const fixtureRoot = '/bundle/academies/';
 
@@ -64,12 +66,16 @@ function database(storage) {
 export class AcademyDemo extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.messageStorage = ctx.storage;
+    this.parentMessageDb = database(ctx.storage);
     if (!env.AXR_HOSTED_DEMO_PASSWORD) throw new Error('Missing demo password');
     configureOperationsGeneration(
       createOperationsGeneration(env, fetch, database(ctx.storage)),
     );
     const server = createOperationsServer({
       services: createExternalServices(env, fetch, database(ctx.storage)),
+      scanVision: createOperationsScanVision(env, fetch, database(ctx.storage)),
+      scanPdfAvailable: false,
       db: database(ctx.storage),
       publicOrigin: new URL(env.AXR_OPERATIONS_PUBLIC_ORIGIN),
       demoPassword: env.AXR_HOSTED_DEMO_PASSWORD,
@@ -81,10 +87,31 @@ export class AcademyDemo extends DurableObject {
     });
     server.listen(0);
     this.port = server.address().port;
+    ctx.blockConcurrencyWhile(async () => {
+      if ((await ctx.storage.getAlarm()) === null)
+        await ctx.storage.setAlarm(Date.now() + 60000);
+    });
   }
 
-  fetch(request) {
+  async fetch(request) {
+    const alarm = await this.messageStorage.getAlarm();
+    if (alarm === null || alarm > Date.now() + 60000)
+      await this.messageStorage.setAlarm(Date.now() + 60000);
     return handleAsNodeRequest(this.port, request);
+  }
+  async alarm() {
+    try {
+      runParentMessageJobs(this.parentMessageDb);
+    } finally {
+      const active = this.parentMessageDb
+        .prepare(
+          "SELECT academy_id FROM op_parent_policies WHERE enabled=1 UNION ALL SELECT academy_id FROM op_parent_messages WHERE state='queued' LIMIT 1",
+        )
+        .get();
+      await this.messageStorage.setAlarm(
+        Date.now() + (active ? 60000 : 3600000),
+      );
+    }
   }
 }
 

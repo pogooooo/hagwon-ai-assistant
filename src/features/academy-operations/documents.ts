@@ -18,6 +18,7 @@ import {
   type Visibility,
 } from '../rag-consultation/server/index.ts';
 import { prepareFileDocument } from '../rag-consultation/server/ingest/ingest-file.ts';
+import { detectFormat } from '../rag-consultation/server/ingest/parsers/index.ts';
 import { scanReviewMarker } from '../rag-consultation/server/ingest/parsers/clova-vision.ts';
 import { DEFAULT_PARSE_LIMITS } from '../rag-consultation/server/ingest/parsers/types.ts';
 import { validateDocument } from '../rag-consultation/server/ingest/validation.ts';
@@ -517,15 +518,17 @@ function revisionForm(ctx: PageContext, previous?: SourceDocumentInput) {
         <label>대상 학생 <select name="studentId">${targetOptions(students, previous?.studentId)}</select></label>
         <label>적용 시작 (한국시간) <input type="datetime-local" name="validFrom" value="${h(localDateTime(previous?.validFrom))}"></label>
         <label>적용 종료 (한국시간) <input type="datetime-local" name="validTo" value="${h(localDateTime(previous?.validTo))}"></label>
-        <label>파일 <input type="file" name="file" accept=".pdf,.docx,.hwpx,.txt,.md,.markdown${ctx.scanVision ? ',.png,.jpg,.jpeg' : ''}"></label>
+        <label>파일 <input type="file" name="file" accept=".pdf,.docx,.hwpx,.xlsx,.csv,.tsv,.pptx,.txt,.md,.markdown,.png,.jpg,.jpeg,.webp,.bmp" aria-describedby="document-file-help"></label>
       </div>
       <label>직접 입력 또는 추출 내용 수정
         <textarea name="text" rows="7" maxlength="${DEFAULT_RAG_CONFIG.maxDocumentChars}">${h(previous?.text)}</textarea>
       </label>
-      <p class="muted">파일을 선택하면 파일의 텍스트를 읽습니다. 파일 없이 내용만 입력할 수도 있습니다.</p>
+      <p class="muted">PDF·Word·HWPX·Excel·CSV/TSV·PowerPoint·텍스트·Markdown 원본을 바로 올릴 수 있습니다. 시트·표·슬라이드의 위치를 함께 보관합니다. 구형 HWP·DOC·XLS·PPT는 HWPX·DOCX·XLSX·PPTX 또는 PDF로 저장해 주세요.</p>
+      <p class="muted" id="document-file-help">${ctx.scanVision ? '사진·캡처는 JPG·PNG·WEBP·BMP를 지원합니다. 큰 사진은 등록용 사본을 자동으로 줄이며, 내용은 새로 작성할 필요가 없습니다. 개인정보가 없는 학원 공개 자료에 사용할 수 있습니다.' : '사진 판독은 현재 서버에서 꺼져 있습니다. 서버에 네이버 AI 연결이 필요하며, 텍스트 문서는 그대로 등록할 수 있습니다.'} ${ctx.scanPdfAvailable === false ? '이 서버에서는 스캔 PDF의 이미지 변환을 지원하지 않습니다. 텍스트 PDF 또는 페이지 사진으로 등록해 주세요.' : '스캔 PDF는 동의한 경우 최대 3페이지를 자동 판독합니다.'} 파일당 최대 ${(ctx.maxDocumentBytes ?? maxDocumentBytes) / (1024 * 1024)}MB입니다.</p>
       ${ctx.scanVision ? '<label class="check-label"><input type="checkbox" name="clovaScan" value="1">개인정보가 없는 스캔 또는 사진의 CLOVA 판독에 동의합니다.</label>' : ''}
       <button type="submit">검수 대기로 저장</button>
       <p role="status" data-document-progress hidden>파일을 판독하고 있습니다. 완료되면 검수 화면이 열립니다.</p>
+      <p role="status" data-image-status></p>
     </form>
   </section>`;
 }
@@ -870,6 +873,17 @@ async function submitDocument(ctx: PageContext, form: FormData) {
     documentType !== 'student_analysis'
       ? ctx.scanVision
       : undefined;
+  const sourceFormat = detectFormat(bytes, original?.name ?? '직접입력.md');
+  if (sourceFormat === 'image' && !ctx.scanVision)
+    throw new OperationError(
+      '이 서버에는 사진 판독이 연결되어 있지 않습니다. 네이버 AI 설정이 필요합니다.',
+      422,
+    );
+  if (sourceFormat === 'image' && field(form, 'clovaScan') !== '1')
+    throw new OperationError(
+      '사진을 읽으려면 개인정보가 없는 자료인지 확인하고 CLOVA 판독에 동의해 주세요.',
+      422,
+    );
   if (original && field(form, 'clovaScan') === '1' && !vision)
     throw new OperationError(
       'CLOVA 판독은 학원 공개 자료에 사용할 수 있습니다.',
@@ -882,13 +896,16 @@ async function submitDocument(ctx: PageContext, form: FormData) {
       { bytes, fileName: original?.name ?? '직접입력.md' },
       {
         ocr: null,
-        vision: vision && {
-          id: vision.id,
-          readPage(bytes, page) {
-            ctx.assertCurrentAccess?.();
-            return vision.readPage(bytes, page);
-          },
-        },
+        vision:
+          vision && (sourceFormat !== 'pdf' || ctx.scanPdfAvailable !== false)
+            ? {
+                id: vision.id,
+                readPage(bytes, page) {
+                  ctx.assertCurrentAccess?.();
+                  return vision.readPage(bytes, page);
+                },
+              }
+            : undefined,
         limits: vision ? { maxOcrPages: 3 } : undefined,
       },
     );
@@ -899,9 +916,20 @@ async function submitDocument(ctx: PageContext, form: FormData) {
       422,
     );
   }
+  if (
+    sourceFormat === 'pdf' &&
+    ctx.scanPdfAvailable === false &&
+    prepared.parsed.pages.some((page) => page.method === 'empty')
+  )
+    throw new OperationError(
+      '읽지 못한 PDF 페이지가 있습니다. 이 서버에서는 스캔 PDF를 변환할 수 없어 일부 내용만 등록하지 않습니다. 텍스트 PDF 또는 페이지 사진으로 올려 주세요.',
+      422,
+    );
   if (!prepared.document) {
     throw new OperationError(
-      '텍스트를 읽을 수 없습니다. 텍스트가 포함된 파일을 올리거나 확인한 내용을 입력해 주세요.',
+      prepared.parsed.error === 'unsupported_hwp_binary'
+        ? '구형 HWP·DOC·XLS 파일은 HWPX·DOCX·XLSX 또는 PDF로 저장한 뒤 올려 주세요.'
+        : '텍스트를 읽을 수 없습니다. 텍스트가 포함된 파일을 올리거나 확인한 내용을 입력해 주세요.',
     );
   }
   const input = prepared.document;
