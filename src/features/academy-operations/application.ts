@@ -144,22 +144,25 @@ export function createOperationsServer({
       'assets/owl.png',
       'assets/app-192.png',
       'assets/app-512.png',
+      'assets/study-room.webp',
       'assets/fonts/noto-korean-400.woff2',
       'assets/fonts/noto-korean-700.woff2',
       'assets/fonts/noto-latin-400.woff2',
       'assets/fonts/noto-latin-700.woff2',
     ]) {
-      const contentType = path.endsWith('.woff2')
-        ? 'font/woff2'
-        : path.endsWith('.css')
-          ? 'text/css; charset=utf-8'
-          : path.endsWith('.json')
-            ? 'application/json; charset=utf-8'
-            : path.endsWith('.webmanifest')
-              ? 'application/manifest+json; charset=utf-8'
-              : path.endsWith('.js')
-                ? 'text/javascript; charset=utf-8'
-                : 'image/png';
+      const contentType = path.endsWith('.webp')
+        ? 'image/webp'
+        : path.endsWith('.woff2')
+          ? 'font/woff2'
+          : path.endsWith('.css')
+            ? 'text/css; charset=utf-8'
+            : path.endsWith('.json')
+              ? 'application/json; charset=utf-8'
+              : path.endsWith('.webmanifest')
+                ? 'application/manifest+json; charset=utf-8'
+                : path.endsWith('.js')
+                  ? 'text/javascript; charset=utf-8'
+                  : 'image/png';
       staticFiles.set('/' + path, {
         contentType,
         bytes: readFileSync(new URL(path, assetsRoot)),
@@ -266,7 +269,7 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · AXR</title><meta name="theme-color" content="#ffffff"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=9"><link rel="stylesheet" href="/service-design.css?v=9"></head><body data-account="' +
+      ' · AXR</title><meta name="theme-color" content="#ffffff"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=10"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
