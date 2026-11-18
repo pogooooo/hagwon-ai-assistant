@@ -18,6 +18,7 @@ import {
   officeFee,
 } from './__fixtures__/document-formats.ts';
 import { parseSourceFile } from '../rag-consultation/server/ingest/parsers/index.ts';
+import { splitIntoBlocks } from '../rag-consultation/server/ingest/chunking.ts';
 const form = (fields: Record<string, string | File>) => {
   const f = new FormData();
   for (const [k, v] of Object.entries(fields)) f.set(k, v);
@@ -96,8 +97,36 @@ for (const source of allFeeFormats())
       assert.doesNotMatch(answer.answer, /250,?000/);
       assert.equal(answer.citations[0].documentId, id);
       assert.equal(answer.citations[0].revision, 1);
-      assert.match(answer.citations[0].location, /표 1 · 1행/);
-      assert.match(answer.citations[0].location, /수강료/);
+      const stored = JSON.parse(
+        String(
+          db
+            .prepare(
+              'SELECT input FROM op_document_versions WHERE document_id=? AND revision=1',
+            )
+            .get(id)!.input,
+        ),
+      );
+      const selected = splitIntoBlocks(stored.text).find((block) => {
+        const content = block.text.replace(/\s|,/g, '');
+        return (
+          content.includes('중2내신반') &&
+          content.includes('310000원') &&
+          !content.includes('250000원')
+        );
+      });
+      assert.ok(
+        selected,
+        'A distinct source block must contain the requested class and amount',
+      );
+      assert.ok(
+        answer.citations.some((citation: { location?: string }) =>
+          citation.location?.includes(selected.location.label),
+        ),
+      );
+      if (selected.location.kind === 'table_row') {
+        assert.equal(selected.location.rowIndex, 1);
+        assert.match(answer.citations[0].location, /수강료/);
+      } else assert.match(answer.citations[0].location, /문단/);
       const original = await documentDownload({
         ...ctx(),
         url: new URL(
