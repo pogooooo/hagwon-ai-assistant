@@ -574,7 +574,7 @@ async function render(ctx: PageContext) {
         ['REVIEW_REQUIRED', 'READY_TO_CONFIRM'].includes(s.processing)
       ) {
         const draft = await service.draft(ctx, s.id);
-        detail += `${startForm('review')}${hidden('submission', s.id)}${hidden('revision', draft.draft_revision)}${draft.items
+        detail += `<p>전체 사진의 문항 번호와 답안을 함께 확인해 주세요. 문항별 확대 이미지는 AI가 추정한 영역입니다.</p>${Array.from({ length: s.expected_pages }, (_, n) => `<details><summary>${n + 1}쪽 전체 사진</summary><a href="/grading/photo?submission=${h(s.id)}&page=${n + 1}" target="_blank" rel="noopener">원본 크기로 열기</a><img src="/grading/photo?submission=${h(s.id)}&page=${n + 1}" alt="${n + 1}쪽 전체 사진" style="max-width:100%;max-height:40rem;object-fit:contain"></details>`).join('')}${startForm('review')}${hidden('submission', s.id)}${hidden('revision', draft.draft_revision)}${draft.items
           .map((d, n) => {
             const def = a.items.find(
                 (i) => i.item_ref === d.extraction.item_ref,
@@ -596,6 +596,9 @@ async function render(ctx: PageContext) {
     const reportId = ctx.url.searchParams.get('report');
     if (reportId) {
       const report = readReport(ctx, reportId);
+      if (staff && report.generation_error)
+        detail +=
+          '<p role="status">AI 응답을 확인하지 못해 확정 통계로 정형 초안을 만들었습니다. 아래 내용을 검수해 주세요.</p>';
       detail += `<section class="panel"><h2>학습 리포트 ${report.status === 'approved' ? '공개본' : '초안'}</h2><p>${report.model_id === 'deterministic-template' ? '확정 기록을 정형 문장으로 정리했습니다.' : 'AI가 확정 기록에서 관찰 항목을 선택하고 정리했습니다.'}</p><div class="record-body">${h(report.rendered_text).replaceAll('\n', '<br>')}</div>${staff && report.status === 'draft' ? `${startForm('approve_report')}${hidden('report', report.report_id)}${hidden('revision', report.revision)}${hidden('generation', report.source_generation)}${hidden('hash', report.facts_hash)}<label><input type="checkbox" name="review_complete" value="yes" required>근거와 내용을 검수했습니다.</label><button>학생·보호자에게 공개</button></form>` : ''}</section>`;
     }
     const visibleStudents = new Set(students.map((s) => s.id));

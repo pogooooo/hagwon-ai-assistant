@@ -84,6 +84,12 @@ test('HTTP photo upload → teacher review → purge → approved report with li
   const location = uploaded.headers.get('location')!,
     submission = new URL(location, origin).searchParams.get('submission')!;
   const rawPath = '/grading/photo?submission=' + submission + '&page=1';
+  const reviewPage = await (await send(location, teacher)).text();
+  assert.ok(
+    reviewPage.includes(rawPath),
+    'teacher review must link the whole page, not just an inferred crop',
+  );
+  assert.match(reviewPage, /1쪽 전체 사진/);
   const raw = await send(rawPath, teacher);
   assert.equal(raw.status, 200);
   assert.equal(raw.headers.get('cache-control'), 'no-store');

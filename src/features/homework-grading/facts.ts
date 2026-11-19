@@ -58,6 +58,7 @@ export interface Fact {
   period_role: 'primary' | 'comparison';
   subject_id: Subject;
   primary_skill_id: string | null;
+  skill_label?: string | null;
   taxonomy_version: string | null;
   n_correct: number;
   n_incorrect: number;
@@ -174,7 +175,11 @@ export function computeFacts(
     }
     for (const subject of q.subjects) {
       const totals = new Map<string, Fact>();
-      const create = (skill: string | null, taxonomy: string | null) => {
+      const create = (
+        skill: string | null,
+        taxonomy: string | null,
+        label?: string,
+      ) => {
         const key = JSON.stringify([skill, taxonomy]);
         let f = totals.get(key);
         if (!f) {
@@ -183,6 +188,7 @@ export function computeFacts(
             period_role: p.period_role,
             subject_id: subject,
             primary_skill_id: skill,
+            skill_label: skill ? (label ?? null) : null,
             taxonomy_version: taxonomy,
             n_correct: 0,
             n_incorrect: 0,
@@ -269,7 +275,11 @@ export function computeFacts(
           if (!item) throw new GradingError('ITEM_SET_MISMATCH');
           for (const f of [
             overall,
-            create(item.primary_skill_id, item.taxonomy_version),
+            create(
+              item.primary_skill_id,
+              item.taxonomy_version,
+              def.skill_label,
+            ),
           ]) {
             f[`n_${item.outcome}`]++;
             if (
@@ -459,7 +469,7 @@ export function readSnapshot(ctx: PageContext, id: string) {
   return result;
 }
 
-const observationSchema = z
+export const observationSchema = z
   .object({
     claim_type: z.enum([
       'observed_rate',
@@ -482,6 +492,7 @@ export interface Report {
   generated_at: string;
   template_version: 'grading-report-3.0';
   model_id: string;
+  generation_error?: string;
   status: 'draft' | 'approved' | 'stale';
   observations: Observation[];
   rendered_text: string;
@@ -502,7 +513,7 @@ export function renderObservations(s: Snapshot, observations: Observation[]) {
     const a = facts[0]!;
     const label =
       subjectNames[a.subject_id] +
-      (a.primary_skill_id ? ` 유형 ${a.primary_skill_id}` : ' 전체');
+      (a.primary_skill_id ? ` 유형 ${a.skill_label ?? '등록 유형'}` : ' 전체');
     if (o.claim_type === 'observed_change') {
       const b = facts[1];
       if (
@@ -602,6 +613,7 @@ export async function generateReport(
       template_key: f.n_evaluable ? 'rate' : 'insufficient',
     }));
   let model = 'deterministic-template';
+  let generationError: string | undefined;
   if (service.provider.report && service.provider.inputAllowed) {
     try {
       // No student identity, problem text, OCR, free-form responses or teacher notes leave this adapter.
@@ -617,8 +629,11 @@ export async function generateReport(
       renderObservations(s, result.observations);
       observations = result.observations;
       model = service.provider.modelId;
-    } catch {
-      /* Fail closed to the same grounded templates. */
+    } catch (error) {
+      generationError =
+        error instanceof GradingError
+          ? error.code
+          : 'PROVIDER_TEMPORARY_FAILURE';
     }
   }
   const rendered = renderObservations(s, observations);
@@ -634,6 +649,7 @@ export async function generateReport(
       generated_at: new Date(service.now()).toISOString(),
       template_version: 'grading-report-3.0',
       model_id: model,
+      ...(generationError ? { generation_error: generationError } : {}),
       status: 'draft',
       observations,
       rendered_text: rendered,

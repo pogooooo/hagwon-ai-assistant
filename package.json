@@ -21,6 +21,7 @@
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
     "rag:dev": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/rag-consultation/server/dev/dev-server.ts",
     "academy:dev": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/academy-operations/server.ts",
+    "grading:validate": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/features/homework-grading/live-validation.ts",
     "prepare": "husky",
     "cap:add:android": "npm run build && cap add android",
     "cap:add:ios": "npm run build && cap add ios",

@@ -23,6 +23,7 @@ import {
 } from './contracts.ts';
 import {
   aggregate,
+  normalizeNumericReading,
   emptyResult,
   propose,
   validateAssignment,
@@ -595,8 +596,25 @@ export class GradingService {
         try {
           readSubmission(ctx, id);
           this.open(this.current(id));
+          const verified = new Map<number, Reading[]>();
+          if (this.provider.verifyPage) {
+            for (const page of pages) {
+              readSubmission(ctx, id);
+              this.open(this.current(id));
+              try {
+                verified.set(
+                  page.page_no,
+                  await this.provider.verifyPage(page, a),
+                );
+              } catch {
+                verified.set(page.page_no, []);
+              }
+            }
+          }
           const items: DraftItem[] = [];
           for (const item of a.items) {
+            readSubmission(ctx, id);
+            this.open(this.current(id));
             const candidates = readings.filter(
               (r) => r.item_ref === item.item_ref,
             );
@@ -619,7 +637,7 @@ export class GradingService {
                     region.page_no <= s.expected_pages,
                 )
               )
-                r = parsed.data;
+                r = normalizeNumericReading(item, parsed.data);
             }
             if (
               candidates.length > 1 ||
@@ -629,6 +647,36 @@ export class GradingService {
             )
               r.ambiguity_codes = ['ASSOCIATION_AMBIGUOUS'];
             if (
+              this.provider.verifyPage &&
+              ['readable', 'blank'].includes(r.answer_status) &&
+              r.association_status === 'matched'
+            ) {
+              const second = (verified.get(item.expected_page_no) ?? []).filter(
+                (v) => v.item_ref === item.item_ref,
+              );
+              const checked = readingSchema.safeParse(second[0]);
+              const check = checked.success
+                ? normalizeNumericReading(item, checked.data)
+                : undefined;
+              if (
+                second.length !== 1 ||
+                !check ||
+                check.association_status !== 'matched' ||
+                check.ambiguity_codes.length ||
+                check.regions.some(
+                  (region) => region.page_no !== item.expected_page_no,
+                ) ||
+                check.answer_status !== r.answer_status ||
+                check.answer_observed.normalize('NFC').trim() !==
+                  r.answer_observed.normalize('NFC').trim() ||
+                check.unit_observed !== r.unit_observed
+              )
+                r = {
+                  ...r,
+                  answer_status: 'ambiguous',
+                  ambiguity_codes: [...r.ambiguity_codes, 'MODEL_DISAGREEMENT'],
+                };
+            } else if (
               r.answer_status === 'readable' &&
               r.association_status === 'matched' &&
               this.provider.check
@@ -672,9 +720,11 @@ export class GradingService {
                   ambiguity_codes: [...r.ambiguity_codes, 'MISSING_REGION'],
                 };
             }
-            let proposed = unavailable
-              ? emptyResult(item, 'PROVIDER_UNAVAILABLE')
-              : propose(item, r);
+            let proposed =
+              unavailable ||
+              r.ambiguity_codes.some((code) => code.startsWith('PROVIDER_'))
+                ? emptyResult(item, 'PROVIDER_UNAVAILABLE')
+                : propose(item, r);
             if (
               ['text_semantic', 'structured_work', 'essay'].includes(
                 item.answer_type,
@@ -686,6 +736,8 @@ export class GradingService {
               item.key?.approval_status === 'approved' &&
               this.provider.semantic
             ) {
+              readSubmission(ctx, id);
+              this.open(this.current(id));
               try {
                 proposed = aggregate(
                   item,

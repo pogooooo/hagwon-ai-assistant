@@ -124,6 +124,31 @@ const units: Record<string, [string, bigint, bigint]> = {
   mL: ['volume', 1n, 1000n],
   L: ['volume', 1n, 1n],
 };
+/** Split only an explicitly written, supported unit. Never convert values or infer a missing unit here. */
+export function normalizeNumericReading(item: Item, reading: Reading): Reading {
+  if (item.answer_type !== 'numeric') return reading;
+  const source = reading.answer_observed.trim();
+  const unit = Object.keys(units)
+    .sort((a, b) => b.length - a.length)
+    .find((u) => source.endsWith(u));
+  if (!unit) return reading;
+  const value = source.slice(0, -unit.length).trim();
+  try {
+    numeric(value);
+  } catch {
+    return reading;
+  }
+  if (reading.unit_observed && reading.unit_observed !== unit)
+    return {
+      ...reading,
+      answer_status: 'ambiguous',
+      ambiguity_codes: [
+        ...reading.ambiguity_codes,
+        'UNIT_TRANSCRIPTION_CONFLICT',
+      ],
+    };
+  return { ...reading, answer_observed: value, unit_observed: unit };
+}
 function numericMatch(reading: Reading, key: Key) {
   if (key.numeric_target === null) throw new GradingError('NO_KEY');
   let a = numeric(reading.answer_observed);

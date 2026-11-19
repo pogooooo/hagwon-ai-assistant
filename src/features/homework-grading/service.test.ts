@@ -453,6 +453,137 @@ function query(student = 'TA_STU_001') {
     statistics_policy_version: 'grading-stats-3.0' as const,
   };
 }
+
+test('page-level second reads verify every item without trusting model crop coordinates', async (t) => {
+  let secondReads = 0,
+    crops = 0;
+  const f = fixture(t, {
+    provider: {
+      modelId: 'page-verification',
+      inputAllowed: true,
+      async read(_pages, a) {
+        return a.items.map((i) => reading(i));
+      },
+      async verifyPage(_page, a) {
+        secondReads++;
+        return a.items.map((i) => reading(i));
+      },
+      async check() {
+        crops++;
+        throw new Error('untrusted crop must not be used');
+      },
+    },
+  });
+  const id = await f.upload(
+    f.register([item(), { ...item('ENG'), item_no: '2' }]),
+  );
+  const draft = await f.service.draft(f.ctx(), id);
+  assert.equal(secondReads, 1);
+  assert.equal(crops, 0);
+  assert.ok(draft.items.every((i) => i.proposed.outcome === 'correct'));
+});
+
+test('second-read disagreement on a blank or a readable answer defers instead of assigning a score', async (t) => {
+  const f = fixture(t, {
+    provider: {
+      modelId: 'page-disagreement',
+      inputAllowed: true,
+      async read(_pages, a) {
+        return a.items.map((i) => reading(i, '', { answer_status: 'blank' }));
+      },
+      async verifyPage(_page, a) {
+        return a.items.map((i) => reading(i));
+      },
+    },
+  });
+  const id = await f.upload(f.register());
+  const draft = await f.service.draft(f.ctx(), id);
+  assert.equal(draft.items[0].proposed.outcome, 'ungradable');
+  assert.equal(draft.items[0].proposed.score, null);
+  assert.ok(
+    draft.items[0].extraction.ambiguity_codes.includes('MODEL_DISAGREEMENT'),
+  );
+});
+
+test('cancellation during a second page read cannot recreate drafts or start semantic grading', async (t) => {
+  let entered!: () => void,
+    release!: () => void,
+    semantic = 0;
+  const started = new Promise<void>((r) => (entered = r)),
+    gate = new Promise<void>((r) => (release = r));
+  const f = fixture(t, {
+    provider: {
+      modelId: 'cancelled-verification',
+      inputAllowed: true,
+      async read(_pages, a) {
+        return a.items.map((i) => reading(i));
+      },
+      async verifyPage(_page, a) {
+        entered();
+        await gate;
+        return a.items.map((i) => reading(i));
+      },
+      async semantic() {
+        semantic++;
+        return [];
+      },
+    },
+  });
+  const pending = f.upload(
+    f.register([item('KOR', { answer_type: 'text_semantic' })]),
+  );
+  await started;
+  const row = f.db
+    .prepare(
+      'SELECT id FROM grading_v3_submissions ORDER BY rowid DESC LIMIT 1',
+    )
+    .get() as { id: string };
+  const scope = readSubmission(f.ctx(), row.id).scope;
+  await f.service.cancel(f.ctx(), row.id);
+  release();
+  await assert.rejects(pending, /RAW_CLOSED|STATE_CONFLICT/);
+  await f.service.sweep();
+  assert.equal(semantic, 0);
+  assert.deepEqual(await f.raw.list(scope), []);
+  assert.equal(readSubmission(f.ctx(), row.id).raw_state, 'VERIFIED');
+  assert.equal(readSubmission(f.ctx(), row.id).published_revision, null);
+});
+
+test('reports show registered skill labels and preserve a safe fallback reason', async (t) => {
+  const f = fixture(t, {
+    provider: {
+      modelId: 'report-error',
+      inputAllowed: true,
+      async read(_pages, a) {
+        return a.items.map((i) => reading(i));
+      },
+      async report() {
+        throw new GradingError('PROVIDER_AUTHENTICATION_FAILED', 503);
+      },
+    },
+  });
+  await f.confirm(await f.upload(f.register()));
+  const s = snapshot(f.ctx(), { ...query(), subjects: ['MATH'] });
+  const overall = s.facts.find((f) => f.primary_skill_id === null)!,
+    skill = s.facts.find((f) => f.primary_skill_id !== null)!;
+  const text = renderObservations(s, [
+    {
+      claim_type: 'observed_rate',
+      template_key: 'rate',
+      fact_ids: [overall.fact_id],
+    },
+    {
+      claim_type: 'observed_score',
+      template_key: 'score',
+      fact_ids: [skill.fact_id],
+    },
+  ]);
+  assert.match(text, /분수 계산/);
+  assert.doesNotMatch(text, /유형 skill_/);
+  const report = await generateReport(f.ctx(), f.service, s.snapshot_id);
+  assert.equal(report.model_id, 'deterministic-template');
+  assert.equal(report.generation_error, 'PROVIDER_AUTHENTICATION_FAILED');
+});
 test('empty facts preserve each requested subject and null denominators', async (t) => {
   const f = fixture(t),
     s = snapshot(f.ctx(), query());

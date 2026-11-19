@@ -3,11 +3,38 @@ import { test } from 'node:test';
 import { decimalString, numeric, points, rate } from './arithmetic.ts';
 import {
   aggregate,
+  normalizeNumericReading,
   propose,
   validateAssignment,
   validateRetained,
 } from './scoring.ts';
 import { item, reading } from './test-fixtures.ts';
+
+test('numeric transcription splits explicit units without changing the observed value or inventing a unit', () => {
+  const def = item();
+  def.key!.numeric_target = '10';
+  def.key!.accepted_units = ['cm'];
+  def.key!.unit_conversion_allowed = true;
+  const a = normalizeNumericReading(def, reading(def, '100 mm'));
+  assert.equal(a.answer_observed, '100');
+  assert.equal(a.unit_observed, 'mm');
+  assert.equal(propose(def, a).outcome, 'correct');
+  assert.equal(
+    normalizeNumericReading(def, reading(def, '100')).unit_observed,
+    '',
+  );
+  const conflict = normalizeNumericReading(
+    def,
+    reading(def, '100 mm', { unit_observed: 'cm' }),
+  );
+  assert.equal(propose(def, conflict).outcome, 'ungradable');
+  const textDef = item('ENG');
+  assert.equal(
+    normalizeNumericReading(textDef, reading(textDef, '100 mm'))
+      .answer_observed,
+    '100 mm',
+  );
+});
 
 test('exact arithmetic preserves four decimal score places and aggregate range', () => {
   assert.equal(decimalString(points('0.1') + points('0.2')), '0.3');
