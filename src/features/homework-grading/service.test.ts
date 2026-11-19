@@ -21,6 +21,32 @@ function code(expected: string) {
     error instanceof GradingError && error.code === expected;
 }
 
+test('the normalized spacing failure cannot receive full marks when literal verification differs', async (t) => {
+  const def = item('KOR');
+  def.key!.accepted_texts = ['할 수 있다'];
+  const f = fixture(t, {
+    provider: {
+      modelId: 'spacing-regression',
+      inputAllowed: true,
+      async read() {
+        return [reading(def, '할 수 있다')];
+      },
+      async verifyPage() {
+        return [reading(def, '할수있다')];
+      },
+    },
+  });
+  const draft = await f.service.draft(
+    f.ctx(),
+    await f.upload(f.register([def])),
+  );
+  assert.equal(draft.items[0].proposed.outcome, 'ungradable');
+  assert.equal(draft.items[0].proposed.score, null);
+  assert.ok(
+    draft.items[0].extraction.ambiguity_codes.includes('MODEL_DISAGREEMENT'),
+  );
+});
+
 test('revoking the teacher class during an asynchronous photo read blocks its response', async (t) => {
   const f = fixture(t),
     id = await f.upload(f.register()),

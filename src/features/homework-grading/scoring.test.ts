@@ -10,6 +10,20 @@ import {
 } from './scoring.ts';
 import { item, reading } from './test-fixtures.ts';
 
+test('spacing-sensitive and spelling-sensitive answers keep strict existing grading rules', () => {
+  const def = item('KOR');
+  for (const [key, actual, expected] of [
+    ['할 수 있다', '할수있다', 'incorrect'],
+    ['갈 수 있다', '갈 수 있다', 'correct'],
+    ['됐다', '됬다', 'incorrect'],
+    ['어이없다', '어의없다', 'incorrect'],
+  ]) {
+    def.key!.accepted_texts = [key];
+    assert.equal(def.key!.normalization.collapse_inner_space, false);
+    assert.equal(propose(def, reading(def, actual)).outcome, expected);
+  }
+});
+
 test('numeric transcription splits explicit units without changing the observed value or inventing a unit', () => {
   const def = item();
   def.key!.numeric_target = '10';
