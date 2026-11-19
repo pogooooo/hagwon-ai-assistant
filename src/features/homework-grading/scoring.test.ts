@@ -10,6 +10,20 @@ import {
 } from './scoring.ts';
 import { item, reading } from './test-fixtures.ts';
 
+test('previously held arithmetic cases and fresh fractions keep literal numeric scoring', () => {
+  const def = item();
+  for (const [key, actual, expected] of [
+    ['2/3', '2/3', 'correct'],
+    ['12', '11', 'incorrect'],
+    ['3/4', '3/4', 'correct'],
+    ['9', '8', 'incorrect'],
+  ] as const) {
+    def.key!.numeric_target = key;
+    assert.equal(propose(def, reading(def, actual)).outcome, expected);
+  }
+  assert.equal(propose(def, reading(def, 'il')).outcome, 'ungradable');
+});
+
 test('spacing-sensitive and spelling-sensitive answers keep strict existing grading rules', () => {
   const def = item('KOR');
   for (const [key, actual, expected] of [

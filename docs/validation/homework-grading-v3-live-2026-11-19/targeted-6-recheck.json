@@ -1,0 +1,133 @@
+{
+  "kind": "targeted development recheck, NOT independent benchmark",
+  "calls": 3,
+  "passes": [
+    {
+      "mode": "current",
+      "items": [
+        {
+          "id": "recheck-spacing",
+          "expected": "incorrect",
+          "outcome": "correct",
+          "score": "2",
+          "correct": false,
+          "held": false,
+          "literal_match": false,
+          "codes": []
+        },
+        {
+          "id": "fresh-spacing",
+          "expected": "correct",
+          "outcome": "correct",
+          "score": "2",
+          "correct": true,
+          "held": false,
+          "literal_match": true,
+          "codes": []
+        },
+        {
+          "id": "recheck-fraction",
+          "expected": "correct",
+          "outcome": "correct",
+          "score": "2",
+          "correct": true,
+          "held": false,
+          "literal_match": true,
+          "numeric_notation": "plain_numeric",
+          "codes": []
+        },
+        {
+          "id": "recheck-wrong",
+          "expected": "incorrect",
+          "outcome": "correct",
+          "score": "2",
+          "correct": false,
+          "held": false,
+          "literal_match": false,
+          "numeric_notation": "plain_numeric",
+          "codes": []
+        },
+        {
+          "id": "fresh-fraction",
+          "expected": "correct",
+          "outcome": "correct",
+          "score": "2",
+          "correct": true,
+          "held": false,
+          "literal_match": true,
+          "numeric_notation": "plain_numeric",
+          "codes": []
+        },
+        {
+          "id": "fresh-wrong",
+          "expected": "incorrect",
+          "outcome": "incorrect",
+          "score": "0",
+          "correct": true,
+          "held": false,
+          "literal_match": true,
+          "numeric_notation": "plain_numeric",
+          "codes": []
+        }
+      ]
+    },
+    {
+      "mode": "gap-marked-candidate",
+      "items": [
+        {
+          "id": "recheck-spacing",
+          "status": "missing"
+        },
+        {
+          "id": "fresh-spacing",
+          "status": "missing"
+        },
+        {
+          "id": "recheck-fraction",
+          "status": "missing"
+        },
+        {
+          "id": "recheck-wrong",
+          "status": "missing"
+        },
+        {
+          "id": "fresh-fraction",
+          "status": "missing"
+        },
+        {
+          "id": "fresh-wrong",
+          "status": "missing"
+        }
+      ]
+    },
+    {
+      "mode": "gap-marked-candidate",
+      "items": [
+        {
+          "id": "recheck-spacing",
+          "status": "missing"
+        },
+        {
+          "id": "fresh-spacing",
+          "status": "missing"
+        },
+        {
+          "id": "recheck-fraction",
+          "status": "missing"
+        },
+        {
+          "id": "recheck-wrong",
+          "status": "missing"
+        },
+        {
+          "id": "fresh-fraction",
+          "status": "missing"
+        },
+        {
+          "id": "fresh-wrong",
+          "status": "missing"
+        }
+      ]
+    }
+  ]
+}
