@@ -578,6 +578,35 @@ function submit(ctx: PageContext, form: FormData) {
     return '/makeup-votes?id=' + p.id;
   });
 }
+export function pendingMakeupNotices(ctx: PageContext): string {
+  if (
+    !['student', 'guardian'].includes(ctx.actor.role) ||
+    !exists(ctx.db, 'op_makeup_polls')
+  )
+    return '';
+  const students = accessibleStudents(ctx.db, ctx.actor);
+  const notices = rows<Pick<Poll, 'id' | 'payload'>>(
+    ctx.db,
+    "SELECT id,payload FROM op_makeup_polls WHERE academy_id=? AND state='open' ORDER BY rowid DESC",
+    ctx.actor.academyId,
+  ).flatMap((poll) => {
+    const data = JSON.parse(poll.payload) as Payload;
+    return students
+      .filter(
+        (s) =>
+          s.classIds.includes(data.closure.classId) &&
+          data.students.includes(s.id) &&
+          !Object.hasOwn(data.votes, s.id),
+      )
+      .map(
+        (s) =>
+          `<li><a href="/makeup-votes?id=${encodeURIComponent(poll.id)}">${h(s.name)} · ${h(data.closure.label)} · 가능 시간 응답</a></li>`,
+      );
+  });
+  return notices.length
+    ? `<section class="panel"><h2>응답할 보강 투표</h2><ul>${notices.join('')}</ul></section>`
+    : '';
+}
 function render(ctx: PageContext) {
   const ids = rows<Poll>(
     ctx.db,
@@ -712,13 +741,20 @@ export function pollScheduleEvidence(
   )) {
     const data = JSON.parse(s.payload) as Payload,
       approvedAt = data.approvedAt!;
+    // Both persisted source key formats predate private consultation evidence.
+    const key = data.closure.key;
+    const classClosureId = key.startsWith('team:')
+      ? academyId + ':' + key.slice('team:'.length)
+      : key.startsWith('notice:')
+        ? 'ops-schedule-' + key.slice('notice:'.length)
+        : undefined;
     const name = one<{ name: string }>(
       db,
       'SELECT name FROM classes WHERE academy_id=? AND id=?',
       academyId,
       s.class_id,
     )?.name;
-    if (!name || !approvedAt) continue;
+    if (!name || !approvedAt || !classClosureId) continue;
     const date = new Date(s.starts_at + 32400000).toISOString().slice(0, 10),
       time =
         new Date(s.starts_at + 32400000).toISOString().slice(11, 16) +
@@ -765,7 +801,12 @@ export function pollScheduleEvidence(
           date,
           time,
           text: name + ' 보강 · ' + s.room,
-          event: { id: documentId, startsAt: s.starts_at, endsAt: s.ends_at },
+          event: {
+            id: documentId,
+            classClosureId,
+            startsAt: s.starts_at,
+            endsAt: s.ends_at,
+          },
         },
         period: null,
         validFrom: approvedAt,

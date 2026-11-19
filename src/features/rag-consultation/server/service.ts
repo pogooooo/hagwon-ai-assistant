@@ -40,6 +40,10 @@ import {
   answerEventRegistration,
 } from './answer/event-evidence.ts';
 import { answerConsultationWindow } from './answer/consultation-window.ts';
+import {
+  answerConsultationBookingTime,
+  consultationBookingTimeRequest,
+} from './answer/consultation-booking.ts';
 import { answerEventLogistics } from './answer/event-logistics.ts';
 import {
   answerClosureRefundAmount,
@@ -339,6 +343,13 @@ export function createRagConsultationService(
         ctx.frame = { ...frame, flags: { ...flags, prediction: true } };
       return routeAnalysis(ctx, studentIdHint);
     }
+    if (ctx.engine === 'planned') {
+      const booking = await answerConsultationBookingTime(ctx);
+      if (booking) {
+        trace.domain = 'info';
+        return booking;
+      }
+    }
     if (
       selectTool &&
       !flags.injectionDirective &&
@@ -371,7 +382,7 @@ export function createRagConsultationService(
       trace.domain = 'info';
       if (tool === 'schedule')
         return (
-          (await answerDatedScheduleNotice(ctx)) ??
+          (await answerDatedScheduleNotice(ctx, studentIdHint)) ??
           (await answerClosureMakeup(ctx)) ??
           (await answerClassScheduleFields(ctx)) ??
           (await routeInfo(ctx, studentIdHint))
@@ -459,7 +470,7 @@ export function createRagConsultationService(
       }
       const closure =
         (await answerStudentAbsence(ctx, studentIdHint)) ??
-        (await answerDatedScheduleNotice(ctx)) ??
+        (await answerDatedScheduleNotice(ctx, studentIdHint)) ??
         (await answerClosureMakeup(ctx));
       if (closure) {
         trace.domain = 'info';
@@ -1569,6 +1580,9 @@ export function createRagConsultationService(
               deps.engine === 'planned' &&
               deps.generation.providerId.startsWith('clova:') &&
               !input.studentIdHint &&
+              !plan.requests.some(({ frame }) =>
+                consultationBookingTimeRequest(frame),
+              ) &&
               !(
                 namedTeacher(frame.normalized) &&
                 frame.topics.some((t) => t.id === 'contact')

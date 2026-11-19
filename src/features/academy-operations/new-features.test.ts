@@ -5,6 +5,10 @@ import { test, type TestContext } from 'node:test';
 import { initializeIdentity, getActor } from './directory.ts';
 import { documentsModule } from './documents.ts';
 import { consultationModule } from './consultation.ts';
+import {
+  configureOperationsGeneration,
+  operationsGeneration,
+} from './runtime-generation.ts';
 import { scheduleModule } from './schedule.ts';
 import { createExternalServices } from './external-services.ts';
 import { publicDataModule } from './public-data.ts';
@@ -667,4 +671,122 @@ test('F6 공통 채팅 엔진은 통학버스 신청을 셔틀 근거에 연결�
     assert.doesNotMatch(answer.answer, /와이파이/);
     assert.ok(answer.citations.some((c) => c.location?.includes('셔틀')));
   }
+});
+
+test('보호자 일반 상담은 공개된 상담 예약 시각만 해당 문서에서 인용한다', async (t) => {
+  const s = setup(t);
+  const originalProvider = operationsGeneration();
+  t.after(() => configureOperationsGeneration(originalProvider));
+  configureOperationsGeneration({
+    providerId: 'clova:local-test',
+    isExternal: false,
+    personalDataApproved: false,
+    availability: () => 'available',
+    generateGroundedAnswer: async () =>
+      assert.fail('예약 시각을 외부에 질의했습니다'),
+  });
+  const saveDocument = async (
+    title: string,
+    text: string,
+    visibility = 'academy_public',
+  ) => {
+    await documentsModule.submit(
+      s.ctx(),
+      form({
+        action: 'save',
+        title,
+        text,
+        documentType: 'policy',
+        visibility,
+        validFrom: '2020-01-01T00:00',
+      }),
+    );
+    const documentId = String(
+      s.db
+        .prepare(
+          "SELECT document_id FROM op_document_versions WHERE json_extract(input, '$.title')=?",
+        )
+        .get(title)!.document_id,
+    );
+    await documentsModule.submit(
+      s.ctx(),
+      form({ action: 'approve', documentId, revision: '1' }),
+    );
+    return documentId;
+  };
+  const guardian = 'TA_GUARDIAN_E_MATH';
+  const question = '가상 검증 상담 예약은 무슨 요일 몇 시인가요?';
+  const year = new Date().getUTCFullYear() + 1;
+  await scheduleModule.submit(
+    s.ctx(),
+    form({
+      action: 'save_notice',
+      class_id: 'TA_E_MATH',
+      title: '초등 수학반 휴강과 보강',
+      closure_start: year + '-12-01T16:00',
+      closure_end: year + '-12-01T17:00',
+      makeup_kind: 'scheduled',
+      makeup_start: year + '-12-05T14:00',
+      makeup_end: year + '-12-05T15:00',
+    }),
+  );
+  const id = await saveDocument(
+    '[가상 검증 전용] 11월 19일 브라우저 안내',
+    '[가상 검증 자료] 브라우저 기능 확인 전용 안내입니다. 가상 검증 상담 예약은 매주 목요일 오후 7시입니다. 실제 학원 운영 안내나 학생 정보가 아닙니다.',
+  );
+  const other = await saveDocument(
+    '운영 안내',
+    '진학 상담 예약은 매주 화요일 11:30입니다.',
+  );
+  const table = await saveDocument(
+    '업무별 시간',
+    '| 구분 | 요일 | 시간 |\n|---|---|---|\n| 보강 | 월요일 | 13:15 |\n| 상담 예약 | 금요일 | 16:30~18:00 |',
+  );
+  await saveDocument(
+    '직원 안내',
+    '가상 검증 상담 예약은 매주 수요일 오전 8시입니다.',
+    'staff_only',
+  );
+  await saveDocument(
+    '보강 안내',
+    '가상 검증 상담 예약은 추후 안내합니다. 초등 수학반 보강은 토요일 14:00~15:00입니다.',
+  );
+  for (const [q, expectedId, value] of [
+    [question, id, '목요일 오후 7시'],
+    ['진학 상담 예약은 무슨 요일 몇 시인가요?', other, '화요일 11:30'],
+    ['학원 상담 예약은 무슨 요일 몇 시인가요?', table, '16:30~18:00'],
+    ['우리 학원 상담 예약은 무슨 요일 몇 시인가요?', table, '금요일'],
+    [
+      '혹시 우리 학원 진학 상담 예약은 무슨 요일 몇 시인가요?',
+      other,
+      '화요일 11:30',
+    ],
+  ]) {
+    const { answer } = await s.ask(q, guardian);
+    assert.equal(answer.status, 'answered', answer.answer);
+    assert.ok(answer.answer.includes(value), answer.answer);
+    assert.deepEqual(
+      answer.citations.map((c) => c.documentId),
+      [expectedId],
+    );
+  }
+  await documentsModule.submit(
+    s.ctx(),
+    form({ action: 'withdraw', documentId: id, revision: '1' }),
+  );
+  const { answer } = await s.ask(question, guardian);
+  assert.equal(answer.status, 'abstained', answer.answer);
+  assert.deepEqual(answer.citations, []);
+  const staff = await s.ask(question, 'TA_DIRECTOR');
+  assert.equal(staff.answer.status, 'answered', staff.answer.answer);
+  assert.match(staff.answer.answer, /수요일 오전 8시/);
+  const { answer: makeup } = await s.ask(
+    year + '년 12월 1일 초등 수학반 휴강 보강은 언제인가요?',
+    guardian,
+  );
+  assert.equal(makeup.status, 'answered', makeup.answer);
+  assert.match(makeup.answer, /14:00/);
+  assert.ok(
+    makeup.citations.some((c) => c.documentId.startsWith('ops-schedule-')),
+  );
 });

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { accessibleClasses } from './directory.ts';
+import { pendingMakeupNotices } from './makeup-polls.ts';
 import { createParentTemplate } from './parent-message-template.ts';
 import {
   assertParentAdmin,
@@ -81,6 +82,7 @@ function renderParentMessages(ctx: PageContext) {
   if (!admin)
     return (
       heading +
+      (selected ? '' : pendingMakeupNotices(ctx)) +
       (selected
         ? `<article class="panel"><div class="panel-heading"><h2>${h(selected.title)}</h2><span class="muted">${time(selected.delivered_at!)}</span></div>${parentContent(ctx, selected, evidence)}<form method="post"><input type="hidden" name="id" value="${h(selected.id)}"><button name="action" value="read" class="secondary">읽음으로 표시</button></form><a href="/messages">알림 목록</a></article>`
         : `<section class="panel"><ul class="record-list">${all.map((m) => `<li><a href="/messages?id=${encodeURIComponent(m.id)}"><span class="record-copy"><strong>${h(m.title)}${m.read_at ? '' : ' · 새 알림'}</strong><small>${time(m.delivered_at!)}</small></span><span aria-hidden="true">›</span></a></li>`).join('') || '<li>받은 알림이 없습니다.</li>'}</ul></section>`)

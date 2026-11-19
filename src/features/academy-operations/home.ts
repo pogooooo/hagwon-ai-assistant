@@ -3,6 +3,7 @@ import { consultationOverview } from './consultation.ts';
 import { recentPublishedDocuments } from './documents.ts';
 import { homeworkOverview } from './homework.ts';
 import { recentLearningReports } from './learning.ts';
+import { pendingMakeupNotices } from './makeup-polls.ts';
 import { selectedCharacter } from './preferences.ts';
 import { serviceIcon } from './service-navigation.ts';
 import { escapeHtml as h, type PageContext } from './shared.ts';
@@ -216,7 +217,7 @@ export function renderHome(ctx: PageContext) {
         })),
         '확정된 학습 기록이 없습니다.',
       );
-  return `${heading}${visitor ? `<div class="home-overview">${search}</div>` : ''}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
+  return `${heading}${pendingMakeupNotices(ctx)}${visitor ? `<div class="home-overview">${search}</div>` : ''}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
     <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
     ${visitor ? '' : `<div class="home-help">${search}</div>`}
     <div class="home-secondary">${visitor ? '' : documentList()}${recentConsultations()}</div>

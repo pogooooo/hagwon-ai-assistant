@@ -211,6 +211,8 @@ export type FactValue =
       /** A confirmed incident and its half-open interval, independent of the document revision. */
       event?: {
         id: string;
+        /** Original class cancellation for a student's assigned group makeup. */
+        classClosureId?: string;
         startsAt: number;
         endsAt: number;
         makeupStatus?: 'pending' | 'scheduled' | 'none';
