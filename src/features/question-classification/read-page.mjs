@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { compareMathReadings, visionChat } from './read-image.mjs';
+import { compareMathReadings, mathStem, visionChat } from './read-image.mjs';
 
 // 설계 문서 5단계: 한 사진에서 문항 경계를 나누고, 그림·표·그래프 정보를
 // 항목별 읽은 방식(적힌 값/눈금에서 읽음/모양에서 추정)과 상태(선명/불명)로 기록한다.
@@ -15,18 +15,20 @@ export const figureSchema = z.object({
   ),
 });
 // 판독 모델에는 중첩 없는 납작한 형식을 요구하고, 받은 값을 내부 figure 구조로 바꾼다.
+const pageNumber = z.coerce.number().int().min(1).max(100000).catch(0);
 const rawReadingSchema = z.object({
+  // 쪽수는 사진 한 장에 하나이므로 최상위에서 받는다. 문항별 값도 계속 받는다.
+  printedPage: pageNumber.optional(),
+  // 여러 문항이 함께 쓰는 지문·조건([7~10] 다음 글을 …)은 한 번만 받아 프로그램이 각 문항에 붙인다.
+  passages: z
+    .array(z.object({ numbers: z.coerce.string(), text: z.string() }))
+    .optional()
+    .catch(undefined),
   items: z
     .array(
       z.object({
-        displayNumber: nonempty,
-        printedPage: z.coerce
-          .number()
-          .int()
-          .min(1)
-          .max(100000)
-          .catch(0)
-          .optional(),
+        displayNumber: z.coerce.string().pipe(nonempty),
+        printedPage: pageNumber.optional(),
         text: z.string(),
         figureDependence: z.string().optional(),
         figureReads: z.array(z.string()).optional(),
@@ -77,22 +79,47 @@ const stripFence = (content) =>
 
 // 판독 모델이 JSON 문자열 안에 그대로 넣은 개행과 잘못된 이스케이프(예: LaTeX의 \f)를
 // 유효한 JSON으로 복구한다. 따옴표 안팎만 추적하는 결정적 변환이라 내용은 바꾸지 않는다.
+// \n·\t·\f·\b·\r로 시작하는 LaTeX 명령. JSON 이스케이프로 읽으면 \neq가 줄바꿈+eq,
+// \to가 탭+o가 되어 전사와 분류 인용이 깨지므로, 이 명령들은 역슬래시 글자로 남긴다.
+const latexCommands =
+  /^(?:neq|ne|neg|not|notin|nabla|nu|ni|to|times|theta|tan|tau|text|textrm|top|triangle|therefore|tfrac|frac|forall|flat|beta|bar|binom|because|bot|bigcup|bigcap|boxed|right|rightarrow|rho|rm|rangle|rceil|rfloor)(?![a-zA-Z])/;
+
+// 문자열을 닫는 따옴표 뒤에 올 수 있는 것: 끝, 닫는 괄호, 콜론, 또는 쉼표 뒤의 다음 값.
+const closesString = /^\s*(?:$|[}\]:]|,\s*(?:["{[\d-]|true|false|null|$))/;
+
 export function repairJsonText(json) {
   let out = '';
   let inString = false;
+  const open = [];
   for (let i = 0; i < json.length; i++) {
     const ch = json[i];
     if (!inString) {
       if (ch === '"') inString = true;
+      else if (ch === '{' || ch === '[') open.push(ch);
+      else if (ch === '}' || ch === ']') open.pop();
       out += ch;
       continue;
     }
     if (ch === '"') {
+      // 뒤에 구조 문자(, } ] :)가 오지 않는 큰따옴표는 판독 모델이 이스케이프하지 않은
+      // 원문 속 따옴표(<box label="">, "word")로 보고 글자로 남긴다.
+      if (closesString.test(json.slice(i + 1, i + 40))) {
+        inString = false;
+        out += ch;
+      } else out += '\\"';
+    } else if (ch === '\n' && /^\s*[}\]]/.test(json.slice(i + 1))) {
+      // 닫는 따옴표를 빠뜨리고 줄을 바꾼 뒤 객체를 닫은 응답: 여기서 문자열을 닫는다.
       inString = false;
-      out += ch;
+      out += '"' + ch;
     } else if (ch === '\\') {
       const next = json[i + 1] ?? '';
-      if ('"\\/bfnrtu'.includes(next)) {
+      if ('bfnrt'.includes(next) && latexCommands.test(json.slice(i + 1)))
+        out += '\\\\';
+      else if (
+        '"\\/bfnrt'.includes(next) ||
+        // \u는 16진수 네 자리가 따를 때만 이스케이프다(\underline 같은 LaTeX는 글자로 남긴다).
+        (next === 'u' && /^[0-9a-fA-F]{4}$/.test(json.slice(i + 2, i + 6)))
+      ) {
         out += ch + next;
         i++;
       } else out += '\\\\';
@@ -100,6 +127,9 @@ export function repairJsonText(json) {
     else if (ch === '\t') out += '\\t';
     else if (ch !== '\r') out += ch;
   }
+  // 판독 모델이 마지막 닫는 괄호만 빠뜨린 응답(…}]로 끝남)은 남은 괄호를 닫는다.
+  // 문자열이 열린 채 끝난 응답은 내용이 잘린 것이므로 고치지 않는다.
+  if (!inString) for (const ch of open.reverse()) out += ch === '{' ? '}' : ']';
   return out;
 }
 
@@ -117,29 +147,94 @@ const parseWith =
       throw error;
     }
   };
-export const parsePageReading = parseWith(
-  rawReadingSchema,
-  ({ displayNumber, printedPage, text, figureDependence, figureReads }) => {
-    const figure = toFigure(figureDependence, figureReads);
-    return {
-      displayNumber,
-      text,
-      ...(printedPage ? { printedPage } : {}),
-      ...(figure ? { figure } : {}),
-    };
-  },
-);
+// 인쇄 번호 뒤의 마침표·괄호·'번'을 걷어 낸다. 두 판독이 '5'와 '5.'로 갈려
+// 문항 구분 불일치로 보류되는 것을 막는다. 0009 같은 앞자리 0은 인쇄 그대로 둔다.
+export function cleanDisplayNumber(value) {
+  const trimmed = value
+    .trim()
+    .replace(/^(?:No\.?|문항)\s*/i, '')
+    .replace(/\s*(?:[.)．]|번)$/u, '')
+    .trim();
+  return trimmed || value.trim();
+}
+// 전사문 앞에 되풀이된 문항 번호("7. f는 …", 수식으로 감싼 "$18.$", "$19$.")를 걷어 낸다.
+function stripEchoedNumber(text, displayNumber) {
+  const escaped = displayNumber.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(
+    new RegExp(
+      '^\\s*\\$?\\s*' +
+        escaped +
+        '\\s*(?:\\$\\s*)?(?:[.)．]|번)\\s*(?:\\$\\s*)?',
+    ),
+    '',
+  );
+}
+
+// [7~10], 7-10, 7, 8 같은 범위 표기를 번호 목록으로 푼다.
+export function passageNumbers(range) {
+  const out = [];
+  for (const part of String(range).split(/[,，、]/)) {
+    const m = part.match(/(\d+)\s*(?:[~∼〜\-–—]\s*(\d+))?/);
+    if (!m) continue;
+    const from = Number(m[1]);
+    const to = m[2] ? Number(m[2]) : from;
+    if (to >= from && to - from < 50)
+      for (let n = from; n <= to; n++) out.push(String(n));
+  }
+  return out;
+}
+
+export function parsePageReading(content) {
+  let reading;
+  try {
+    const json = JSON.parse(repairJsonText(stripFence(content)));
+    reading = rawReadingSchema.parse(
+      Array.isArray(json) ? { items: json } : json,
+    );
+  } catch (cause) {
+    const error = Error('판독 JSON 해석 실패: ' + cause.message);
+    error.raw = content;
+    throw error;
+  }
+  const passages = (reading.passages ?? []).filter((p) => p.text.trim());
+  return reading.items.map(
+    ({ displayNumber, printedPage, text, figureDependence, figureReads }) => {
+      const number = cleanDisplayNumber(displayNumber);
+      const key = String(Number(number.match(/\d+/)?.[0] ?? NaN));
+      let body = stripEchoedNumber(text, number);
+      // 공유 지문은 문항 본문에 아직 없을 때만 앞에 붙인다(기준서 예시와 같은 지문→발문 순서).
+      for (const passage of passages)
+        if (
+          passageNumbers(passage.numbers).includes(key) &&
+          !body.includes(passage.text.trim())
+        )
+          body = passage.text.trim() + '\n' + body;
+      const figure = toFigure(figureDependence, figureReads);
+      const page = printedPage || reading.printedPage;
+      return {
+        displayNumber: number,
+        text: body,
+        ...(page ? { printedPage: page } : {}),
+        ...(figure ? { figure } : {}),
+      };
+    },
+  );
+}
 export const parseCrossCheck = parseWith(crossCheckSchema);
 
 const formatRule =
-  '사진에 인쇄된 문항을 빠짐없이 찾아 JSON 하나로만 출력하세요. 최상위는 {"items":[...]} 하나입니다. 각 문항은 다음 네 칸을 가집니다: ' +
-  '{"displayNumber":"인쇄된 문항 번호 그대로","text":"문항 원문 전사","figureDependence":"필수|보조|없음","figureReads":["내용 | 읽은 방식 | 상태"]}. 문항이 있는 면의 인쇄 쪽수가 보이면 printedPage에 정수로 추가하세요. 보이지 않으면 생략하세요. 모든 문자열의 따옴표를 닫으세요.';
+  '사진에 인쇄된 문항을 빠짐없이 찾아 JSON 하나로만 출력하세요. 형식: ' +
+  '{"printedPage":쪽수,"passages":[],"items":[{"displayNumber":"인쇄된 문항 번호","text":"문항 원문 전사","figureDependence":"필수|보조|없음","figureReads":["내용 | 읽은 방식 | 상태"]}]}. ' +
+  'printedPage: 면의 위나 아래 모서리에 따로 인쇄된 쪽 번호 정수입니다. 머리글의 단원·유형 번호, 연도, 문항 번호와 혼동하지 마세요. 보이지 않으면 칸을 빼세요. ' +
+  'items: 번호가 붙은 문항마다 하나씩입니다. 두 단이면 왼쪽 단을 위에서 아래로 읽은 뒤 오른쪽 단을 읽으세요. [7~10] 같은 지문 머리말, 선택지 ①②, 쪽 번호는 문항이 아닙니다. displayNumber에는 번호를 인쇄된 숫자 그대로(예: 0012, 7) 쓰고 마침표는 빼세요. text에 번호를 다시 쓰지 마세요. ' +
+  'passages: 사진에 "[n~m] 다음 글을 읽고 물음에 답하시오."처럼 여러 문항이 함께 쓰는 지문이 실제로 인쇄되어 있을 때만 {"numbers":사진에 적힌 번호 범위,"text":지문 원문}을 넣고, 각 문항 text에는 그 문항의 발문과 선택지만 적으세요. 그런 지문이 없으면 []입니다. 이 안내의 예시 글자를 출력에 옮기지 마세요. ' +
+  '사진에 없는 번호나 문장을 만들지 마세요. 문제를 풀지 마세요. 모든 문자열의 따옴표를 닫고, 문자열 안의 큰따옴표는 \\"로 쓰세요.';
 const figureRule =
   '그림 규칙: 문항에 그림·표·그래프가 없으면 figureDependence는 "없음", figureReads는 []입니다. 있으면 풀이에 필요한 정보를 figureReads에 한 항목씩 "내용 | 읽은 방식 | 상태" 문자열로 적습니다. 읽은 방식은 숫자가 적혀 있으면 "적힌 값", 축·눈금에서 읽으면 "눈금에서 읽음", 모양만 보고 추정하면 "모양에서 추정"입니다. 상태는 또렷하면 "선명", 작거나 번지면 "불명"입니다. 예: "점 (1, 2)를 지남 | 적힌 값 | 선명", "직선의 기울기 양수 | 모양에서 추정 | 선명". 그림 없이 글만으로 풀 수 있으면 figureDependence는 "보조", 그림을 봐야만 풀 수 있으면 "필수"입니다.';
 const prompts = {
   'M:read':
     formatRule +
-    '\n전사 규칙: 띄어쓰기, 괄호, 부호, 지수를 보존하고 위첨자는 ^{지수}로 쓰세요. 읽을 수 없는 글자는 [불명]으로 표시하세요. 풀이, 설명, 마크다운은 넣지 마세요. 여러 문항이 한 지문·조건을 함께 쓰면 그 지문을 각 문항의 text에 포함하세요.\n' +
+    '\n전사 규칙: 띄어쓰기, 괄호, 부호, 지수를 보존하고 위첨자는 ^{지수}로 쓰세요. 읽을 수 없는 글자는 [불명]으로 표시하세요. 풀이, 설명, 마크다운은 넣지 마세요.\n' +
     figureRule,
   'M:check':
     formatRule +
@@ -147,14 +242,14 @@ const prompts = {
     figureRule,
   'E:read':
     formatRule +
-    '\n전사 규칙: 발문, 지문, 선택지를 문항마다 연결해 전사하세요. 밑줄 범위, 빈칸 위치, 삽입 위치 번호, 문단 기호를 보존하세요. 읽을 수 없는 글자는 [불명]으로 표시하세요. 풀이, 설명, 마크다운은 넣지 마세요. 여러 문항이 한 지문을 함께 쓰면 그 지문을 각 문항의 text에 포함하세요.\n' +
+    '\n전사 규칙: 발문, 지문, 선택지를 문항마다 연결해 전사하세요. 영어 지문과 선택지는 영어 그대로 옮기고 번역하거나 요약하지 마세요. 밑줄 범위, 빈칸 위치, 삽입 위치 번호, 문단 기호를 보존하세요. 읽을 수 없는 글자는 [불명]으로 표시하세요. 풀이, 설명, 마크다운은 넣지 마세요.\n' +
     figureRule,
 };
 
 export async function readPage(filename, { subject, pass = 'read' } = {}) {
   const prompt = prompts[subject + ':' + pass];
   if (!prompt) throw Error('지원하지 않는 판독 과목·단계: ' + subject + pass);
-  const reply = await visionChat(filename, prompt, { maxTokens: 2000 });
+  const reply = await visionChat(filename, prompt, { maxTokens: 4096 });
   return { ...reply, items: parsePageReading(reply.text) };
 }
 
@@ -173,7 +268,9 @@ export async function crossCheckPage(filename, items) {
 }
 
 export function applyCrossCheck(items, verdicts) {
-  const byNumber = new Map(verdicts.map((v) => [v.displayNumber, v]));
+  const byNumber = new Map(
+    verdicts.map((v) => [cleanDisplayNumber(v.displayNumber), v]),
+  );
   return items.map((item) => {
     if (item.holdReason || !item.text.trim()) return item;
     const verdict = byNumber.get(item.displayNumber);
@@ -252,11 +349,15 @@ export function mergeMathPage(first, second) {
         text: '',
         holdReason: '두 판독의 문항 구분이 일치하지 않음',
       };
-    const reason = compareMathReadings(x.text, y.text);
+    // 전체가 같으면 그대로 쓰고, 선택지만 갈리면 두 판독이 합의한 발문만 쓴다.
+    // 발문이 다르거나 [불명]이 있으면 보류한다.
+    const whole = compareMathReadings(x.text, y.text);
+    const reason =
+      whole && compareMathReadings(mathStem(x.text), mathStem(y.text));
     const figure = mergeFigure(x.figure, y.figure);
     return {
       displayNumber,
-      text: reason ? '' : x.text,
+      text: reason ? '' : whole ? mathStem(x.text) : x.text,
       ...(figure ? { figure } : {}),
       ...(reason ? { holdReason: reason } : {}),
     };
@@ -293,4 +394,15 @@ export function itemsFromPhoto(assignmentId, page, merged) {
     );
   }
   return items;
+}
+
+// 사진에 인쇄된 쪽수를 판독 결과에서 고른다. 모든 판독이 같은 쪽수 하나만 읽었을 때만 채택한다.
+export function pagesFromReadings(readingPasses) {
+  const pages = new Set(
+    readingPasses
+      .flat()
+      .map((r) => r.printedPage)
+      .filter((p) => !!p),
+  );
+  return pages.size === 1 ? [...pages][0] : undefined;
 }

@@ -12,6 +12,44 @@ npm run classify -- src/features/question-classification/examples/math-image-dem
 
 통과한 문항은 첫 전사문 그대로 분류하고 인용을 검사한다. 판독문·토큰 수·보류 이유는 `evidence/`에서 확인한다. 다시 분류할 때는 `out/image-demo/transcribed/math-image-demo.json`을 입력으로 쓰면 사진 판독 비용이 들지 않고, 저장된 그림 정보와 그림 보류 규칙도 그대로 적용된다. 보류된 문항은 여기에 빈 원문으로 저장된다. 사진을 보고 정확한 원문을 확인한 뒤 입력하면 다시 분류할 수 있다. 상담 담당자에게 전달할 파일은 `out/image-demo/classification/math-image-demo.json`이다.
 
+판독 응답은 최상위 `printedPage`(쪽수)와 `passages`(`[7~10]`처럼 여러 문항이 함께 쓰는 지문)를 함께 받는다. 프로그램이 지문을 범위 안 각 문항 원문 앞에 붙이고, 번호 뒤 마침표와 원문 앞에 되풀이된 번호를 걷어 낸다. 수학 두 판독 비교는 LaTeX 표기 변형(`\dfrac`·`\frac`, `\:`, `^{\prime}`·`'`, `\ne`·`\neq`)과 한글 앞 공백 차이를 접되, 숫자 사이 공백·괄호 종류·지수 차이는 그대로 보류한다. 두 판독이 선택지(① 이후)나 배점 표시만 다르고 발문이 같으면, 합의한 발문만 원문으로 써서 통과시킨다. 발문이 다르면 보류한다.
+
+### 사진 평가 세트
+
+`examples/photo-set/`은 기준서 예시 55문항을 교재 쪽 12장(수학 6, 영어 6)으로 인쇄해 휴대폰 사진처럼 기울이고 흐리게 만든 평가 세트다. 쪽 번호, 머리글의 단원 번호, 두 단 배치, 0012식 번호, `[7~10]` 공유 지문을 담았다. `make-photos.py`(Pillow, 맑은 고딕)로 다시 만들 수 있고 정답은 `manifest.json`과 `rubric-set/expected.json`에 있다. 실제 교재 사진이 아니고 기준서 예시 문장이라 개발 확인용이다.
+
+```sh
+node --env-file=.env.local src/features/question-classification/examples/photo-set/evaluate-photos.mjs run out/photo-eval [--control]
+node src/features/question-classification/examples/photo-set/evaluate-photos.mjs score out/photo-eval
+```
+
+`run`은 숙제 등록 1단계와 같은 경로(판독 → 문항 ID → 쪽수 결정 → 분류 1회)를 한 장씩 실행한다(CLOVA 호출 약 34회). `--control`은 정답 원문을 같은 묶음으로 분류해 판독과 무관한 분류 상한을 같이 잰다. `score`는 저장된 결과만 읽어 쪽수, 번호 재현율·오탐, 판독 보류, 원문 유사도·경계, 유형 정확도를 집계한다.
+
+### 시험지 평가 데이터와 CLOVA OCR 판독
+
+`examples/exam-set/evaluate-exams.mjs`는 공유 평가 데이터(문제지 PDF, `문항목록.csv`, `정답지.csv`)로 쪽마다 사진 경로를 실행하고 정답지의 대분류로 채점한다. 평가 데이터와 결과는 저장소에 넣지 않는다.
+
+```sh
+node --env-file=.env.local src/features/question-classification/examples/exam-set/evaluate-exams.mjs run <데이터폴더> <출력폴더> --only 2026년_10월 [--ocr]
+node src/features/question-classification/examples/exam-set/evaluate-exams.mjs score <데이터폴더> <출력폴더> --only 2026년_10월
+```
+
+`--ocr`은 HCX-005 판독 대신 `ocr-page.mjs`의 CLOVA OCR(General)로 글자를 읽고, 글자 위치로 두 단 순서를 맞춘 뒤 줄 맨 앞 번호(`5.`, `0012`)와 `[41~42]` 머리말로 문항을 나눈다. `.env.local`에 `CLOVA_OCR_INVOKE_URL`(API Gateway 연동의 APIGW Invoke URL, `/general`로 끝남)과 `CLOVA_OCR_SECRET`을 설정한다. 도메인의 내부 Invoke URL은 네이버 클라우드 밖에서 접속되지 않는다. `text`는 영어 PDF 글자 층으로 분류만 재는 대조군이다. `images`는 쪽 이미지를 저장하고, `--paddle`은 외부 판독기가 그 이미지로 만든 마크다운(`<출력폴더>/paddle/*.md`)을 문항으로 나눠 분류한다. 숙제 등록 화면은 아직 HCX-005 판독을 쓴다.
+
+### 판독·분류 방식 비교 결과(2026-11-16, 10월 고3 수학 공통 22문항)
+
+방식 비교용 실험 스크립트는 저장소에 넣지 않았다. 판단에 쓴 결과만 남긴다. 수식 일치도는 사람이 옮긴 정답 원문과 한글을 뺀 수식 부분의 편집 거리로 쟀다.
+
+| 판독                                                                       | 평균 수식 일치도 | 0.9 이상 |
+| -------------------------------------------------------------------------- | ---------------- | -------- |
+| CLOVA OCR 그대로                                                           | 0.659            | 3/22     |
+| HCX-005 쪽 전체 판독(현재)                                                 | 0.269            | 3/22     |
+| PaddleOCR(PP-StructureV3, CPU 쪽당 3~4분)                                  | 0.625            | 10/22    |
+| CLOVA OCR로 찾은 수식 조각만 잘라 HCX-005                                  | 0.627            | 0/22     |
+| CLOVA OCR로 문항 영역(단 폭 × 번호 줄~같은 단 다음 번호 줄)을 잘라 HCX-005 | 0.897            | 16/22    |
+
+정답지 대분류 기준 분류 정답은 모두 '이해'로 답하면 10/22, 현재 분류(소분류 태그 → 대분류)는 6/22, 대분류 하나를 바로 고르게 하고 3·5·7월 출제의도 방식의 예시를 준 분류는 15/22(정답 원문으로는 14/22)였다. 한 회차 측정이라 한두 문항 차이는 실행마다 달라질 수 있다.
+
 Node.js 24에서 `npm ci` 후 실행한다. 프로젝트 루트의 `.env.local`에 `CLOVA_STUDIO_API_KEY=발급받은키`를 설정한다. 기존 `RAG_CLOVA_API_KEY`도 사용할 수 있다. 기본 모델은 `HCX-007`이며 `CLASSIFICATION_MODEL`로 변경할 수 있다. 각 실행은 해당 과목 기준서와 문항 ID·원문을 [CLOVA Studio Chat Completions v3](https://api.ncloud-docs.com/docs/clovastudio-chatcompletionsv3)로 전송한다. 입력 형식은 `examples/math-demo.json`과 `examples/english-demo.json`을 참고한다.
 
 ```sh
