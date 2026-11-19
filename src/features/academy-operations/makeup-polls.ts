@@ -578,6 +578,35 @@ function submit(ctx: PageContext, form: FormData) {
     return '/makeup-votes?id=' + p.id;
   });
 }
+export function pendingMakeupNotices(ctx: PageContext): string {
+  if (
+    !['student', 'guardian'].includes(ctx.actor.role) ||
+    !exists(ctx.db, 'op_makeup_polls')
+  )
+    return '';
+  const students = accessibleStudents(ctx.db, ctx.actor);
+  const notices = rows<Pick<Poll, 'id' | 'payload'>>(
+    ctx.db,
+    "SELECT id,payload FROM op_makeup_polls WHERE academy_id=? AND state='open' ORDER BY rowid DESC",
+    ctx.actor.academyId,
+  ).flatMap((poll) => {
+    const data = JSON.parse(poll.payload) as Payload;
+    return students
+      .filter(
+        (s) =>
+          s.classIds.includes(data.closure.classId) &&
+          data.students.includes(s.id) &&
+          !Object.hasOwn(data.votes, s.id),
+      )
+      .map(
+        (s) =>
+          `<li><a href="/makeup-votes?id=${encodeURIComponent(poll.id)}">${h(s.name)} · ${h(data.closure.label)} · 가능 시간 응답</a></li>`,
+      );
+  });
+  return notices.length
+    ? `<section class="panel"><h2>응답할 보강 투표</h2><ul>${notices.join('')}</ul></section>`
+    : '';
+}
 function render(ctx: PageContext) {
   const ids = rows<Poll>(
     ctx.db,

@@ -10,6 +10,7 @@ import { homeworkModule } from './homework.ts';
 import {
   makeupPollsModule,
   pollChoices,
+  pendingMakeupNotices,
   assertPollSessionFree,
   pollScheduleEvidence,
 } from './makeup-polls.ts';
@@ -142,8 +143,22 @@ test('recommend → teacher selects → own-student votes → teacher approval �
   const s = setup(t);
   s.start();
   assert.equal(s.row().state, 'open');
+  assert.match(
+    pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')),
+    /응답할 보강 투표/,
+  );
+  assert.match(pendingMakeupNotices(s.ctx('TA_STUDENT_001')), /가능 시간 응답/);
+  assert.doesNotMatch(
+    pendingMakeupNotices(s.ctx('TA_STUDENT_001')),
+    /가상학생B/,
+  );
   assert.throws(() => s.submit('approve', { choice: '0' }), /미응답|불가|충돌/);
   s.submit('vote', { student: 'TA_STU_001', rank1: '0' }, 'TA_STUDENT_001');
+  assert.equal(pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')), '');
+  assert.match(
+    pendingMakeupNotices(s.ctx('TA_GUARDIAN_M2')),
+    /응답할 보강 투표/,
+  );
   assert.throws(
     () =>
       s.submit('vote', { student: 'TA_STU_002', rank1: '0' }, 'TA_STUDENT_001'),
