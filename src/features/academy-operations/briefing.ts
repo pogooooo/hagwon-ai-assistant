@@ -386,7 +386,9 @@ export const briefingModule: OperationModule = {
   label: '브리핑',
   roles: ['admin', 'teacher'],
   setup() {},
-  render,
+  render: (ctx) =>
+    `<p><a href="/student-reports">학생 분석·승인 리포트·교사용 상담 자료</a></p>` +
+    render(ctx),
   submit() {
     throw new OperationError('브리핑은 조회 전용 화면입니다.', 405);
   },

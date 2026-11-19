@@ -1,4 +1,5 @@
 import { classesOnDate } from '../makeup-schedule/model/timetable.ts';
+import { assertPollSessionFree } from './makeup-polls.ts';
 import type { OperationsDatabase } from './database.ts';
 import type {
   AcademyConfig,
@@ -25,6 +26,94 @@ export function assertUnifiedSchedule(
   config: Pick<AcademyConfig, 'classes'>,
   replacement?: NoticeRange,
 ) {
+  if (hasTable(db, 'op_makeup_sessions')) {
+    const sessions = rows<{ starts_at: number; ends_at: number }>(
+      db,
+      'SELECT starts_at,ends_at FROM op_makeup_sessions WHERE academy_id=?',
+      academy,
+    );
+    for (const s of sessions) {
+      const day = new Date(s.starts_at + 32400000).toISOString().slice(0, 10);
+      const weekday = new Date(day + 'T00:00:00Z').getUTCDay();
+      for (const c of classesOnDate(config, day)) {
+        if (
+          !c.days.includes(weekday) ||
+          state.events.some(
+            (e) =>
+              e.scope === 'class' &&
+              e.status === 'confirmed' &&
+              e.classId === c.classId &&
+              e.date === day,
+          )
+        )
+          continue;
+        const students =
+          'students' in config
+            ? (config as AcademyConfig).students
+                .filter((s) => s.classIds.includes(c.classId))
+                .map((s) => s.studentId)
+            : [];
+        assertPollSessionFree(
+          db,
+          academy,
+          at(day, c.start),
+          at(day, c.end),
+          c.teacher,
+          c.room,
+          students,
+        );
+      }
+    }
+    for (const e of state.events)
+      if (e.status === 'confirmed' && e.makeup) {
+        const c =
+          e.classSnapshot ??
+          config.classes.find((c) => c.classId === e.classId);
+        if (c)
+          assertPollSessionFree(
+            db,
+            academy,
+            at(e.makeup.date, e.makeup.start),
+            at(e.makeup.date, e.makeup.end),
+            c.teacher,
+            e.makeup.room,
+            e.studentId ? [e.studentId] : [],
+          );
+      }
+    if (replacement) {
+      const teacherIds = replacement.class_id
+        ? rows<{ teacher_id: string }>(
+            db,
+            'SELECT teacher_id FROM teacher_classes WHERE class_id=?',
+            replacement.class_id,
+          ).map((t) => t.teacher_id)
+        : [];
+      for (const s of sessions)
+        if (
+          overlap(
+            replacement.closure_start,
+            replacement.closure_end,
+            s.starts_at,
+            s.ends_at,
+          )
+        )
+          throw new OperationError(
+            '휴강 공지가 승인된 보강 투표 일정과 겹칩니다.',
+            409,
+          );
+      if (replacement.makeup_start !== null && replacement.makeup_end !== null)
+        for (const teacher of teacherIds)
+          assertPollSessionFree(
+            db,
+            academy,
+            replacement.makeup_start,
+            replacement.makeup_end,
+            teacher,
+            '',
+            [],
+          );
+    }
+  }
   if (!hasTable(db, 'ops_schedule_notices')) return;
   const notices = rows<NoticeRange>(
     db,
@@ -103,6 +192,7 @@ export function assertTeacherFree(
   start: number,
   end: number,
 ) {
+  assertPollSessionFree(db, academy, start, end, teacher, '', []);
   if (!hasTable(db, 'op_team_schedule')) return;
   const record = one<{ state: string; config: string }>(
     db,
