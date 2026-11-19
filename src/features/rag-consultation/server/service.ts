@@ -371,7 +371,7 @@ export function createRagConsultationService(
       trace.domain = 'info';
       if (tool === 'schedule')
         return (
-          (await answerDatedScheduleNotice(ctx)) ??
+          (await answerDatedScheduleNotice(ctx, studentIdHint)) ??
           (await answerClosureMakeup(ctx)) ??
           (await answerClassScheduleFields(ctx)) ??
           (await routeInfo(ctx, studentIdHint))
@@ -459,7 +459,7 @@ export function createRagConsultationService(
       }
       const closure =
         (await answerStudentAbsence(ctx, studentIdHint)) ??
-        (await answerDatedScheduleNotice(ctx)) ??
+        (await answerDatedScheduleNotice(ctx, studentIdHint)) ??
         (await answerClosureMakeup(ctx));
       if (closure) {
         trace.domain = 'info';

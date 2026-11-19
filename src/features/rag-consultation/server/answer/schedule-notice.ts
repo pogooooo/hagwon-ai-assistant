@@ -64,17 +64,24 @@ function relatedMakeup(
   makeup: ChangeFact,
   allChanges: ChangeFact[],
 ) {
-  if (
-    makeup.subjectType !== cancellation.subjectType ||
-    makeup.subjectId !== cancellation.subjectId
-  )
-    return false;
   const cancelRange = scheduleChangeInterval(cancellation.value);
   const makeupRange = scheduleChangeInterval(makeup.value);
   if (!cancelRange || !makeupRange || makeupRange.start < cancelRange.end)
     return false;
   const closureEvent = cancellation.value.event;
   const makeupEvent = makeup.value.event;
+  if (makeupEvent?.classClosureId)
+    return (
+      cancellation.subjectType === 'class' &&
+      makeup.subjectType === 'student' &&
+      makeup.classId === cancellation.subjectId &&
+      makeupEvent.classClosureId === closureEvent?.id
+    );
+  if (
+    makeup.subjectType !== cancellation.subjectType ||
+    makeup.subjectId !== cancellation.subjectId
+  )
+    return false;
   if (closureEvent || makeupEvent)
     return !!closureEvent && closureEvent.id === makeupEvent?.id;
   // Old notices without an incident ID can cite an exact closure day in the makeup notice.
@@ -135,7 +142,7 @@ function changeLine(
         scope,
         date === undefined ? undefined : formatKstDate(date),
         value.time,
-        kind,
+        value.event?.classClosureId ? value.text : kind,
       ]
         .filter(Boolean)
         .join(' ');
@@ -148,6 +155,11 @@ function fromChanges(
   makeupUnconfirmed = false,
 ): AnswerDraft {
   ctx.trace.intent = 'dated_schedule_notice';
+  ctx.trace.targetStudentIds = [
+    ...new Set(
+      facts.filter((f) => f.subjectType === 'student').map((f) => f.subjectId),
+    ),
+  ];
   const lines = facts.map((fact) => changeLine(ctx, fact));
   if (makeupUnconfirmed)
     lines.push(
@@ -235,7 +247,10 @@ async function answerImportedClassNotice(
   if (pending) return fromChanges(ctx, day, [cancellation], true);
 }
 
-export async function answerDatedScheduleNotice(ctx: AnswerContext) {
+export async function answerDatedScheduleNotice(
+  ctx: AnswerContext,
+  studentIdHint?: string,
+) {
   const { access, frame } = ctx;
   const q = frame.normalized;
   if (
@@ -261,9 +276,28 @@ export async function answerDatedScheduleNotice(ctx: AnswerContext) {
   const scoped = ids.length ? ids : ownClasses;
   const [classId] = scoped;
   if (scoped.length > 1 || frame.negatedClassIds.includes(classId)) return;
+  const target =
+    frame.flags.makeupSchedule && classId && access.allowedStudentIds.length
+      ? resolveSubjects({ access, frame, state: ctx.state, studentIdHint })
+      : undefined;
+  if (target?.kind === 'denied') return deny('ACCESS_DENIED');
+  const studentIds =
+    target?.kind === 'resolved' && target.studentIds.length === 1
+      ? target.studentIds
+      : [];
+  if (target && !studentIds.length && /투표/.test(q))
+    return {
+      status: 'clarify',
+      reasonCode: 'AMBIGUOUS_SUBJECT',
+      text: '어느 학생의 확정 보강 일정인지 선택해 주세요.',
+      clarifyOptionStudentIds:
+        target.kind === 'clarify' ? target.optionStudentIds : target.studentIds,
+      citations: [],
+      usedFacts: [],
+    } satisfies AnswerDraft;
   const facts = await ctx.facts.queryApprovedFacts({
     access,
-    studentIds: [],
+    studentIds,
     asOf: ctx.asOf,
     factTypes: ['schedule_change'],
   });
@@ -273,7 +307,12 @@ export async function answerDatedScheduleNotice(ctx: AnswerContext) {
       fact.value.kind === 'schedule_change' &&
       !isAssistantDirective(fact.value.text) &&
       (fact.subjectType === 'academy' ||
-        (fact.subjectType === 'class' && fact.subjectId === classId)),
+        (fact.subjectType === 'class' && fact.subjectId === classId) ||
+        (fact.subjectType === 'student' &&
+          studentIds.includes(fact.subjectId) &&
+          fact.classId === classId &&
+          fact.value.changeType === 'makeup' &&
+          !!fact.value.event?.classClosureId)),
   );
   const hasOperationalNotices = changes.some(({ value }) => !!value.event);
   const asksLinkedMakeup =
@@ -417,6 +456,7 @@ export async function answerStudentAbsence(
       f.subjectId === studentId &&
       f.value.kind === 'schedule_change' &&
       !!f.value.event &&
+      !f.value.event.classClosureId &&
       !isAssistantDirective(f.value.text) &&
       (!ctx.frame.classIds.length ||
         (f.classId !== null && ctx.frame.classIds.includes(f.classId))),

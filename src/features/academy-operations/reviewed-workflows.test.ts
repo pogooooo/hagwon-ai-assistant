@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { once } from 'node:events';
 import { createOperationsServer } from './application.ts';
@@ -7,6 +8,10 @@ import { initializeIdentity, getActor } from './directory.ts';
 import { calendarModule, visibleCalendarEntries } from './calendar.ts';
 import { learningModule } from './learning.ts';
 import { homeworkModule } from './homework.ts';
+import { documentsModule } from './documents.ts';
+import { consultationModule } from './consultation.ts';
+import { scheduleModule } from './schedule.ts';
+import type { RagAnswer } from '../rag-consultation/contract.ts';
 import {
   makeupPollsModule,
   pollChoices,
@@ -19,7 +24,10 @@ import {
   studentReportEvidence,
 } from './student-reports.ts';
 import { emptyState, createEvent } from '../makeup-schedule/model/schedule.ts';
-import type { AcademyConfig } from '../makeup-schedule/model/types.ts';
+import type {
+  AcademyConfig,
+  ScheduleState,
+} from '../makeup-schedule/model/types.ts';
 import {
   assertTeacherFree,
   assertUnifiedSchedule,
@@ -32,7 +40,11 @@ function form(data: Record<string, string | string[]>) {
     for (const s of Array.isArray(v) ? v : [v]) f.append(k, s);
   return f;
 }
-function setup(t: TestContext) {
+function setup(
+  t: TestContext,
+  date = '2026-11-23',
+  availability?: ScheduleState['availability'],
+) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   initializeIdentity(db, 'workflow-tests');
@@ -74,8 +86,8 @@ function setup(t: TestContext) {
   };
   const event = createEvent(
     config,
-    emptyState(),
-    { scope: 'class', classId: 'TA_E_MATH', date: '2026-11-23', confirm: true },
+    { ...emptyState(), availability },
+    { scope: 'class', classId: 'TA_E_MATH', date, confirm: true },
     '2026-11-19T00:00:00Z',
   );
   assert.ok(event.ok);
@@ -267,6 +279,158 @@ test('two nonoverlapping groups cover every student exactly once, with subgroup 
     /투표/,
   );
 });
+for (const origin of ['team', 'notice']) {
+  test(`consultation cites the original ${origin} cancellation and only the selected student's approved makeup`, async (t) => {
+    t.mock.timers.enable({
+      apis: ['Date'],
+      now: new Date('2026-11-19T12:00:00+09:00'),
+    });
+    const s = setup(t, origin === 'team' ? '2026-11-30' : '2026-11-23', {
+      TA_STU_001: [{ day: 6, start: '13:00', end: '14:00' }],
+      TA_STU_002: [{ day: 0, start: '10:00', end: '11:00' }],
+    });
+    documentsModule.setup(s.db);
+    scheduleModule.setup(s.db);
+    consultationModule.setup(s.db);
+    const notice = (date: string, makeup: boolean) =>
+      scheduleModule.submit(
+        s.ctx(),
+        form({
+          action: 'save_notice',
+          class_id: 'TA_E_MATH',
+          title: date + ' 휴강',
+          closure_start: date + 'T16:00',
+          closure_end: date + 'T17:00',
+          makeup_kind: makeup ? 'scheduled' : 'pending',
+          ...(makeup
+            ? {
+                makeup_start: '2026-12-05T14:00',
+                makeup_end: '2026-12-05T15:00',
+              }
+            : {}),
+        }),
+      );
+    let key = 'team:EV-001';
+    if (origin === 'notice') {
+      await notice('2026-11-30', false);
+      key =
+        'notice:' +
+        s.db
+          .prepare('SELECT id FROM ops_schedule_notices WHERE title=?')
+          .get('2026-11-30 휴강')!.id;
+    }
+    await notice('2026-11-25', true);
+    const ask = async (
+      actor: string,
+      studentId = '',
+      question = '초등 수학반 11월 30일 휴강에 대해 투표로 확정한 보강은 언제인가요?',
+    ) => {
+      const conversationId = randomUUID();
+      await consultationModule.submit(
+        s.ctx(actor),
+        form({ action: 'ask', conversationId, studentId, question }),
+      );
+      return JSON.parse(
+        String(
+          s.db
+            .prepare(
+              "SELECT response FROM op_consultation_messages WHERE thread_id=? AND kind='answer'",
+            )
+            .get(conversationId)!.response,
+        ),
+      ) as RagAnswer;
+    };
+    s.submit('create', { source: key });
+    const slots = JSON.parse(s.row().payload).options as {
+      date: string;
+      start: string;
+    }[];
+    const options = [
+      ['2026-12-05', '13:00'],
+      ['2026-12-06', '10:00'],
+    ].map(([date, start]) => {
+      const index = slots.findIndex(
+        (slot) => slot.date === date && slot.start === start,
+      );
+      assert.ok(index >= 0);
+      return String(index);
+    });
+    s.submit('publish', { options });
+    s.submit('vote', { student: 'TA_STU_001', rank1: '0' }, 'TA_STUDENT_001');
+    s.submit('vote', { student: 'TA_STU_002', rank1: '1' }, 'TA_GUARDIAN_M2');
+    const pending = await ask('TA_GUARDIAN_E_MATH');
+    assert.equal(pending.status, 'partial', pending.answer);
+    assert.equal(pending.citations.length, 1);
+    const original = pending.citations[0].documentId;
+    s.submit('approve', { choice: '0' }, 'TA_TEACHER');
+    const own = await ask('TA_GUARDIAN_E_MATH');
+    const other = await ask('TA_GUARDIAN_M2', 'TA_STU_002');
+    assert.deepEqual((await ask('TA_STUDENT_001')).citations, own.citations);
+    await assert.rejects(
+      ask('TA_GUARDIAN_E_MATH', 'TA_STU_002'),
+      /조회 가능한 학생/,
+    );
+    for (const [answer, studentId, slot, excluded] of [
+      [
+        own,
+        'TA_STU_001',
+        /12월 5일 13:00~14:00 .*1강의실/,
+        /12월 6일|학생\s*B/,
+      ],
+      [
+        other,
+        'TA_STU_002',
+        /12월 6일 10:00~11:00 .*1강의실/,
+        /12월 5일|학생\s*A/,
+      ],
+    ] as const) {
+      assert.equal(answer.status, 'answered', answer.answer);
+      assert.match(answer.answer, /11월 30일 16:00~17:00 휴강/);
+      assert.match(answer.answer, slot);
+      assert.doesNotMatch(answer.answer, excluded);
+      assert.doesNotMatch(answer.answer, /14:00~15:00|미정|확정되지/);
+      assert.equal(answer.citations.length, 2);
+      assert.equal(answer.citations[0].documentId, original);
+      assert.ok(
+        answer.citations[1].documentId.startsWith('poll-makeup-') &&
+          answer.citations[1].documentId.endsWith(studentId),
+      );
+    }
+    const separate = await ask(
+      'TA_GUARDIAN_E_MATH',
+      '',
+      '초등 수학반 11월 25일 휴강의 보강은 언제인가요?',
+    );
+    assert.equal(separate.status, 'answered', separate.answer);
+    assert.match(separate.answer, /12월 5일 14:00~15:00/);
+    assert.ok(
+      separate.citations.every(
+        (c) =>
+          c.documentId !== original && !c.documentId.startsWith('poll-makeup-'),
+      ),
+    );
+    const absence = await ask(
+      'TA_GUARDIAN_E_MATH',
+      '',
+      '우리 아이 12월 5일 결석 보강은 언제인가요?',
+    );
+    assert.equal(absence.status, 'abstained', absence.answer);
+    assert.deepEqual(absence.citations, []);
+    s.db
+      .prepare('INSERT INTO guardian_students VALUES(?,?)')
+      .run('TA_GUARDIAN_E_MATH', 'TA_STU_002');
+    assert.equal((await ask('TA_GUARDIAN_E_MATH')).status, 'clarify');
+    assert.deepEqual(
+      (await ask('TA_GUARDIAN_E_MATH', 'TA_STU_002')).citations,
+      other.citations,
+    );
+    s.submit('cancel');
+    const cancelled = await ask('TA_GUARDIAN_E_MATH', 'TA_STU_001');
+    assert.equal(cancelled.status, 'partial', cancelled.answer);
+    assert.deepEqual(cancelled.citations, pending.citations);
+    assert.doesNotMatch(cancelled.answer, /12월|13:00/);
+  });
+}
 test('HTTP routes require login and reject student report access and guardian approval', async (t) => {
   const db = new DatabaseSync(':memory:');
   const server = createOperationsServer({

@@ -347,24 +347,29 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
   const workbook = workbookEvidence(db, academyId);
   const team = teamScheduleEvidence(db, academyId);
   const polls = pollScheduleEvidence(db, academyId);
-  return {
+  const schedule = {
     documents: [
-      ...knowledgeEvidence(db, academyId),
-      ...schoolEvidence(db, academyId),
       ...scheduleDocuments(db, academyId),
       ...team.map((x) => x.document),
       ...regularScheduleDocuments(db, academyId),
-      ...learning.documents,
-      ...workbook.documents,
       ...polls.documents,
     ],
     facts: [
       ...scheduleFacts(db, academyId),
       ...team.flatMap((x) => x.facts),
-      ...learning.facts,
-      ...workbook.facts,
       ...polls.facts,
     ],
+  };
+  return {
+    schedule,
+    documents: [
+      ...knowledgeEvidence(db, academyId),
+      ...schoolEvidence(db, academyId),
+      ...schedule.documents,
+      ...learning.documents,
+      ...workbook.documents,
+    ],
+    facts: [...schedule.facts, ...learning.facts, ...workbook.facts],
   };
 }
 
@@ -394,10 +399,11 @@ export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
     ? (JSON.parse(existing.conversation_state) as ConversationState)
     : null;
   const catalog = currentCatalog(ctx);
-  const { documents: notices, facts: noticeFacts } = supplementaryEvidence(
-    db,
-    actor.academyId,
-  );
+  const {
+    documents: notices,
+    facts: noticeFacts,
+    schedule,
+  } = supplementaryEvidence(db, actor.academyId);
   const indexVersion = documentsIndexVersion(
     db,
     actor.academyId,
@@ -425,19 +431,7 @@ export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
     documents: store,
     selectEvidence: schoolStore
       ? () => ({ documents: schoolStore, facts: schoolStore })
-      : await scheduleAuthority(
-          [
-            ...scheduleDocuments(db, actor.academyId),
-            ...teamScheduleEvidence(db, actor.academyId).map((x) => x.document),
-            ...regularScheduleDocuments(db, actor.academyId),
-          ],
-          [
-            ...scheduleFacts(db, actor.academyId),
-            ...teamScheduleEvidence(db, actor.academyId).flatMap(
-              (x) => x.facts,
-            ),
-          ],
-        ),
+      : await scheduleAuthority(schedule.documents, schedule.facts),
     catalog: { getAcademyCatalog: async () => catalog },
     generation: operationsGeneration(),
     handoff: new InMemoryHandoffStore(),
