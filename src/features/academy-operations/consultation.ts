@@ -47,6 +47,7 @@ import {
   currentDocumentRevisions,
 } from './documents.ts';
 import { scheduleDocuments, scheduleFacts } from './schedule.ts';
+import { pollScheduleEvidence } from './makeup-polls.ts';
 import {
   escapeHtml as h,
   field,
@@ -345,6 +346,7 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
   const learning = learningEvidence(db, academyId);
   const workbook = workbookEvidence(db, academyId);
   const team = teamScheduleEvidence(db, academyId);
+  const polls = pollScheduleEvidence(db, academyId);
   return {
     documents: [
       ...knowledgeEvidence(db, academyId),
@@ -354,12 +356,14 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
       ...regularScheduleDocuments(db, academyId),
       ...learning.documents,
       ...workbook.documents,
+      ...polls.documents,
     ],
     facts: [
       ...scheduleFacts(db, academyId),
       ...team.flatMap((x) => x.facts),
       ...learning.facts,
       ...workbook.facts,
+      ...polls.facts,
     ],
   };
 }
@@ -841,6 +845,9 @@ export const consultationModule: OperationModule = {
   label: '상담 및 이력',
   roles: ['admin', 'teacher', 'student', 'guardian', 'visitor'],
   setup: setupConsultation,
-  render: renderConsultation,
+  render: (ctx) =>
+    (['admin', 'teacher'].includes(ctx.actor.role)
+      ? '<p><a href="/student-reports">학생별 근거 분석·교사용 상담 자료 초안</a></p>'
+      : '') + renderConsultation(ctx),
   submit: submitConsultation,
 };

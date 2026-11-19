@@ -1,4 +1,5 @@
 import { teamScheduleModule, calendarSessions } from './team-schedule.ts';
+import { pollCalendarEntries } from './makeup-polls.ts';
 import { scheduleModule, calendarNotices } from './schedule.ts';
 import {
   escapeHtml as h,
@@ -20,6 +21,7 @@ export function visibleCalendarEntries(
       kind,
     })),
     ...calendarNotices(ctx, from, to),
+    ...pollCalendarEntries(ctx, from, to),
   ].sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -117,7 +119,7 @@ export const calendarModule: OperationModule = {
       (bookingEditFields.some((field) => search.has(field))
         ? 'bookings'
         : 'calendar');
-    return `<div class="page-heading"><h1>일정·예약</h1></div>
+    return `<div class="page-heading"><h1>일정·예약</h1><a href="/makeup-votes">보강 후보 추천·투표</a></div>
       ${ctx.formError ? `<p class="notice" role="alert">${h(ctx.formError)}</p><div hidden data-restore-schedule="${h(JSON.stringify([...ctx.submittedForm!.entries()].filter(([, v]) => typeof v === 'string')))}"></div>` : ''}
       ${search.get('saved') ? '<p class="notice" role="status">저장했습니다.</p>' : ''}
       <nav class="view-tabs page-tabs" aria-label="일정 보기">

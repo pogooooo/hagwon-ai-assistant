@@ -81,9 +81,20 @@ export function serviceNavigation(
   const groups = [
     [
       '학원 생활',
-      ['/', '/messages', '/consultation', '/voice', '/schedule', '/homework'],
+      [
+        '/',
+        '/messages',
+        '/consultation',
+        '/voice',
+        '/schedule',
+        '/makeup-votes',
+        '/homework',
+      ],
     ],
-    ['기록과 자료', ['/learning', '/briefing', '/documents']],
+    [
+      '기록과 자료',
+      ['/learning', '/briefing', '/student-reports', '/documents'],
+    ],
     [
       '운영 관리',
       ['/directory', '/schools', '/public-data', '/knowledge', '/settings'],
