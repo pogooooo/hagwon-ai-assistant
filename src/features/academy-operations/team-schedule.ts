@@ -1,6 +1,7 @@
 import type { OperationsDatabase } from './database.ts';
 import type { SourceDocumentInput } from '../rag-consultation/server/types.ts';
 import { assertUnifiedSchedule } from './schedule-conflicts.ts';
+import { assertPollSourceEditable } from './makeup-polls.ts';
 import { z } from 'zod';
 import {
   createEvent,
@@ -519,6 +520,12 @@ function submit(ctx: PageContext, form: FormData, preview = false) {
       if (!staff(ctx))
         throw new OperationError('일정 관리 권한이 없습니다.', 403);
       const eventId = field(form, 'eventId');
+      if (eventId)
+        assertPollSourceEditable(
+          ctx.db,
+          ctx.actor.academyId,
+          'team:' + eventId,
+        );
       const event = state.events.find((e) => e.eventId === eventId);
       if (eventId && (!event || !visible(ctx, event)))
         throw new OperationError('일정을 찾을 수 없습니다.', 404);

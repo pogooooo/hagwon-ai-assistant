@@ -91,11 +91,15 @@ export function serviceNavigation(
         '/consultation',
         '/voice',
         '/schedule',
+        '/makeup-votes',
         '/homework',
         '/grading',
       ],
     ],
-    ['기록과 자료', ['/learning', '/briefing', '/documents']],
+    [
+      '기록과 자료',
+      ['/learning', '/briefing', '/student-reports', '/documents'],
+    ],
     [
       '운영 관리',
       ['/directory', '/schools', '/public-data', '/knowledge', '/settings'],

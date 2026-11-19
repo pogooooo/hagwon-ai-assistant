@@ -144,6 +144,13 @@ test('monthly scheduler uses KST and previous month; repeated ticks and restarts
   runParentMessageJobs(s.db, Date.parse('2026-12-05T09:59:00+09:00'));
   assert.equal(visibleParentMessages(s.ctx()).length, 0);
   runParentMessageJobs(s.db, Date.parse('2026-12-05T10:00:00+09:00'));
+  assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
+  assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
+  for (const batch of new Set(
+    visibleParentMessages(s.ctx()).map((m) => m.batch_id),
+  ))
+    queueParentBatch(s.ctx(), batch);
+  deliverParentMessages(s.db, Date.parse('2026-12-05T10:00:00+09:00'));
   const count = visibleParentMessages(s.ctx()).length;
   assert.ok(count > 0);
   assert.ok(
@@ -164,7 +171,7 @@ test('monthly scheduler uses KST and previous month; repeated ticks and restarts
   assert.equal(visibleParentMessages(s.ctx()).length, count);
 });
 
-test('a monthly preview prepared before the due time is delivered automatically exactly once', async (t) => {
+test('a monthly preview waits for explicit approval and is delivered exactly once', async (t) => {
   const s = setup(t);
   await s.publish();
   saveParentPolicy(s.ctx(), {
@@ -188,6 +195,13 @@ test('a monthly preview prepared before the due time is delivered automatically 
   assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
   const due = Date.parse('2026-12-05T10:00:00+09:00');
   runParentMessageJobs(s.db, due);
+  assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
+  assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
+  for (const batch of new Set(
+    visibleParentMessages(s.ctx()).map((m) => m.batch_id),
+  ))
+    queueParentBatch(s.ctx(), batch);
+  deliverParentMessages(s.db, due);
   const messages = visibleParentMessages(s.ctx());
   assert.ok(messages.length > 0);
   assert.ok(messages.every((m) => m.state === 'delivered'));
@@ -259,7 +273,7 @@ test('a broken academy policy cannot prevent other academies or queued notices f
   );
 });
 
-test('enabling automatic delivery after a scheduled draft run sends the existing preview, not another report', async (t) => {
+test('legacy automatic flag cannot bypass approval or duplicate an existing preview', async (t) => {
   const s = setup(t);
   await s.publish();
   saveParentPolicy(s.ctx(), {
@@ -277,6 +291,13 @@ test('enabling automatic delivery after a scheduled draft run sends the existing
     automatic: 1,
   });
   runParentMessageJobs(s.db, due + 60000);
+  assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
+  assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
+  for (const batch of new Set(
+    visibleParentMessages(s.ctx()).map((m) => m.batch_id),
+  ))
+    queueParentBatch(s.ctx(), batch);
+  deliverParentMessages(s.db, due + 60000);
   assert.deepEqual(
     visibleParentMessages(s.ctx()).map((m) => m.id),
     ids,
@@ -334,7 +355,7 @@ test('withdrawn evidence in an old preview is not queued at the monthly due time
   assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
 });
 
-test('a failure between draft creation and run recording rolls back and a later tick delivers once', async (t) => {
+test('a failure rolls back; a later tick prepares a draft and explicit approval delivers once', async (t) => {
   const s = setup(t);
   await s.publish();
   saveParentPolicy(s.ctx(), {
@@ -369,6 +390,13 @@ test('a failure between draft creation and run recording rolls back and a later 
   assert.deepEqual(errors, ['AC_TEST_A']);
   assert.equal(visibleParentMessages(s.ctx()).length, 0);
   runParentMessageJobs(flaky, due + 60000, (id) => errors.push(id));
+  assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
+  assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
+  for (const batch of new Set(
+    visibleParentMessages(s.ctx()).map((m) => m.batch_id),
+  ))
+    queueParentBatch(s.ctx(), batch);
+  deliverParentMessages(s.db, due + 60000);
   const delivered = visibleParentMessages(s.ctx()).length;
   assert.ok(delivered > 0);
   assert.ok(
@@ -474,6 +502,13 @@ test('missing and unapproved results are not fabricated; late approval is picked
   assert.equal(visibleParentMessages(s.ctx()).length, 0);
   await s.publish();
   runParentMessageJobs(s.db, at + 60000);
+  assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
+  assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
+  for (const batch of new Set(
+    visibleParentMessages(s.ctx()).map((m) => m.batch_id),
+  ))
+    queueParentBatch(s.ctx(), batch);
+  deliverParentMessages(s.db, at + 60000);
   assert.ok(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length);
 });
 test('withdrawn evidence blocks queued reports and hides previously delivered content', async (t) => {

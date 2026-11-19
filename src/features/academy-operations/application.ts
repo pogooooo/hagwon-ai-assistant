@@ -42,6 +42,8 @@ import { briefingModule } from './briefing.ts';
 import { parentMessagesModule } from './parent-messages.ts';
 import { unreadParentCount } from './parent-messages-model.ts';
 import { calendarModule } from './calendar.ts';
+import { makeupPollsModule } from './makeup-polls.ts';
+import { studentReportsModule } from './student-reports.ts';
 import { previewTeamSchedule } from './team-schedule.ts';
 import { renderHome } from './home.ts';
 import { serviceNavigation } from './service-navigation.ts';
@@ -64,6 +66,8 @@ const modules: OperationModule[] = [
   learningModule,
   briefingModule,
   calendarModule,
+  makeupPollsModule,
+  studentReportsModule,
   documentsModule,
   consultationModule,
   preferencesModule,
@@ -78,6 +82,8 @@ const sessionCookie = 'axr_operations';
 const menuOrder = [
   '/consultation',
   '/schedule',
+  '/makeup-votes',
+  '/student-reports',
   '/documents',
   '/learning',
   '/briefing',

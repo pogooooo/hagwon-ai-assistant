@@ -1,0 +1,439 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { accessibleClasses, accessibleStudents } from './directory.ts';
+import { parseClassification, tagById } from './classification.ts';
+import { readWorkbookAnalysis } from './workbook-analysis.ts';
+import {
+  escapeHtml as h,
+  field,
+  required,
+  rows,
+  one,
+  transaction,
+  OperationError,
+  type PageContext,
+  type OperationModule,
+} from './shared.ts';
+import type { OperationsDatabase } from './database.ts';
+
+const staff = (ctx: PageContext) =>
+  ['admin', 'teacher'].includes(ctx.actor.role);
+const hash = (v: unknown) =>
+  createHash('sha256').update(JSON.stringify(v)).digest('hex');
+export interface AdditionalReportEvidence {
+  sources: unknown[];
+  total: number;
+  correct: number;
+  unknown: number;
+  types: { id: string; name: string; total: number; wrong: number }[];
+}
+const additionalEvidence = new WeakMap<
+  OperationsDatabase,
+  (student: string, classId: string, period: string) => AdditionalReportEvidence
+>();
+/** Optional adapter; the experimental grader stays out of the common main implementation. */
+export function registerStudentReportEvidence(
+  db: OperationsDatabase,
+  read: (
+    student: string,
+    classId: string,
+    period: string,
+  ) => AdditionalReportEvidence,
+) {
+  additionalEvidence.set(db, read);
+}
+interface Report {
+  id: string;
+  academy_id: string;
+  student_id: string;
+  class_id: string;
+  period: string;
+  version: number;
+  state: string;
+  body: string;
+  counsel: string;
+  fingerprint: string;
+  approved_by: string | null;
+}
+export function setupStudentReports(db: OperationsDatabase) {
+  db.exec(`CREATE TABLE IF NOT EXISTS op_student_reports(id TEXT PRIMARY KEY,academy_id TEXT NOT NULL,student_id TEXT NOT NULL,class_id TEXT NOT NULL,period TEXT NOT NULL,version INTEGER NOT NULL,state TEXT NOT NULL,body TEXT NOT NULL,counsel TEXT NOT NULL,fingerprint TEXT NOT NULL,approved_by TEXT,UNIQUE(academy_id,student_id,class_id,period));
+  CREATE TABLE IF NOT EXISTS op_student_attendance(academy_id TEXT NOT NULL,student_id TEXT NOT NULL,class_id TEXT NOT NULL,date TEXT NOT NULL,status TEXT NOT NULL,actor_id TEXT NOT NULL,PRIMARY KEY(academy_id,student_id,class_id,date));
+  CREATE TABLE IF NOT EXISTS op_student_report_history(report_id TEXT NOT NULL,version INTEGER NOT NULL,actor_id TEXT NOT NULL,state TEXT NOT NULL,body TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(report_id,version));`);
+}
+function scope(ctx: PageContext, studentId: string, classId: string) {
+  const student = accessibleStudents(ctx.db, ctx.actor).find(
+    (s) => s.id === studentId && s.classIds.includes(classId),
+  );
+  if (
+    !student ||
+    !accessibleClasses(ctx.db, ctx.actor).some((c) => c.id === classId)
+  )
+    throw new OperationError('이 학생·반 자료에 접근할 수 없습니다.', 403);
+  return student;
+}
+/** All counters come from the latest teacher-confirmed revision, never an AI draft. */
+export function studentReportEvidence(
+  ctx: PageContext,
+  studentId: string,
+  classId: string,
+  period: string,
+) {
+  scope(ctx, studentId, classId);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period))
+    throw new OperationError('분석 월을 확인해 주세요.');
+  const sources: unknown[] = [];
+  const types = new Map<
+    string,
+    { name: string; wrong: number; total: number }
+  >();
+  let total = 0,
+    correct = 0,
+    unknown = 0;
+  const add = (tags: { tagId: string; name: string }[], ok: boolean) => {
+    for (const t of tags) {
+      const v = types.get(t.tagId) ?? { name: t.name, wrong: 0, total: 0 };
+      v.total++;
+      if (!ok) v.wrong++;
+      types.set(t.tagId, v);
+    }
+  };
+  const confirmed = rows<{
+    assignment_id: string;
+    revision: number;
+    classification: string;
+    outcomes: string;
+    created_at: string;
+  }>(
+    ctx.db,
+    `SELECT a.assignment_id,a.revision,a.classification,r.outcomes,r.created_at FROM op_learning_assignments a JOIN op_learning_results r ON r.academy_id=a.academy_id AND r.assignment_id=a.assignment_id WHERE a.academy_id=? AND a.class_id=? AND a.period=? AND r.student_id=? AND r.state='confirmed' AND r.classification_revision=a.revision AND r.revision=(SELECT MAX(x.revision) FROM op_learning_results x WHERE x.academy_id=r.academy_id AND x.assignment_id=r.assignment_id AND x.student_id=r.student_id) ORDER BY a.assignment_id`,
+    ctx.actor.academyId,
+    classId,
+    period,
+    studentId,
+  );
+  for (const r of confirmed) {
+    const c = parseClassification(JSON.parse(r.classification)),
+      outcomes = JSON.parse(r.outcomes) as Record<string, string>;
+    sources.push(r);
+    for (const item of c.items) {
+      const result = outcomes[item.itemId];
+      if (result !== 'correct' && result !== 'incorrect') {
+        unknown++;
+        continue;
+      }
+      total++;
+      if (result === 'correct') correct++;
+      add(
+        item.tags
+          .filter((t) => t.status === 'adopted')
+          .flatMap((t) => {
+            const tag = tagById.get(t.tagId);
+            return tag ? [{ tagId: t.tagId, name: tag.name }] : [];
+          }),
+        result === 'correct',
+      );
+    }
+  }
+  for (const r of readWorkbookAnalysis(
+    ctx.db,
+    ctx.actor.academyId,
+  ).results.filter(
+    (r) =>
+      r.studentId === studentId &&
+      r.dueDate.startsWith(period) &&
+      r.classes.some((c) => c.id === classId),
+  )) {
+    sources.push(r);
+    for (const q of r.questions) {
+      total++;
+      if (q.correct) correct++;
+      add(
+        q.tags.map((t) => ({ tagId: t.tagId, name: t.name })),
+        !!q.correct,
+      );
+    }
+  }
+  const extra = additionalEvidence.get(ctx.db)?.(studentId, classId, period);
+  if (extra) {
+    sources.push(...extra.sources);
+    total += extra.total;
+    correct += extra.correct;
+    unknown += extra.unknown;
+    for (const t of extra.types) {
+      const prior = types.get(t.id) ?? { name: t.name, total: 0, wrong: 0 };
+      prior.total += t.total;
+      prior.wrong += t.wrong;
+      types.set(t.id, prior);
+    }
+  }
+  const attendance = rows<{ date: string; status: string; actor_id: string }>(
+    ctx.db,
+    'SELECT date,status,actor_id FROM op_student_attendance WHERE academy_id=? AND student_id=? AND class_id=? AND date LIKE ? ORDER BY date',
+    ctx.actor.academyId,
+    studentId,
+    classId,
+    period + '-%',
+  );
+  const repeated = [...types.values()]
+    .filter((t) => t.wrong >= 2)
+    .sort((a, b) => b.wrong - a.wrong || a.name.localeCompare(b.name));
+  const suggestions = [...types.values()]
+    .filter((t) => t.wrong > 0)
+    .sort((a, b) => b.wrong - a.wrong || a.name.localeCompare(b.name))
+    .slice(0, 3);
+  return {
+    total,
+    correct,
+    unknown,
+    repeated,
+    suggestions,
+    attendance,
+    fingerprint: hash({ sources, attendance }),
+    sourceCount: sources.length,
+  };
+}
+function draft(
+  ctx: PageContext,
+  studentId: string,
+  classId: string,
+  period: string,
+) {
+  const student = scope(ctx, studentId, classId),
+    e = studentReportEvidence(ctx, studentId, classId, period);
+  const score = e.total
+    ? `교사 확정 ${e.total}문항 중 ${e.correct}문항 정답 (${Math.round((e.correct / e.total) * 100)}%).`
+    : '이 기간에 교사가 확정한 채점 기록이 없습니다.';
+  const repeat = e.repeated.length
+    ? '반복 오답: ' +
+      e.repeated
+        .map((t) => `${t.name} ${t.wrong}/${t.total}문항 오답`)
+        .join(', ')
+    : '반복 오답 유형을 확인할 기록이 부족합니다.';
+  const practice = e.suggestions.length
+    ? '추천 연습 유형: ' +
+      e.suggestions.map((t) => t.name).join(', ') +
+      ' (확인된 오답을 바탕으로 한 제안).'
+    : '추천 연습 유형을 정할 근거가 없습니다.';
+  const attendance = e.attendance.length
+    ? '출결 기록: ' +
+      ['present', 'late', 'absent']
+        .map(
+          (v, i) =>
+            ['출석', '지각', '결석'][i] +
+            ' ' +
+            e.attendance.filter((a) => a.status === v).length +
+            '건',
+        )
+        .join(' · ')
+    : '출석·지각 등 출결 기록이 없습니다. 출석이나 태도를 추정하지 않습니다.';
+  const body = `${student.name} · ${period} 월간 리포트\n${score}\n${repeat}\n${practice}\n${attendance}${e.unknown ? '\n미확인 ' + e.unknown + '문항은 정답률에서 제외했습니다.' : ''}`;
+  return {
+    body,
+    counsel: `교사용 상담 자료 초안\n${body}\n상담 확인 항목: 반복 오답을 함께 살펴보고 다음 연습 유형을 협의합니다. 기록에 없는 원인·태도·가정 상황은 단정하지 않습니다.`,
+    e,
+  };
+}
+function load(ctx: PageContext, id: string) {
+  const r = one<Report>(
+    ctx.db,
+    'SELECT * FROM op_student_reports WHERE academy_id=? AND id=?',
+    ctx.actor.academyId,
+    id,
+  );
+  if (!r) throw new OperationError('리포트를 찾을 수 없습니다.', 404);
+  scope(ctx, r.student_id, r.class_id);
+  if (
+    !staff(ctx) &&
+    (ctx.actor.role !== 'guardian' ||
+      r.state !== 'approved' ||
+      r.fingerprint !==
+        studentReportEvidence(ctx, r.student_id, r.class_id, r.period)
+          .fingerprint)
+  )
+    throw new OperationError(
+      '교사가 승인한 최신 리포트만 보호자에게 공개됩니다.',
+      403,
+    );
+  return r;
+}
+function submit(ctx: PageContext, form: FormData) {
+  if (!staff(ctx))
+    throw new OperationError('담당 교사만 분석·편집·승인할 수 있습니다.', 403);
+  return transaction(ctx.db, () => {
+    ctx.assertCurrentAccess?.();
+    const action = required(form, 'action', '작업');
+    if (action === 'attendance') {
+      const student = required(form, 'student', '학생'),
+        klass = required(form, 'class', '반'),
+        date = required(form, 'date', '날짜'),
+        status = required(form, 'status', '출결');
+      scope(ctx, student, klass);
+      if (
+        !z.iso.date().safeParse(date).success ||
+        !['present', 'late', 'absent'].includes(status) ||
+        date > new Date(Date.now() + 32400000).toISOString().slice(0, 10)
+      )
+        throw new OperationError('과거 또는 오늘의 실제 출결을 선택해 주세요.');
+      ctx.db
+        .prepare(
+          'INSERT INTO op_student_attendance VALUES(?,?,?,?,?,?) ON CONFLICT(academy_id,student_id,class_id,date) DO UPDATE SET status=excluded.status,actor_id=excluded.actor_id',
+        )
+        .run(ctx.actor.academyId, student, klass, date, status, ctx.actor.id);
+      return '/student-reports';
+    }
+    let r: Report;
+    if (action === 'analyze') {
+      const student = required(form, 'student', '학생'),
+        klass = required(form, 'class', '반'),
+        period = required(form, 'period', '분석 월');
+      const result = draft(ctx, student, klass, period);
+      const old = one<Report>(
+        ctx.db,
+        'SELECT * FROM op_student_reports WHERE academy_id=? AND student_id=? AND class_id=? AND period=?',
+        ctx.actor.academyId,
+        student,
+        klass,
+        period,
+      );
+      if (old) {
+        if (field(form, 'version') !== String(old.version))
+          throw new OperationError(
+            '기존 리포트를 열고 현재 버전에서 다시 분석해 주세요.',
+            409,
+          );
+      }
+      r = {
+        id: old?.id ?? randomUUID(),
+        academy_id: ctx.actor.academyId,
+        student_id: student,
+        class_id: klass,
+        period,
+        version: (old?.version ?? 0) + 1,
+        state: 'draft',
+        body: result.body,
+        counsel: result.counsel,
+        fingerprint: result.e.fingerprint,
+        approved_by: null,
+      };
+      ctx.db
+        .prepare(
+          'INSERT INTO op_student_reports VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,state=excluded.state,body=excluded.body,counsel=excluded.counsel,fingerprint=excluded.fingerprint,approved_by=NULL',
+        )
+        .run(
+          r.id,
+          r.academy_id,
+          r.student_id,
+          r.class_id,
+          r.period,
+          r.version,
+          r.state,
+          r.body,
+          r.counsel,
+          r.fingerprint,
+          null,
+        );
+    } else {
+      r = load(ctx, required(form, 'id', '리포트'));
+      if (field(form, 'version') !== String(r.version))
+        throw new OperationError(
+          '리포트가 변경되었습니다. 다시 확인해 주세요.',
+          409,
+        );
+      const current = studentReportEvidence(
+        ctx,
+        r.student_id,
+        r.class_id,
+        r.period,
+      );
+      if (current.fingerprint !== r.fingerprint)
+        throw new OperationError(
+          '채점·출결 근거가 바뀌었습니다. 다시 분석하고 검토해 주세요.',
+          409,
+        );
+      if (action === 'save') {
+        r.body = required(form, 'body', '리포트', 10000);
+        r.counsel = required(form, 'counsel', '상담 자료', 10000);
+        r.state = 'draft';
+        r.approved_by = null;
+      } else if (action === 'approve') {
+        if (r.state !== 'draft' || field(form, 'reviewed') !== 'yes')
+          throw new OperationError(
+            '저장한 초안을 검토한 뒤 승인해 주세요.',
+            409,
+          );
+        if (!current.sourceCount && !current.attendance.length)
+          throw new OperationError(
+            '근거 기록이 없어 공개할 수 없습니다. 기록 없음 안내는 교사에게만 표시합니다.',
+            422,
+          );
+        r.state = 'approved';
+        r.approved_by = ctx.actor.id;
+      } else if (action === 'withdraw') {
+        r.state = 'draft';
+        r.approved_by = null;
+      } else throw new OperationError('지원하지 않는 작업입니다.');
+      r.version++;
+      ctx.db
+        .prepare(
+          'UPDATE op_student_reports SET version=?,state=?,body=?,counsel=?,approved_by=? WHERE id=?',
+        )
+        .run(r.version, r.state, r.body, r.counsel, r.approved_by, r.id);
+    }
+    ctx.db
+      .prepare('INSERT INTO op_student_report_history VALUES(?,?,?,?,?,?)')
+      .run(
+        r.id,
+        r.version,
+        ctx.actor.id,
+        r.state,
+        r.body,
+        new Date().toISOString(),
+      );
+    return '/student-reports?id=' + r.id;
+  });
+}
+function render(ctx: PageContext) {
+  const students = accessibleStudents(ctx.db, ctx.actor),
+    classes = accessibleClasses(ctx.db, ctx.actor);
+  let html =
+    '<h1>학생 분석·월간 리포트</h1><p>교사 확정 채점과 기록된 출결만 사용합니다. 초안·상담 자료는 교사만 보고, 승인한 월간 리포트만 해당 보호자에게 공개됩니다.</p>';
+  const options = (list: { id: string; name: string }[]) =>
+    list
+      .map((s) => `<option value="${h(s.id)}">${h(s.name)}</option>`)
+      .join('');
+  if (staff(ctx))
+    html += `<section class="panel"><h2>학생별 분석</h2><form method="post"><label>학생<select name="student">${options(students)}</select></label><label>반<select name="class">${options(classes)}</select></label><label>분석 월<input type="month" name="period" value="${new Date(Date.now() + 32400000).toISOString().slice(0, 7)}" required></label><button name="action" value="analyze">분석 · 상담 자료 초안 만들기</button></form><details><summary>실제 출결 기록 입력</summary><form method="post"><label>학생<select name="student">${options(students)}</select></label><label>반<select name="class">${options(classes)}</select></label><label>날짜<input type="date" name="date" required></label><label>출결<select name="status"><option value="present">출석</option><option value="late">지각</option><option value="absent">결석</option></select></label><button name="action" value="attendance">출결 기록 저장</button></form></details></section>`;
+  const list = rows<Report>(
+    ctx.db,
+    'SELECT * FROM op_student_reports WHERE academy_id=? ORDER BY period DESC,student_id',
+    ctx.actor.academyId,
+  ).filter((r) => {
+    try {
+      load(ctx, r.id);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  html += `<nav>${list.map((r) => `<a href="/student-reports?id=${h(r.id)}">${h(students.find((s) => s.id === r.student_id)?.name)} ${h(r.period)} · ${r.state === 'approved' ? '승인' : '초안'}</a>`).join(' · ')}</nav>`;
+  const id = ctx.url.searchParams.get('id');
+  if (!id) return html + '<p>학생별 리포트를 선택해 주세요.</p>';
+  const r = load(ctx, id);
+  if (!staff(ctx))
+    return (
+      html +
+      `<section class="panel"><h2>교사 승인 월간 리포트</h2><p class="preserve">${h(r.body)}</p></section>`
+    );
+  const e = studentReportEvidence(ctx, r.student_id, r.class_id, r.period),
+    hidden = `<input type="hidden" name="id" value="${h(r.id)}"><input type="hidden" name="version" value="${r.version}">`;
+  html += `<section class="panel"><p>${r.state === 'approved' ? '보호자 공개 중' : '교사 검토 초안 · 보호자 비공개'}${r.fingerprint !== e.fingerprint ? ' · 근거 변경됨, 다시 분석 필요' : ''}</p><form method="post">${hidden}<label>월간 리포트<textarea name="body" rows="12" maxlength="10000">${h(r.body)}</textarea></label><label>교사용 상담 자료 초안<textarea name="counsel" rows="12" maxlength="10000">${h(r.counsel)}</textarea></label><button name="action" value="save">수정 저장 · 비공개 초안</button></form><form method="post">${hidden}<label><input type="checkbox" name="reviewed" value="yes" required>저장된 내용을 검토했습니다</label><button name="action" value="approve">교사 승인 · 해당 보호자에게 공개</button></form><form method="post">${hidden}<button name="action" value="withdraw">공개 철회</button></form><form method="post">${hidden}<input type="hidden" name="student" value="${h(r.student_id)}"><input type="hidden" name="class" value="${h(r.class_id)}"><input type="hidden" name="period" value="${h(r.period)}"><button name="action" value="analyze">최신 근거로 다시 분석 · 승인 해제</button></form></section>`;
+  return html;
+}
+export const studentReportsModule: OperationModule = {
+  path: '/student-reports',
+  label: '학생 분석·리포트',
+  roles: ['admin', 'teacher', 'guardian'],
+  setup: setupStudentReports,
+  render,
+  submit,
+};

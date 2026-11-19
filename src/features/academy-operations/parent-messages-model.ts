@@ -575,33 +575,16 @@ export function runParentMessageJobs(
           p.academy_id,
           period,
         );
-        // Enabling automatic delivery must also pick up an existing preview.
-        // Previously delivered or explicitly cancelled messages are never reset.
-        if (
-          completed &&
-          !(
-            p.automatic &&
-            one(
-              db,
-              "SELECT id FROM op_parent_messages WHERE academy_id=? AND period=? AND kind='monthly' AND state='draft' LIMIT 1",
-              p.academy_id,
-              period,
-            )
-          )
-        )
-          return;
+        // A scheduled job may prepare a draft, never approve its final content.
+        if (completed) return;
         const result = buildMonthlyMessages(
           db,
           p.academy_id,
           period,
           p,
           now,
-          p.automatic ? 'adopt' : 'keep',
+          'keep',
         );
-        if (p.automatic)
-          db.prepare(
-            "UPDATE op_parent_messages SET state='queued' WHERE academy_id=? AND state='draft' AND id IN (SELECT value FROM json_each(?))",
-          ).run(p.academy_id, JSON.stringify(result.eligibleIds));
         // Late-approved reports can be picked up on the next tick. Unique message
         // keys prevent repeats after a restart or a crash between these writes.
         if (result.recipients && result.missing === 0)

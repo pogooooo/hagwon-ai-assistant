@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { assertPollSourceEditable } from './makeup-polls.ts';
 import { renderTeamNotices } from './team-schedule.ts';
 import {
   checkNoticeAgainstTeam,
@@ -163,6 +164,12 @@ function requireCurrentNotice(form: FormData, notice: Notice): void {
 function saveNotice(ctx: PageContext, form: FormData): void {
   const id = field(form, 'notice_id', 80);
   const notice = id ? getNotice(ctx, id) : undefined;
+  if (notice)
+    assertPollSourceEditable(
+      ctx.db,
+      ctx.actor.academyId,
+      'notice:' + notice.id,
+    );
   if (notice) requireCurrentNotice(form, notice);
   const classId = field(form, 'class_id', 80) || null;
   requireClassScope(ctx, classId);
@@ -737,6 +744,11 @@ function submit(ctx: PageContext, form: FormData): void {
         break;
       case 'revoke_notice': {
         const notice = getNotice(ctx, required(form, 'notice_id', '공지', 80));
+        assertPollSourceEditable(
+          ctx.db,
+          ctx.actor.academyId,
+          'notice:' + notice.id,
+        );
         requireCurrentNotice(form, notice);
         ctx.db
           .prepare(
