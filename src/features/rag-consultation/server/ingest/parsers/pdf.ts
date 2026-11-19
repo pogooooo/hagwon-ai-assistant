@@ -51,6 +51,38 @@ export function configurePdfRuntime(load: () => Promise<PdfRuntime>) {
   pdfRuntime = undefined;
 }
 
+/** Render all homework pages before any paid request; never use the text layer as student handwriting. */
+export async function renderGradingPdf(bytes: Uint8Array, maxPages = 10) {
+  const { library, options } = await (pdfRuntime ??= loadPdfRuntime());
+  const task = library.getDocument({
+    ...options,
+    data: new Uint8Array(bytes),
+    disableFontFace: true,
+    useSystemFonts: false,
+    maxImageSize: 20000000,
+    verbosity: 0,
+  });
+  try {
+    const document = await task.promise;
+    if (document.numPages < 1 || document.numPages > maxPages)
+      throw new Error('PDF_PAGE_LIMIT');
+    const pages: Uint8Array[] = [];
+    for (let i = 1; i <= document.numPages; i++) {
+      const page = await document.getPage(i);
+      const view = page.getViewport({ scale: 1 });
+      const scale = Math.min(2, 2200 / Math.max(view.width, view.height));
+      const canvas = await renderPage(page, scale);
+      pages.push(new Uint8Array(canvas.toBuffer('image/png')));
+      page.cleanup();
+      canvas.width = 1;
+      canvas.height = 1;
+    }
+    return pages;
+  } finally {
+    await task.destroy();
+  }
+}
+
 const MIN_TEXT_CHARS = 20;
 const OCR_TARGET_WIDTH = 1500;
 const OCR_MAX_DIMENSION = 2400;

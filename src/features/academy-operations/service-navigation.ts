@@ -1,6 +1,10 @@
 import { escapeHtml as h } from './shared.ts';
 
 const symbols: Record<string, [string, string]> = {
+  '/grading': [
+    'homework',
+    '<path d="M5 3h14v18H5Z"/><path d="m8 12 3 3 5-6M8 6h5"/>',
+  ],
   '/messages': ['chat', '<path d="M3 5h18v14H3Z"/><path d="m3 6 9 7 9-7"/>'],
   '/': [
     'home',
@@ -81,7 +85,15 @@ export function serviceNavigation(
   const groups = [
     [
       '학원 생활',
-      ['/', '/messages', '/consultation', '/voice', '/schedule', '/homework'],
+      [
+        '/',
+        '/messages',
+        '/consultation',
+        '/voice',
+        '/schedule',
+        '/homework',
+        '/grading',
+      ],
     ],
     ['기록과 자료', ['/learning', '/briefing', '/documents']],
     [

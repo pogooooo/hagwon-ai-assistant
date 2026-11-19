@@ -10,6 +10,7 @@ import {
 } from '../../src/features/academy-operations/runtime-generation.ts';
 import { configurePdfRuntime } from '../../src/features/rag-consultation/server/ingest/parsers/pdf.ts';
 import { runParentMessageJobs } from '../../src/features/academy-operations/parent-messages-model.ts';
+import { gradingService } from '../../src/features/homework-grading/module.ts';
 
 const fixtureRoot = '/bundle/academies/';
 
@@ -101,11 +102,12 @@ export class AcademyDemo extends DurableObject {
   }
   async alarm() {
     try {
+      await gradingService(this.parentMessageDb).sweep();
       runParentMessageJobs(this.parentMessageDb);
     } finally {
       const active = this.parentMessageDb
         .prepare(
-          "SELECT academy_id FROM op_parent_policies WHERE enabled=1 UNION ALL SELECT academy_id FROM op_parent_messages WHERE state='queued' LIMIT 1",
+          "SELECT academy_id FROM op_parent_policies WHERE enabled=1 UNION ALL SELECT academy_id FROM op_parent_messages WHERE state='queued' UNION ALL SELECT tenant FROM grading_v3_submissions WHERE raw_state<>'VERIFIED' LIMIT 1",
         )
         .get();
       await this.messageStorage.setAlarm(

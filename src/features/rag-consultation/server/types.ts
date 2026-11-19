@@ -233,6 +233,8 @@ export type FactValue =
       /** True when the rubric supports reference use only. */
       referenceOnly?: boolean;
       basis?: 'classified_assessed' | 'approved_homework';
+      /** Explicit subject from an approved grading manifest; legacy facts use their class subject. */
+      subject?: string;
     }
   | { kind: 'weak_area'; unit: string; text: string };
 
@@ -307,6 +309,7 @@ export interface AcademyCatalog {
   displayName: string;
   aliases: readonly string[];
   classes: readonly AcademyClass[];
+  subjects?: readonly string[];
   /** 학습 분석 단원명(예: 일차방정식, 함수). */
   units: readonly string[];
   /** 학습 분석 문항 유형명(예: 계산, 서술형). */

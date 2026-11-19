@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { setupKnowledge, knowledgeEvidence } from './knowledge.ts';
 import {
+  gradingCatalog,
+  gradingEvidence,
+} from '../homework-grading/evidence.ts';
+import {
   setupSchools,
   schoolEvidence,
   schoolQuerySelection,
@@ -314,8 +318,12 @@ function currentCatalog({ db, actor }: PageContext): AcademyCatalog {
       subject,
       grade,
     })),
-    units: learningLabels,
-    questionTypes: learningTypes,
+    subjects: gradingCatalog(db, actor.academyId).subjects,
+    units: [...learningLabels, ...gradingCatalog(db, actor.academyId).units],
+    questionTypes: [
+      ...learningTypes,
+      ...gradingCatalog(db, actor.academyId).units,
+    ],
     studentDirectory: students.map(({ id, name }) => ({
       studentId: id,
       names: [name, name.replace(/^가상/, '')],
@@ -342,6 +350,7 @@ function consultationAccess({ db, actor }: PageContext): RagAccessScope {
 }
 
 function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
+  const grading = gradingEvidence(db, academyId);
   const learning = learningEvidence(db, academyId);
   const workbook = workbookEvidence(db, academyId);
   const team = teamScheduleEvidence(db, academyId);
@@ -354,12 +363,14 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
       ...regularScheduleDocuments(db, academyId),
       ...learning.documents,
       ...workbook.documents,
+      ...grading.documents,
     ],
     facts: [
       ...scheduleFacts(db, academyId),
       ...team.flatMap((x) => x.facts),
       ...learning.facts,
       ...workbook.facts,
+      ...grading.facts,
     ],
   };
 }

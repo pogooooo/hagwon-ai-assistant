@@ -32,6 +32,11 @@ import {
   reviewHomeworkReading,
 } from './homework-classifier.ts';
 import { homeworkModule, homeworkPhoto } from './homework.ts';
+import {
+  gradingModule,
+  gradingPhoto,
+  gradingService,
+} from '../homework-grading/module.ts';
 import { learningModule } from './learning.ts';
 import { briefingModule } from './briefing.ts';
 import { parentMessagesModule } from './parent-messages.ts';
@@ -55,6 +60,7 @@ import {
 const modules: OperationModule[] = [
   directoryModule,
   homeworkModule,
+  gradingModule,
   learningModule,
   briefingModule,
   calendarModule,
@@ -76,6 +82,7 @@ const menuOrder = [
   '/learning',
   '/briefing',
   '/homework',
+  '/grading',
   '/directory',
   '/settings',
   '/public-data',
@@ -484,6 +491,23 @@ export function createOperationsServer({
         response.end(Buffer.from(photo.bytes));
         return;
       }
+      if (url.pathname === '/grading/photo' && request.method === 'GET') {
+        const photo = await gradingPhoto({
+          db,
+          actor,
+          url,
+          assertCurrentAccess: () => assertCurrentSession(request, actor!),
+        });
+        assertCurrentSession(request, actor);
+        response.writeHead(200, {
+          'Content-Type': photo.mime,
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        });
+        response.end(Buffer.from(photo.bytes));
+        photo.bytes.fill(0);
+        return;
+      }
       if (url.pathname === '/documents/download' && request.method === 'GET') {
         const file = documentDownload({ db, actor, url });
         response.writeHead(200, {
@@ -620,7 +644,15 @@ export function createOperationsServer({
     }
   }
 
-  return createServer((request, response) => {
+  const server = createServer((request, response) => {
     void serve(request, response);
   });
+  const maintenance = setInterval(() => {
+    void gradingService(db)
+      .sweep()
+      .catch(() => {});
+  }, 30000);
+  maintenance.unref?.();
+  server.on('close', () => clearInterval(maintenance));
+  return server;
 }
