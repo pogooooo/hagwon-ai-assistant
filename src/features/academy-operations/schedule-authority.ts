@@ -1,4 +1,5 @@
 import type { QueryFrame } from '../rag-consultation/server/query/parse-query.ts';
+import { consultationBookingTimeRequest } from '../rag-consultation/server/answer/consultation-booking.ts';
 import { InMemoryRagStore } from '../rag-consultation/server/index.ts';
 import type {
   SourceDocumentInput,
@@ -7,6 +8,7 @@ import type {
 
 /** Schedule dates/times come from operations data; general makeup policy remains searchable. */
 export function requestsOperationalSchedule(frame: Readonly<QueryFrame>) {
+  if (consultationBookingTimeRequest(frame)) return false;
   const q = frame.normalized;
   const dated =
     frame.explicitDates.length > 0 ||

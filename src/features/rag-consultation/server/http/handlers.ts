@@ -80,6 +80,7 @@ const factValueSchema = z.discriminatedUnion('kind', [
     event: z
       .object({
         id: idString,
+        classClosureId: idString.optional(),
         startsAt: z.number().int(),
         endsAt: z.number().int(),
         makeupStatus: z.enum(['pending', 'scheduled', 'none']).optional(),
