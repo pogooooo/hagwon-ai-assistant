@@ -11,7 +11,16 @@ export function isCleanPublicEvidence(
   quote?: string,
 ): boolean {
   return (
-    chunk.visibility === 'academy_public' &&
+    chunk.visibility === 'academy_public' && isCleanEvidence(chunk, at, quote)
+  );
+}
+
+export function isCleanEvidence(
+  chunk: RagChunk,
+  at: number,
+  quote?: string,
+): boolean {
+  return (
     isValidAt(chunk.validFrom, chunk.validTo, at) &&
     !chunk.suspicious &&
     !isAssistantDirective(chunk.text) &&

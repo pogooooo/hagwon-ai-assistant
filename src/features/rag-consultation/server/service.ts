@@ -40,6 +40,10 @@ import {
   answerEventRegistration,
 } from './answer/event-evidence.ts';
 import { answerConsultationWindow } from './answer/consultation-window.ts';
+import {
+  answerConsultationBookingTime,
+  consultationBookingTimeRequest,
+} from './answer/consultation-booking.ts';
 import { answerEventLogistics } from './answer/event-logistics.ts';
 import {
   answerClosureRefundAmount,
@@ -338,6 +342,13 @@ export function createRagConsultationService(
       if (predictsOutcome && !flags.prediction)
         ctx.frame = { ...frame, flags: { ...flags, prediction: true } };
       return routeAnalysis(ctx, studentIdHint);
+    }
+    if (ctx.engine === 'planned') {
+      const booking = await answerConsultationBookingTime(ctx);
+      if (booking) {
+        trace.domain = 'info';
+        return booking;
+      }
     }
     if (
       selectTool &&
@@ -1569,6 +1580,9 @@ export function createRagConsultationService(
               deps.engine === 'planned' &&
               deps.generation.providerId.startsWith('clova:') &&
               !input.studentIdHint &&
+              !plan.requests.some(({ frame }) =>
+                consultationBookingTimeRequest(frame),
+              ) &&
               !(
                 namedTeacher(frame.normalized) &&
                 frame.topics.some((t) => t.id === 'contact')
