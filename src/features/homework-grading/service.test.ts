@@ -15,6 +15,38 @@ import {
 } from './facts.ts';
 import { gradingEvidence } from './evidence.ts';
 import { decodeUploads } from './media.ts';
+import { registerGradingReports } from './report-adapter.ts';
+import {
+  setupStudentReports,
+  studentReportEvidence,
+} from '../academy-operations/student-reports.ts';
+import { setupLearning } from '../academy-operations/learning.ts';
+
+test('common student analysis adapter includes only published v3 results, without double counting skill aggregates', async (t) => {
+  const f = fixture(t);
+  setupLearning(f.db);
+  setupStudentReports(f.db);
+  registerGradingReports(f.db);
+  const id = await f.upload(f.register());
+  assert.equal(
+    studentReportEvidence(f.ctx(), 'TA_STU_001', 'TA_E_MATH', '2026-11').total,
+    0,
+  );
+  await f.confirm(id);
+  const e = studentReportEvidence(
+    f.ctx(),
+    'TA_STU_001',
+    'TA_E_MATH',
+    '2026-11',
+  );
+  assert.equal(e.total, 1);
+  assert.equal(e.correct, 1);
+  assert.equal(e.sourceCount, 1);
+  assert.equal(
+    studentReportEvidence(f.ctx(), 'TA_STU_001', 'TA_E_MATH', '2026-10').total,
+    0,
+  );
+});
 
 function code(expected: string) {
   return (error: unknown) =>
