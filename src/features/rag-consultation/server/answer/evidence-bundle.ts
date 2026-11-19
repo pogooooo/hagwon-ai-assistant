@@ -7,7 +7,7 @@ import { abstain, deny, resolveEffectiveTime } from '../answer/context.ts';
 import { satisfiesAnswerTypes } from '../answer/evidence.ts';
 import { supportsExcerpt } from './verify.ts';
 import { canReadRecord } from '../retrieval/access-filter.ts';
-import { isValidAt, toKstDate } from '../text/time.ts';
+import { isValidAt, toKstDate, hasExplicitClockTime } from '../text/time.ts';
 import type { PlannedRequest } from '../query/plan.ts';
 
 /** Domain adapters propose a draft. References keep the original facts and
@@ -192,7 +192,7 @@ export function validateEvidence(
       if (verifiedPartial && proposal.unresolvedFields?.includes(field))
         return true;
       return field === 'startTime'
-        ? /\d{1,2}:\d{2}|\d{1,2}\s*시(?:\s|[부터에]|$)/m.test(proposal.text)
+        ? hasExplicitClockTime(proposal.text)
         : satisfiesAnswerTypes(proposal.text, [field]);
     })
   ) {
