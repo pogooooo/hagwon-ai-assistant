@@ -96,3 +96,27 @@ export function formatValidity(
   const lastDay = kstStartOfDay(toKstDate(validTo - 1));
   return `${formatKstDate(validFrom)} ~ ${formatKstDate(lastDay)} 적용`;
 }
+/** Clock values in prose may be followed by Korean particles or sentence endings.
+ * A duration (시간) or an invalid hour/minute is not a lesson start time. */
+export function hasExplicitClockTime(text: string): boolean {
+  for (const match of text.matchAll(/(?<!\d)(\d{1,2}):(\d{2})(?!\d)/g)) {
+    if (Number(match[1]) < 24 && Number(match[2]) < 60) return true;
+  }
+  for (const match of text.matchAll(
+    /(?<!\d)(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?/g,
+  )) {
+    if (
+      Number(match[1]) >= 24 ||
+      (match[2] !== undefined && Number(match[2]) >= 60)
+    )
+      continue;
+    const rest = text.slice(match.index! + match[0].length);
+    if (
+      /^(?:$|\s|[.,!?~·()\-]|에|부터|까지|쯤|경|반|입니|예요|이에요|이며|이고|였|이었|로|다)/.test(
+        rest,
+      )
+    )
+      return true;
+  }
+  return false;
+}

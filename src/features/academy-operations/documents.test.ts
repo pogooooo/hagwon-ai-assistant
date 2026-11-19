@@ -12,6 +12,7 @@ import {
 } from './documents.ts';
 import { directoryModule } from './directory.ts';
 import { OperationError, type PageContext } from './shared.ts';
+import { hasExplicitClockTime } from '../rag-consultation/server/text/time.ts';
 
 const academyId = 'AC_TEST_A';
 
@@ -406,6 +407,63 @@ test('자료 검색과 선택 자료 답변 미리보기는 승인된 해당 문
   assert.doesNotMatch(hidden, /answer-preview/);
   const publicView = await documentsModule.render({ ...visitor, url: ctx.url });
   assert.doesNotMatch(publicView, /answer-preview/);
+});
+
+test('registered approved prose clock times survive sufficiency checks; durations and missing weekdays do not', async (t) => {
+  const { admin } = setup(t);
+  let caseNumber = 0;
+  for (const [body, expected] of [
+    ['가상 검증 상담 예약은 매주 목요일 오후 7시입니다.', true],
+    ['가상 검증 상담 예약은 매주 목요일 19:00입니다.', true],
+    ['가상 검증 상담 예약은 매주 목요일 오후 7시에 시작합니다.', true],
+    ['가상 검증 상담 예약은 매주 목요일 7시간 진행합니다.', false],
+    ['가상 검증 상담 예약은 오후 7시입니다.', false],
+  ] as const) {
+    const id = await save(
+      admin,
+      '가상 검증 상담 예약 안내 ' + ++caseNumber,
+      body,
+    );
+    await submit(admin, { action: 'approve', documentId: id, revision: '1' });
+    const html = await documentsModule.render({
+      ...admin,
+      url: new URL(
+        'http://localhost/documents?id=' +
+          id +
+          '&revision=1&previewQuestion=' +
+          encodeURIComponent('가상 검증 상담 예약은 무슨 요일 몇 시인가요?'),
+      ),
+    });
+    const answer =
+      /<div class="answer-preview" role="status"><p class="preserve">([\s\S]*?)<\/p>/.exec(
+        html,
+      )?.[1];
+    assert.ok(answer);
+    if (expected) {
+      assert.match(answer, /목요일/);
+      assert.match(answer, /7시|19:00/);
+      assert.doesNotMatch(answer, /확인할 수 없습니다|근거가 부족/);
+    } else assert.doesNotMatch(answer, /목요일.*(?:7시입니다|7시간 진행)/);
+  }
+});
+test('clock lexer accepts Korean particles but rejects durations and invalid times', () => {
+  for (const text of [
+    '오전 9시예요.',
+    '18시에 시작',
+    '7시 30분입니다.',
+    '09:30',
+    '오후 7시입니다.',
+  ])
+    assert.equal(hasExplicitClockTime(text), true, text);
+  for (const text of [
+    '7시간 진행',
+    '37시입니다.',
+    '29:99',
+    '7시 65분',
+    '3시대 유물',
+    '7시설',
+  ])
+    assert.equal(hasExplicitClockTime(text), false, text);
 });
 
 test('스캔 사진은 관리자 검수 전 색인되지 않고 불일치한 셀은 수정 후 승인된다', async (t) => {
