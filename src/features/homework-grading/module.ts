@@ -41,7 +41,7 @@ import {
   snapshot,
   type Report,
 } from './facts.ts';
-import { cropAnswer } from './media.ts';
+import { cropAnswer, gradingMediaLimits } from './media.ts';
 import type { OperationsDatabase } from '../academy-operations/database.ts';
 import { registerGradingReports } from './report-adapter.ts';
 
@@ -104,6 +104,8 @@ const errorNames: Record<string, string> = {
   INPUT_UNREADABLE:
     '사진이나 PDF를 읽을 수 없습니다. 파일 손상·크기·기울기를 확인해 주세요.',
   UNSUPPORTED_MEDIA: 'JPG·PNG·WEBP 사진 또는 PDF를 올려 주세요.',
+  MEDIA_BUSY: '다른 답안 사진을 처리하고 있습니다. 잠시 후 다시 시도해 주세요.',
+  PAGE_LIMIT: '허용된 제출 쪽수를 초과했습니다.',
   UPLOAD_LIMIT: '업로드 크기나 파일 개수 제한을 초과했습니다.',
   PAGE_COUNT_MISMATCH: '과제 문항의 쪽수와 제출 페이지 수를 확인해 주세요.',
   CORRECTION_REQUIRES_REVISION:
@@ -299,7 +301,12 @@ async function submit(ctx: PageContext, form: FormData) {
           assignment_id: field(form, 'assignment'),
           assignment_version: 1,
           student_ref: field(form, 'student'),
-          expected_page_count: number(form, 'pages', 1, 10),
+          expected_page_count: number(
+            form,
+            'pages',
+            1,
+            gradingMediaLimits().pages,
+          ),
           ...(field(form, 'target')
             ? {
                 submission_purpose: 'correction_evidence' as const,
@@ -627,6 +634,7 @@ async function render(ctx: PageContext) {
         visibleStudents.has(r.student) && (staff || r.status === 'approved'),
     );
     const target = id ? readSubmission(ctx, id) : undefined;
+    const mediaLimits = gradingMediaLimits(ctx.maxDocumentBytes);
     return `<div class="page-heading"><h1>사진 숙제 채점</h1><p>국어·영어·수학 답안을 검수하고, 확정 결과로 학습 기록을 정리합니다.</p></div>${detail}<section class="panel"><h2>숙제 사진 제출</h2>${
       assignments.length
         ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${choice(
@@ -643,7 +651,7 @@ async function render(ctx: PageContext) {
             students.map((s) => s.id),
             target?.student ?? '',
             Object.fromEntries(students.map((s) => [s.id, s.name])),
-          )}${input('pages', '총 페이지 수', '1', 'number', 'min="1" max="10" required')}<label>사진 또는 PDF<input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label>${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
+          )}${input('pages', '총 페이지 수', '1', 'number', `min="1" max="${mediaLimits.pages}" required`)}<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label>사진 또는 PDF<input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label>${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
         : '<p>강사가 과제와 문항·정답을 먼저 등록하면 제출할 수 있습니다.</p>'
     }</section>${
       staff

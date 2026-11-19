@@ -684,7 +684,14 @@ export class GradingService {
               const page = pages.find(
                 (p) => p.page_no === item.expected_page_no,
               )!;
-              const crop = await cropAnswer(page, r);
+              const crop = await cropAnswer(page, r).catch((error) => {
+                if (
+                  error instanceof GradingError &&
+                  error.code === 'MEDIA_BUSY'
+                )
+                  return null;
+                throw error;
+              });
               if (crop) {
                 try {
                   const check = await this.provider.check(crop, item);

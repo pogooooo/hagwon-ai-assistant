@@ -10,26 +10,86 @@ export interface ImagePage {
   mime: string;
   page_no: number;
 }
+type Size = { width: number; height: number };
+type Crop = Size & { x: number; y: number };
+
+export interface GradingMediaRuntime {
+  maxPages: number;
+  maxInputBytes: number;
+  maxImagePixels: number;
+  decodePhoto(bytes: Uint8Array): Promise<Uint8Array>;
+  renderPdf(bytes: Uint8Array, remainingPages: number): Promise<Uint8Array[]>;
+  crop(bytes: Uint8Array, region: Crop): Promise<Uint8Array>;
+}
+let media: GradingMediaRuntime = {
+  maxPages: 10,
+  maxInputBytes: Infinity,
+  maxImagePixels: 20_000_000,
+  async decodePhoto(bytes) {
+    const { loadImage, createCanvas } = await import('@napi-rs/canvas');
+    const image = await loadImage(Buffer.from(bytes));
+    const scale = Math.min(1, 2200 / Math.max(image.width, image.height));
+    const canvas = createCanvas(
+      Math.round(image.width * scale),
+      Math.round(image.height * scale),
+    );
+    try {
+      canvas
+        .getContext('2d')
+        .drawImage(image, 0, 0, canvas.width, canvas.height);
+      return new Uint8Array(canvas.toBuffer('image/png'));
+    } finally {
+      canvas.width = 1;
+      canvas.height = 1;
+    }
+  },
+  renderPdf: renderGradingPdf,
+  async crop(bytes, { x, y, width, height }) {
+    const { loadImage, createCanvas } = await import('@napi-rs/canvas');
+    const image = await loadImage(Buffer.from(bytes));
+    const canvas = createCanvas(width, height);
+    try {
+      canvas
+        .getContext('2d')
+        .drawImage(image, x, y, width, height, 0, 0, width, height);
+      return new Uint8Array(canvas.toBuffer('image/png'));
+    } finally {
+      canvas.width = 1;
+      canvas.height = 1;
+    }
+  },
+};
+export function configureGradingMedia(runtime: GradingMediaRuntime) {
+  media = runtime;
+}
+export function gradingMediaLimits(requestBytes = 20 * 1024 * 1024) {
+  return {
+    pages: media.maxPages,
+    bytes: Math.min(requestBytes, media.maxInputBytes),
+    pixels: media.maxImagePixels,
+  };
+}
 export async function decodeUploads(
   files: { bytes: Uint8Array; mime: string }[],
   maxBytes = 20 * 1024 * 1024,
 ): Promise<ImagePage[]> {
   if (
     !files.length ||
-    files.length > 10 ||
-    files.reduce((n, f) => n + f.bytes.length, 0) > maxBytes
-  )
+    files.length > media.maxPages ||
+    files.reduce((n, f) => n + f.bytes.length, 0) >
+      Math.min(maxBytes, media.maxInputBytes)
+  ) {
     throw new GradingError('UPLOAD_LIMIT', 413);
+  }
   const result: ImagePage[] = [];
   try {
     for (const file of files) {
+      const remainingPages = media.maxPages - result.length;
+      if (remainingPages < 1) throw new GradingError('PAGE_LIMIT');
       if (new TextDecoder().decode(file.bytes.subarray(0, 5)) === '%PDF-') {
         if (file.mime !== 'application/pdf')
           throw new GradingError('MEDIA_MISMATCH');
-        for (const bytes of await renderGradingPdf(
-          file.bytes,
-          10 - result.length,
-        ))
+        for (const bytes of await media.renderPdf(file.bytes, remainingPages))
           result.push({ bytes, mime: 'image/png', page_no: result.length + 1 });
       } else {
         const size = imageDimensions(file.bytes),
@@ -44,32 +104,16 @@ export async function decodeUploads(
         if (
           size.width < 32 ||
           size.height < 32 ||
-          size.width * size.height > 20000000 ||
+          size.width * size.height > media.maxImagePixels ||
           Math.max(size.width / size.height, size.height / size.width) > 5
         )
           throw new GradingError('INPUT_UNREADABLE');
-        const { loadImage, createCanvas } = await import('@napi-rs/canvas');
-        const decoded = await loadImage(Buffer.from(file.bytes));
-        const scale = Math.min(
-          1,
-          2200 / Math.max(decoded.width, decoded.height),
-        );
-        const canvas = createCanvas(
-          Math.round(decoded.width * scale),
-          Math.round(decoded.height * scale),
-        );
-        canvas
-          .getContext('2d')
-          .drawImage(decoded, 0, 0, canvas.width, canvas.height);
         result.push({
-          bytes: new Uint8Array(canvas.toBuffer('image/png')),
+          bytes: await media.decodePhoto(file.bytes),
           mime: 'image/png',
           page_no: result.length + 1,
         });
-        canvas.width = 1;
-        canvas.height = 1;
       }
-      if (result.length > 10) throw new GradingError('PAGE_LIMIT');
     }
   } catch (error) {
     for (const page of result) page.bytes.fill(0);
@@ -84,29 +128,18 @@ export async function cropAnswer(
 ): Promise<ImagePage | null> {
   const region = reading.regions.find((r) => r.page_no === page.page_no);
   if (!region) return null;
-  const { loadImage, createCanvas } = await import('@napi-rs/canvas');
-  const image = await loadImage(Buffer.from(page.bytes));
+  const size = imageDimensions(page.bytes);
+  if (!size) throw new GradingError('INPUT_UNREADABLE');
   const [a, b, c, d] = region.bbox;
-  const width = Math.ceil((c - a) * image.width),
-    height = Math.ceil((d - b) * image.height);
+  const x = Math.floor(a * size.width),
+    y = Math.floor(b * size.height);
+  const width = Math.min(size.width - x, Math.ceil((c - a) * size.width));
+  const height = Math.min(size.height - y, Math.ceil((d - b) * size.height));
   if (width < 8 || height < 8 || Math.max(width / height, height / width) > 5)
     return null;
-  const canvas = createCanvas(width, height);
-  canvas
-    .getContext('2d')
-    .drawImage(
-      image,
-      Math.floor(a * image.width),
-      Math.floor(b * image.height),
-      width,
-      height,
-      0,
-      0,
-      width,
-      height,
-    );
-  const bytes = new Uint8Array(canvas.toBuffer('image/png'));
-  canvas.width = 1;
-  canvas.height = 1;
-  return { bytes, mime: 'image/png', page_no: page.page_no };
+  return {
+    bytes: await media.crop(page.bytes, { x, y, width, height }),
+    mime: 'image/png',
+    page_no: page.page_no,
+  };
 }

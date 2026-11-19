@@ -62,7 +62,7 @@ npm run check
 npm run build
 ```
 
-사진 실제 디코딩과 텍스트/스캔 PDF 렌더링은 로컬 Node의 기존 `@napi-rs/canvas`/`pdfjs-dist`를 재사용한다. Cloudflare의 현재 native-unavailable 배포에는 이 디코더가 없다. 해당 환경에서 새 사진 채점을 운영 가능하다고 주장하지 않는다. 기존 배포는 변경하지 않았으며, 운영 연결에는 별도 디코딩 경로 검증이 필요하다.
+Node는 기존 `@napi-rs/canvas`와 `pdfjs-dist`를 사용한다. v3 Worker는 같은 업로드·답안 자르기 경로에서 Photon으로 JPEG·PNG·WebP를 디코딩하고 PDFium으로 PDF 각 쪽을 PNG로 렌더링한다. 새 서비스 바인딩 없이 두 WASM 모듈을 배포 번들에 포함한다. Worker 입력 한도는 합계 3 MiB·2쪽, 사진당 150만 화소이며 결과는 긴 변 1,400px·100만 화소 이하로 맞춘다. 동시 디코딩 요청은 재시도하도록 제한한다. 로컬 workerd에서 합성 사진 3종, 텍스트·스캔 PDF, 답안 영역의 실제 픽셀과 한도 초과 거부를 확인했다. EXIF 방향을 적용한 JPEG의 픽셀도 확인했다. 운영 계정의 CPU 한도, 복잡한 PDF의 최고 메모리 사용량, 한글 글꼴별 렌더링 품질은 실측하지 않았다.
 
 ## 검증의 의미
 
