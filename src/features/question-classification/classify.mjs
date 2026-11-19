@@ -137,6 +137,13 @@ export async function buildInstructions(subject, { withFigures = false } = {}) {
     math
       ? '⑩ 판정 질문: 문항이 묻지 않았고 소문항·지시문으로도 주어지지 않은 값을 먼저 구해야 최종 답에 이르는가? 그렇다면 ⑩은 reference가 아니라 adopted다. ⑨와 함께 붙일 때는 개념 연결과 별개인 그 중간 값을 action에 쓴다. 연결만으로 요구한 값이 바로 나오면 ⑨만 붙인다.'
       : '⑦ 판정 질문: 대화에서 다음 사람이 할 말이나 상황에 맞는 표현을 고르는가? 아니면 ⑦이 아니다. 글쓴이가 바라는 행동·요구·글의 목적을 물으면 ④다.',
+    // 공유 평가 데이터(고3 모의고사 3·5·7월 출제의도)에서 영어 대분류가 자주 갈린 경계를 질문으로 정리했다.
+    // 10월 시험은 검증에만 썼다(PDF 글자 기준 14→18/28). 같은 방식의 수학 질문은 10월에서 효과가 없어 넣지 않았다.
+    ...(math
+      ? []
+      : [
+          '대분류 판정 질문: 주어진 문장이 들어갈 위치를 고르면 ⑧ 문장 삽입이며 빈칸 추론(⑥)이 아니다. 글의 주제·요지·제목을 고르면 ①이고, 밑줄 친 표현이 뜻하는 바를 고를 때만 ③이다. 발문이 사진에 없고 지문에 빈칸만 있으면 빈칸에 들어갈 말을 추론하는 ⑥으로 본다.',
+        ]),
     '그림·밑줄 등 필요한 단서가 없으면 보류한다. 태그마다 입력 text의 연속된 원문 구절을 그대로 quote에 쓰고, 필요한 행동은 action, 참고·보류 사유는 reason에 쓴다.',
     // 그림 정보가 실제로 포함된 숙제에만 넣는다. 글자 전용 숙제의 지시는 바뀌지 않는다.
     ...(withFigures
@@ -183,17 +190,75 @@ export function aliasItemIds(assignment) {
 
 const sameQuoteMarks = (s) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
 
-export function verifyResponse(assignment, raw) {
+// 원문에서 quote를 찾는다. 글자·숫자·기호의 순서는 그대로 대조하고, 표기만 다른 것은 같게 본다:
+// 따옴표 종류, 공백·줄바꿈(판독은 줄을 바꾸고 한글 띄어쓰기를 잃는다), 밑줄 위치 표시(① ~ ⑳),
+// 수식 표기의 $·중괄호·\left·\right·간격 명령(모델은 인용하면서 이를 넣거나 뺀다).
+// 찾은 원문 구간을 그대로 돌려준다.
+const ignoredInQuote =
+  /^(?:\s+|[①-⑳]|\$|[{}]|\\(?:left|right|displaystyle)(?![a-zA-Z])|\\[,:;! ])/;
+function quoteSkeleton(value) {
+  const source = sameQuoteMarks(value);
+  const chars = [];
+  const at = [];
+  for (let i = 0; i < source.length;) {
+    const skip = source.slice(i).match(ignoredInQuote);
+    if (skip) {
+      i += skip[0].length;
+      continue;
+    }
+    chars.push(source[i]);
+    at.push(i);
+    i += 1;
+  }
+  return { text: chars.join(''), at };
+}
+export function findQuote(text, quote) {
+  const target = quoteSkeleton(quote).text;
+  if (!target) return null;
+  const source = quoteSkeleton(text);
+  const start = source.text.indexOf(target);
+  if (start < 0) return null;
+  return text.slice(source.at[start], source.at[start + target.length - 1] + 1);
+}
+
+// lenient: 재시도까지 문항 수·ID가 어긋나면 쪽 전체를 버리지 않고, 같은 ID가 여러 번이면 그 문항을,
+// 응답에 없는 문항은 그 문항만 판정 없음(unreadable)으로 둔다. 처음 시도에서는 재요청하도록 오류를 낸다.
+export function verifyResponse(assignment, raw, { lenient = false } = {}) {
   const { items } = responseSchema(assignment.subject).parse(raw);
   const byId = new Map(items.map((i) => [i.itemId, i]));
-  if (items.length !== assignment.items.length || byId.size !== items.length)
+  if (
+    !lenient &&
+    (items.length !== assignment.items.length || byId.size !== items.length)
+  )
     throw Error('AI 결과의 문항 수 또는 ID 중복 오류');
+  const duplicated = new Set(
+    items.map((i) => i.itemId).filter((id, n, all) => all.indexOf(id) !== n),
+  );
   return assignment.items.map(({ itemId, text }) => {
     const result = byId.get(itemId);
+    if (lenient && (!result || duplicated.has(itemId)))
+      return {
+        itemId,
+        disposition: 'unreadable',
+        reasoning: result
+          ? '분류 응답에 같은 문항이 여러 번 나옴'
+          : '분류 응답에서 빠진 문항',
+        tags: [],
+      };
     if (!result) throw Error('AI 결과에서 빠진 문항: ' + itemId);
-    const { tags } = result;
-    if (new Set(tags.map((t) => t.tagId)).size !== tags.length)
-      throw Error('허용되지 않는 태그 판정: ' + itemId);
+    // 같은 태그가 두 번 나오면 쪽 전체를 실패시키지 않는다. 판정이 같으면 첫 번째만 쓰고,
+    // 판정이 갈리면 그 문항의 해당 태그를 보류한다.
+    const tags = [];
+    for (const tag of result.tags) {
+      const k = tags.findIndex((t) => t.tagId === tag.tagId);
+      if (k < 0) tags.push(tag);
+      else if (tags[k].status !== tag.status)
+        tags[k] = {
+          ...tags[k],
+          status: 'held',
+          reason: '같은 유형에 서로 다른 판정이 나옴',
+        };
+    }
     if (!text.trim())
       return {
         ...result,
@@ -204,16 +269,14 @@ export function verifyResponse(assignment, raw) {
     return {
       ...result,
       tags: tags.map((tag) => {
-        // 따옴표 종류(‘ ’ ' / “ ” ")만 같은 문자로 보고 나머지는 그대로 대조한다.
-        // 글자 수가 변하지 않으므로 같은 위치의 원문 구절을 quote로 되돌려 저장한다.
-        const at = tag.quote.trim()
-          ? sameQuoteMarks(text).indexOf(sameQuoteMarks(tag.quote))
-          : -1;
-        const quoteVerified = at >= 0;
+        // 따옴표 종류와 공백·줄바꿈만 같게 보고 나머지는 그대로 대조한다.
+        // 찾은 위치의 원문 구절을 quote로 되돌려 저장한다.
+        const found = tag.quote.trim() ? findQuote(text, tag.quote) : null;
+        const quoteVerified = found !== null;
         return quoteVerified
           ? {
               ...tag,
-              quote: text.slice(at, at + tag.quote.length),
+              quote: found,
               quoteVerified,
             }
           : {

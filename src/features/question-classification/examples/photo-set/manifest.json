@@ -1,0 +1,421 @@
+[
+  {
+    "image": "page-01-M24.jpg",
+    "subject": "M",
+    "printedPage": 24,
+    "layout": {
+      "columns": 1,
+      "numberStyle": "pad4",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "math-ex-01",
+        "printedNumber": "0001",
+        "text": "단, x ≠ 3일 때 (x² − 9)/(x − 3)을 간단히 하시오."
+      },
+      {
+        "itemId": "math-ex-02",
+        "printedNumber": "0002",
+        "text": "f(x) = x² − 9일 때 f(4)를 구하시오."
+      },
+      {
+        "itemId": "math-ex-03",
+        "printedNumber": "0003",
+        "text": "f(x) = 3x² − 2x일 때 f′(2)를 구하시오."
+      },
+      {
+        "itemId": "math-ex-04",
+        "printedNumber": "0004",
+        "text": "극한 lim(h→0) [f(2+h) − f(2)]/h가 미분가능한 함수 f의 어떤 값을 뜻하는지 기호로 쓰시오."
+      }
+    ]
+  },
+  {
+    "image": "page-02-M25.jpg",
+    "subject": "M",
+    "printedPage": 25,
+    "layout": {
+      "columns": 2,
+      "numberStyle": "dot",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "math-ex-05",
+        "printedNumber": "5",
+        "text": "함수 y = f(x)의 그래프에 점 (2, 5)가 표시되어 있다. f(2)는 얼마인가?"
+      },
+      {
+        "itemId": "math-ex-06",
+        "printedNumber": "6",
+        "text": "그래프에 표시된 (0, 1), (2, 5)를 지나는 직선의 식을 쓰시오."
+      },
+      {
+        "itemId": "math-ex-07",
+        "printedNumber": "7",
+        "text": "f는 2에서 미분가능하다. lim(h→0) [f(2+h) − f(2)]/h를 f의 도함수 기호로 나타내시오."
+      },
+      {
+        "itemId": "math-ex-08",
+        "printedNumber": "8",
+        "text": "f(x) = x²일 때 f′(2)를 계산하시오."
+      }
+    ]
+  },
+  {
+    "image": "page-03-M26.jpg",
+    "subject": "M",
+    "printedPage": 26,
+    "layout": {
+      "columns": 1,
+      "numberStyle": "pad4",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "math-ex-09",
+        "printedNumber": "0009",
+        "text": "함수 f는 모든 실수 x에 대해 f(−x) = f(x)를 만족시킨다. 이 함수의 그래프는 무엇에 대해 대칭인가?"
+      },
+      {
+        "itemId": "math-ex-10",
+        "printedNumber": "0010",
+        "text": "미분가능한 함수 f가 모든 실수 x에 대해 f(−x) = f(x)를 만족시킨다. f′(0)의 값을 구하시오."
+      },
+      {
+        "itemId": "math-ex-11",
+        "printedNumber": "0011",
+        "text": "기본요금은 1,000원이고 1 km마다 200원이 추가된다. x km 이용 요금을 식으로 나타내시오."
+      },
+      {
+        "itemId": "math-ex-12",
+        "printedNumber": "0012",
+        "text": "이용 요금은 1,000 + 200x원이다. 3 km 요금을 구하시오."
+      },
+      {
+        "itemId": "math-ex-13",
+        "printedNumber": "0013",
+        "text": "정사각형 타일을 한 줄로 이어 붙인 1칸, 2칸, 3칸 그림이 있다. 같은 방식으로 n칸을 붙일 때 바깥 둘레의 단위 변 개수에 어떤 규칙이 있는지 설명하시오."
+      }
+    ]
+  },
+  {
+    "image": "page-04-M27.jpg",
+    "subject": "M",
+    "printedPage": 27,
+    "layout": {
+      "columns": 2,
+      "numberStyle": "plain",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "math-ex-14",
+        "printedNumber": "14",
+        "text": "n칸의 바깥 둘레는 2n + 2이다. 10칸의 둘레를 구하시오."
+      },
+      {
+        "itemId": "math-ex-15",
+        "printedNumber": "15",
+        "text": "함수 f는 [1, 3]에서 연속이고 f(1) = −2, f(3) = 5이다. 열린구간 (1, 3) 안의 방정식 f(x) = 0의 해의 개수에 대해 무엇을 확실히 말할 수 있는가?"
+      },
+      {
+        "itemId": "math-ex-16",
+        "printedNumber": "16",
+        "text": "주어진 그래프에서 x축과 만나는 점의 개수를 읽으시오."
+      },
+      {
+        "itemId": "math-ex-17",
+        "printedNumber": "17",
+        "text": "‘모든 실수 x에 대해 x² ≥ x이다’의 참·거짓을 판단하고 이유를 쓰시오."
+      },
+      {
+        "itemId": "math-ex-18",
+        "printedNumber": "18",
+        "text": "x = 1/2일 때 x² − x의 값을 고르시오."
+      }
+    ]
+  },
+  {
+    "image": "page-05-M28.jpg",
+    "subject": "M",
+    "printedPage": 28,
+    "layout": {
+      "columns": 1,
+      "numberStyle": "dot",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "math-ex-19",
+        "printedNumber": "19",
+        "text": "직선 y = 2x + k가 포물선 y = x²에 접할 때 k를 구하시오."
+      },
+      {
+        "itemId": "math-ex-20",
+        "printedNumber": "20",
+        "text": "x² − 2x − k = 0의 판별식이 0이다. k를 구하시오."
+      },
+      {
+        "itemId": "math-ex-21",
+        "printedNumber": "21",
+        "text": "1부터 100까지의 자연수 중 3의 배수도 5의 배수도 아닌 수는 몇 개인가?"
+      },
+      {
+        "itemId": "math-ex-22",
+        "printedNumber": "22",
+        "text": "3의 배수는 33개, 5의 배수는 20개, 공배수는 6개다. 100 − (33 + 20 − 6)을 계산하시오."
+      }
+    ]
+  },
+  {
+    "image": "page-06-M29.jpg",
+    "subject": "M",
+    "printedPage": 29,
+    "layout": {
+      "columns": 2,
+      "numberStyle": "pad4",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "math-ex-23",
+        "printedNumber": "0023",
+        "text": "직선 y = 2x + k가 포물선 y = x²에 접한다. 이 직선과 x축, y축으로 둘러싸인 삼각형의 넓이를 구하시오."
+      },
+      {
+        "itemId": "math-ex-24",
+        "printedNumber": "0024",
+        "text": "현장학습에 38명이 간다. 12인승 차량은 한 대에 8만 원, 20인승은 12만 원이다. 모두 탈 수 있는 가장 저렴한 대여 방법을 구하시오."
+      },
+      {
+        "itemId": "math-ex-25",
+        "printedNumber": "0025",
+        "text": "20인승 차량 두 대를 빌리기로 했다. 대당 12만 원이면 총액은 얼마인가?"
+      }
+    ]
+  },
+  {
+    "image": "page-07-E112.jpg",
+    "subject": "E",
+    "printedPage": 112,
+    "layout": {
+      "columns": 1,
+      "numberStyle": "plain",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "english-ex-01",
+        "printedNumber": "1",
+        "text": "Trees shade sidewalks. They also cool nearby buildings. 두 문장을 함께 포괄하는 제목을 고르시오."
+      },
+      {
+        "itemId": "english-ex-02",
+        "printedNumber": "2",
+        "text": "Trees shade sidewalks. They also cool nearby buildings. 나무가 무엇에 그늘을 만드는지 본문에서 찾으시오."
+      },
+      {
+        "itemId": "english-ex-03",
+        "printedNumber": "3",
+        "text": "The tour is free, but visitors must book by Friday. 방문객의 예약 마감일은 언제인가?"
+      },
+      {
+        "itemId": "english-ex-04",
+        "printedNumber": "4",
+        "text": "The tour is free, but visitors must book by Friday. 이 안내문을 쓴 목적은 무엇인가?"
+      }
+    ]
+  },
+  {
+    "image": "page-08-E113.jpg",
+    "subject": "E",
+    "printedPage": 113,
+    "layout": {
+      "columns": 2,
+      "numberStyle": "dot",
+      "folio": "top"
+    },
+    "items": [
+      {
+        "itemId": "english-ex-05",
+        "printedNumber": "5",
+        "text": "The first version failed. Its errors showed us what to change. Failure was our map. 마지막 문장의 ‘Failure was our map’이 뜻하는 바로 가장 적절한 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-06",
+        "printedNumber": "6",
+        "text": "The first version failed. Its errors showed us what to change. Failure was our map. ‘Its errors’에서 ‘Its’가 가리키는 대상을 고르시오."
+      },
+      {
+        "itemId": "english-ex-07",
+        "printedNumber": "7",
+        "text": "The last bus leaves before evening classes end. Please run one later service. 필자가 요구하는 조치로 가장 적절한 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-08",
+        "printedNumber": "8",
+        "text": "The last bus leaves before evening classes end. Please run one later service. 마지막 버스는 저녁 수업이 끝나기 전과 후 중 언제 떠나는가?"
+      },
+      {
+        "itemId": "english-ex-09",
+        "printedNumber": "9",
+        "text": "The last bus leaves before evening classes end. Please run one later service. 윗글의 요지로 가장 적절한 것은?"
+      },
+      {
+        "itemId": "english-ex-10",
+        "printedNumber": "10",
+        "text": "The last bus leaves before evening classes end. Please run one later service. 필자가 주장하는 바로 가장 적절한 것은?"
+      }
+    ]
+  },
+  {
+    "image": "page-09-E114.jpg",
+    "subject": "E",
+    "printedPage": 114,
+    "layout": {
+      "columns": 1,
+      "numberStyle": "plain",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "english-ex-11",
+        "printedNumber": "11",
+        "text": "Mia kept checking the clock. When her missing dog ran in, her shoulders relaxed. Mia의 심경 변화로 가장 적절한 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-12",
+        "printedNumber": "12",
+        "text": "Mia kept checking the clock. When her missing dog ran in, her shoulders relaxed. Mia가 계속 확인한 물건은 무엇인가?"
+      },
+      {
+        "itemId": "english-ex-13",
+        "printedNumber": "13",
+        "text": "One bee finds a flower and signals its location. Soon dozens arrive. The colony benefits because ___. 빈칸에 들어갈 말로 가장 적절한 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-14",
+        "printedNumber": "14",
+        "text": "One bee [signal / signals] its location. 괄호 안에서 알맞은 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-15",
+        "printedNumber": "15",
+        "text": "[듣기 대본] I missed the last train. Could I use your phone? 대화의 마지막 말에 대한 응답으로 가장 적절한 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-16",
+        "printedNumber": "16",
+        "text": "[듣기 대본] I missed the last train. Could I use your phone? 대화를 듣고 화자가 빌리고 싶어 하는 물건을 고르시오."
+      }
+    ]
+  },
+  {
+    "image": "page-10-E115.jpg",
+    "subject": "E",
+    "printedPage": 115,
+    "layout": {
+      "columns": 1,
+      "numberStyle": "dot",
+      "folio": "top"
+    },
+    "items": [
+      {
+        "itemId": "english-ex-17",
+        "printedNumber": "17",
+        "text": "A jar fell off the shelf. ( ① ) We swept up the pieces. ( ② ) 글의 흐름으로 보아 주어진 문장 ‘It shattered on the floor.’가 들어가기에 가장 적절한 곳을 고르시오."
+      },
+      {
+        "itemId": "english-ex-18",
+        "printedNumber": "18",
+        "text": "A jar fell off the shelf. ___ We swept up the pieces. 빈칸에 들어갈 문장으로 가장 적절한 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-19",
+        "printedNumber": "19",
+        "text": "(A) We served the soup. (B) We chopped the onions. (C) We boiled them in broth. 글의 순서로 가장 적절한 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-20",
+        "printedNumber": "20",
+        "text": "(A) We served the soup. (B) We chopped the onions. (C) We boiled them in broth. (C)의 ‘them’이 가리키는 단어를 고르시오."
+      }
+    ]
+  },
+  {
+    "image": "page-11-E116.jpg",
+    "subject": "E",
+    "printedPage": 116,
+    "layout": {
+      "columns": 2,
+      "numberStyle": "plain",
+      "folio": "bottom"
+    },
+    "items": [
+      {
+        "itemId": "english-ex-21",
+        "printedNumber": "21",
+        "text": "① Bees carry pollen between flowers. ② My uncle collects stamps. ③ This helps plants produce seeds. 전체 흐름과 관계 없는 문장을 고르시오."
+      },
+      {
+        "itemId": "english-ex-22",
+        "printedNumber": "22",
+        "text": "① Bees carry pollen between flowers. ② My uncle collects stamps. ③ This helps plants produce seeds. 벌이 꽃 사이로 옮기는 것은 무엇인가?"
+      },
+      {
+        "itemId": "english-ex-23",
+        "printedNumber": "23",
+        "text": "Shoppers used fewer bags when stores charged for them. 윗글의 내용을 한 문장으로 요약할 때 빈칸에 들어갈 말을 고르시오. 요약문: A bag ___ reduced bag ___."
+      },
+      {
+        "itemId": "english-ex-24",
+        "printedNumber": "24",
+        "text": "Shoppers used fewer bags when stores charged for them. 윗글의 제목으로 가장 적절한 것을 고르시오."
+      }
+    ]
+  },
+  {
+    "image": "page-12-E117.jpg",
+    "subject": "E",
+    "printedPage": 117,
+    "layout": {
+      "columns": 1,
+      "numberStyle": "dot",
+      "folio": "top"
+    },
+    "items": [
+      {
+        "itemId": "english-ex-25",
+        "printedNumber": "25",
+        "text": "The box of pencils [is / are] on the desk. 괄호 안에서 알맞은 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-26",
+        "printedNumber": "26",
+        "text": "The box is [empty / full]. There is nothing inside. 괄호 안에서 알맞은 것을 고르시오."
+      },
+      {
+        "itemId": "english-ex-27",
+        "printedNumber": "27",
+        "text": "The path was narrow, so the hikers walked in single file. ‘narrow’와 뜻이 가장 가까운 말을 고르시오."
+      },
+      {
+        "itemId": "english-ex-28",
+        "printedNumber": "28",
+        "text": "The path was narrow, so the hikers walked in single file. 등산객들은 어떤 대형으로 걸었는가?"
+      },
+      {
+        "itemId": "english-ex-29",
+        "printedNumber": "29",
+        "text": "Lena put the keys in a drawer because she kept losing them. ‘them’이 가리키는 대상을 고르시오."
+      },
+      {
+        "itemId": "english-ex-30",
+        "printedNumber": "30",
+        "text": "Lena [keep / keeps] losing the keys. 괄호 안에서 알맞은 것을 고르시오."
+      }
+    ]
+  }
+]

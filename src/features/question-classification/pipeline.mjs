@@ -82,68 +82,89 @@ export async function classifyAssignment(
   }
   const { aliased, restore } = aliasItemIds(readable);
   if (!readable.items.length) runs.push(inAssignmentOrder([]));
+  // 응답이 형식 검증을 통과하지 못하면(빈 reasoning, 문항 수 불일치, 깨진 JSON) 사진 전체가
+  // 실패하므로 그 경우에만 같은 요청을 한 번 더 보낸다. HTTP 오류와 출력 한도 초과는 재시도하지 않는다.
+  let retries = 0;
   for (let i = 0; readable.items.length && i < Number(repeats); i++) {
-    const response = await fetch(
-      'https://clovastudio.stream.ntruss.com/v3/chat-completions/' +
-        encodeURIComponent(model),
-      {
-        method: 'POST',
-        redirect: 'error',
-        signal: AbortSignal.timeout(120000),
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + key,
+    for (let attempt = 0; ; attempt++) {
+      const response = await fetch(
+        'https://clovastudio.stream.ntruss.com/v3/chat-completions/' +
+          encodeURIComponent(model),
+        {
+          method: 'POST',
+          redirect: 'error',
+          signal: AbortSignal.timeout(120000),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + key,
+          },
+          body: JSON.stringify({
+            ...(model === 'HCX-007'
+              ? {
+                  maxCompletionTokens: 4096,
+                  thinking: { effort: 'none' },
+                  responseFormat: {
+                    type: 'json',
+                    schema: clovaOutputSchema(assignment.subject),
+                  },
+                }
+              : { maxTokens: 4096 }),
+            messages: [
+              { role: 'system', content: instructions },
+              {
+                role: 'user',
+                content: JSON.stringify(
+                  aliased.items.map(({ itemId, text }) => ({ itemId, text })),
+                ),
+              },
+            ],
+          }),
         },
-        body: JSON.stringify({
-          ...(model === 'HCX-007'
-            ? {
-                maxCompletionTokens: 4096,
-                thinking: { effort: 'none' },
-                responseFormat: {
-                  type: 'json',
-                  schema: clovaOutputSchema(assignment.subject),
-                },
-              }
-            : { maxTokens: 4096 }),
-          messages: [
-            { role: 'system', content: instructions },
-            {
-              role: 'user',
-              content: JSON.stringify(
-                aliased.items.map(({ itemId, text }) => ({ itemId, text })),
-              ),
-            },
-          ],
-        }),
-      },
-    );
-    if (!response.ok)
-      throw Error('CLOVA Studio HTTP ' + response.status + ' (' + model + ')');
-    const reply = await response.json();
-    const tokens = reply.result?.usage ?? null;
-    usage.push(tokens);
-    console.log('CLOVA token usage:', JSON.stringify(tokens));
-    if (reply.result?.finishReason === 'length')
-      throw Error(
-        'CLOVA Studio 응답이 출력 한도에 도달했습니다. 한 번에 넣는 문항 수를 줄여 주세요.',
       );
-    const content = reply.result?.message?.content;
-    if (typeof content !== 'string')
-      throw Error('CLOVA Studio 응답에 분류 결과가 없습니다.');
-    const json = content
-      .trim()
-      .replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1');
-    runs.push(
-      inAssignmentOrder(
-        annotateEvidence(
-          restore(verifyResponse(aliased, JSON.parse(json))),
-          figures,
-          builtTexts,
-        ),
-      ),
-    );
+      if (!response.ok)
+        throw Error(
+          'CLOVA Studio HTTP ' + response.status + ' (' + model + ')',
+        );
+      const reply = await response.json();
+      const tokens = reply.result?.usage ?? null;
+      usage.push(tokens);
+      console.log('CLOVA token usage:', JSON.stringify(tokens));
+      if (reply.result?.finishReason === 'length')
+        throw Error(
+          'CLOVA Studio 응답이 출력 한도에 도달했습니다. 한 번에 넣는 문항 수를 줄여 주세요.',
+        );
+      const content = reply.result?.message?.content;
+      try {
+        if (typeof content !== 'string')
+          throw Error('CLOVA Studio 응답에 분류 결과가 없습니다.');
+        const json = content
+          .trim()
+          .replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1');
+        runs.push(
+          inAssignmentOrder(
+            annotateEvidence(
+              restore(
+                verifyResponse(aliased, JSON.parse(json), {
+                  lenient: attempt >= 1,
+                }),
+              ),
+              figures,
+              builtTexts,
+            ),
+          ),
+        );
+        break;
+      } catch (error) {
+        if (attempt >= 1) throw error;
+        retries += 1;
+        console.log(
+          'CLOVA 분류 응답 검증 실패, 한 번 더 요청:',
+          error.message.slice(0, 200),
+        );
+      }
+    }
   }
   const classifiedAt = new Date().toISOString();
   const record = makeHandoff(assignment, runs, classifiedAt);
-  return { record, model, classifiedAt, runs, usage };
+  return { record, model, classifiedAt, runs, usage, retries };
 }

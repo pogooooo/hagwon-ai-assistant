@@ -498,3 +498,340 @@ test('행동을 판정하고 태그를 누락한 응답은 거절하고, 근거 
   assert.equal(item.itemStatus, 'no_adopted');
   assert.deepEqual(item.tags, []);
 });
+
+import {
+  cleanDisplayNumber,
+  passageNumbers,
+  pagesFromReadings,
+} from './read-page.mjs';
+
+// 사진 평가 세트(examples/photo-set)에서 실제로 나온 판독 실패를 재현한다.
+const bs = String.fromCharCode(92);
+const tex = (s: string) => s.replaceAll('~', bs);
+
+test('JSON 복구는 \neq·\to·\text·\frac 같은 LaTeX 명령을 줄바꿈·탭으로 바꾸지 않는다', () => {
+  const raw = tex(
+    '{"items":[{"displayNumber":"1","text":"$x ~neq 3$, $~lim_{h~to 0}$, $1~:~text{km}$, $~frac{1}{2}$, $~times$, $~right)$~n다음 줄"}]}',
+  );
+  const [item] = parsePageReading(raw);
+  assert.equal(
+    item.text,
+    tex(
+      '$x ~neq 3$, $~lim_{h~to 0}$, $1~:~text{km}$, $~frac{1}{2}$, $~times$, $~right)$',
+    ) + '\n다음 줄',
+  );
+});
+
+test('판독 번호의 마침표와 본문에 되풀이된 번호를 걷어 내고 최상위 쪽수를 문항에 넣는다', () => {
+  assert.equal(cleanDisplayNumber('5.'), '5');
+  assert.equal(cleanDisplayNumber('12번'), '12');
+  assert.equal(cleanDisplayNumber('0009'), '0009');
+  const items = parsePageReading(
+    JSON.stringify({
+      printedPage: '25',
+      items: [
+        { displayNumber: '7.', text: '7. f는 2에서 미분가능하다.' },
+        { displayNumber: '8', text: '8.f(x) = x²', printedPage: 26 },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    items.map((i) => [i.displayNumber, i.text, i.printedPage]),
+    [
+      ['7', 'f는 2에서 미분가능하다.', 25],
+      ['8', 'f(x) = x²', 26],
+    ],
+  );
+});
+
+test('공유 지문은 범위 안의 문항 앞에 한 번씩 붙이고 이미 들어 있으면 다시 붙이지 않는다', () => {
+  assert.deepEqual(passageNumbers('[7–10]'), ['7', '8', '9', '10']);
+  assert.deepEqual(passageNumbers('11, 12'), ['11', '12']);
+  const items = parsePageReading(
+    JSON.stringify({
+      passages: [{ numbers: '7~8', text: 'The last bus leaves early.' }],
+      items: [
+        { displayNumber: '7', text: '필자가 요구하는 조치는?' },
+        {
+          displayNumber: '8',
+          text: 'The last bus leaves early. 언제 떠나는가?',
+        },
+        { displayNumber: '9', text: '괄호 안에서 고르시오.' },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    items.map((i) => i.text),
+    [
+      'The last bus leaves early.\n필자가 요구하는 조치는?',
+      'The last bus leaves early. 언제 떠나는가?',
+      '괄호 안에서 고르시오.',
+    ],
+  );
+});
+
+test('수학 두 판독 비교는 LaTeX 표기·한글 앞 공백 차이를 접고 숫자 사이 공백과 괄호 차이는 보류한다', () => {
+  assert.equal(
+    compareMathReadings(
+      tex('단, $x ~neq 3$ 일 때 33 개'),
+      tex('단, $x ~ne 3$일 때 33개'),
+    ),
+    null,
+  );
+  assert.equal(
+    compareMathReadings(
+      tex('$f^{~prime}(2)$ $1~:~text{km}$'),
+      "$f'(2)$ $1 km$",
+    ),
+    null,
+  );
+  assert.equal(
+    compareMathReadings(
+      tex('$~lim~limits _{h~to 0}~dfrac{a}{h}$'),
+      tex('$~lim_{h~to0}~frac{a}{h}$'),
+    ),
+    null,
+  );
+  assert.ok(compareMathReadings('x = 12', 'x = 1 2'));
+  assert.ok(compareMathReadings('[f(2+h)-f(2)]/h', '(f(2+h)-f(2))/h'));
+});
+
+test('쪽수는 모든 판독이 같은 값 하나를 읽었을 때만 채택한다', () => {
+  assert.equal(
+    pagesFromReadings([[{ printedPage: 24 }], [{ printedPage: 24 }, {}]]),
+    24,
+  );
+  assert.equal(
+    pagesFromReadings([[{ printedPage: 24 }], [{ printedPage: 2 }]]),
+    undefined,
+  );
+  assert.equal(pagesFromReadings([[{}], []]), undefined);
+});
+
+test('교차 검수 응답의 번호 표기(5.)가 달라도 같은 문항으로 맞춘다', () => {
+  const [item] = applyCrossCheck(
+    [{ displayNumber: '5', text: 'f(2)는?' }],
+    [{ displayNumber: '5.', verdict: '일치' }],
+  );
+  assert.equal(item.text, 'f(2)는?');
+});
+
+test('판독 JSON이 마지막 닫는 괄호만 빠뜨리면 닫아 주고, 문자열이 잘린 응답은 그대로 실패한다', () => {
+  const items = parsePageReading(
+    '{"printedPage":25,"passages":[],"items":[{"displayNumber":"5","text":"f(2)는?"}]',
+  );
+  assert.deepEqual(
+    items.map((i) => [i.displayNumber, i.printedPage]),
+    [['5', 25]],
+  );
+  assert.throws(
+    () => parsePageReading('{"items":[{"displayNumber":"5","text":"f(2'),
+    /판독 JSON 해석 실패/,
+  );
+});
+
+import { classifyAssignment } from './pipeline.mjs';
+
+test('분류 응답이 형식 검증에 실패하면 한 번만 다시 요청하고, 두 번 실패하면 오류를 낸다', async (t) => {
+  t.mock.method(console, 'log', () => {});
+  const saved = process.env.CLOVA_STUDIO_API_KEY;
+  process.env.CLOVA_STUDIO_API_KEY = 'test-key';
+  t.after(() => {
+    if (saved === undefined) delete process.env.CLOVA_STUDIO_API_KEY;
+    else process.env.CLOVA_STUDIO_API_KEY = saved;
+  });
+  const replies: ((id: string) => unknown)[] = [];
+  let calls = 0;
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async (_url: string, init: RequestInit) => {
+      calls += 1;
+      const body = JSON.parse(String(init.body));
+      const [{ itemId }] = JSON.parse(body.messages[1].content);
+      const content = JSON.stringify(replies.shift()!(itemId));
+      return new Response(
+        JSON.stringify({ result: { message: { content }, usage: {} } }),
+      );
+    },
+  );
+  const assessed = (reasoning: string) => (itemId: string) => ({
+    items: [
+      {
+        itemId,
+        disposition: 'assessed',
+        reasoning,
+        tags: [
+          {
+            tagId: 'math-02',
+            quote: 'f(4)를 구하시오',
+            action: '대입',
+            status: 'adopted',
+            reason: '',
+          },
+        ],
+      },
+    ],
+  });
+  const assignment = {
+    assignmentId: 'retry',
+    subject: 'M',
+    items: [
+      {
+        itemId: 'q1',
+        page: 1,
+        displayNumber: '1',
+        text: 'f(x) = x² − 9일 때 f(4)를 구하시오.',
+      },
+    ],
+  };
+  replies.push(assessed(''), assessed('f(4) = 16 − 9 = 7'));
+  const ok = await classifyAssignment(assignment);
+  assert.equal(calls, 2);
+  assert.equal(ok.retries, 1);
+  assert.equal(ok.usage.length, 2);
+  assert.equal(ok.record.items[0].itemStatus, 'classified');
+
+  calls = 0;
+  replies.push(assessed(''), assessed(''));
+  await assert.rejects(classifyAssignment(assignment));
+  assert.equal(calls, 2);
+});
+
+test('판독 JSON 문자열 안의 이스케이프 안 된 큰따옴표와 빠진 닫는 따옴표를 복구한다', () => {
+  const [boxed] = parsePageReading(
+    '{"items":[{"displayNumber":"12","text":"조건을 만족한다.\n<box label="">(가) a=1</box>"}]}',
+  );
+  assert.equal(boxed.text, '조건을 만족한다.\n<box label="">(가) a=1</box>');
+  const items = parsePageReading(
+    '{"items":[\n {"displayNumber":"23","text":"값은? ⑤ $1$\n },\n {"displayNumber":"24","text":"He said "stop", then left."}\n]}',
+  );
+  assert.deepEqual(
+    items.map((i) => [i.displayNumber, i.text]),
+    [
+      ['23', '값은? ⑤ $1$'],
+      ['24', 'He said "stop", then left.'],
+    ],
+  );
+});
+
+import { findQuote } from './classify.mjs';
+
+test('인용 대조는 원문의 줄바꿈·공백 차이를 같게 보고 원문 구간을 그대로 돌려준다', () => {
+  const text =
+    'musicians owe it to themselves to become\n“researchers” just like everyone else.';
+  assert.equal(
+    findQuote(text, 'to become "researchers" just like'),
+    'to become\n“researchers” just like',
+  );
+  assert.equal(findQuote(text, 'to become scientists'), null);
+  assert.equal(findQuote(text, '   '), null);
+});
+
+test('인용 대조는 모델이 뺀 밑줄 위치 번호(①)를 같게 보되 다른 낱말은 거절한다', () => {
+  const text = 'then we can ① confidently deduce\nthe outcome.';
+  assert.equal(
+    findQuote(text, 'we can confidently deduce the outcome'),
+    'we can ① confidently deduce\nthe outcome',
+  );
+  assert.equal(findQuote(text, 'we can safely deduce the outcome'), null);
+});
+
+import { mathStem } from './read-image.mjs';
+
+test('수학 두 판독이 선택지·배점만 다르면 합의한 발문으로 통과하고, 발문이 다르면 보류한다', () => {
+  assert.equal(
+    mathStem('쌍곡선의 점근선이 y=2x일 때, a의 값은? [$3$점]\r\n① $2$\n② $3$'),
+    '쌍곡선의 점근선이 y=2x일 때, a의 값은?',
+  );
+  const [choicesDiffer, stemDiffers, same] = mergeMathPage(
+    [
+      { displayNumber: '24', text: 'a의 값은?\n① $2$\n② $3$' },
+      { displayNumber: '25', text: '$\log_{b}a^{2}=2$일 때 값은?' },
+      { displayNumber: '26', text: 'f(2)의 값은? ① 1 ② 2' },
+    ],
+    [
+      { displayNumber: '24', text: 'a의 값은? [$3$점]\n① $1$\n② [불명]' },
+      { displayNumber: '25', text: '$\log_{b}a=2$일 때 값은? [$3$점]' },
+      { displayNumber: '26', text: 'f(2)의 값은? ① 1 ② 2' },
+    ],
+  );
+  assert.deepEqual(choicesDiffer, { displayNumber: '24', text: 'a의 값은?' });
+  assert.equal(stemDiffers.text, '');
+  assert.equal(stemDiffers.holdReason, '수학 문항의 두 판독이 일치하지 않음');
+  assert.equal(same.text, 'f(2)의 값은? ① 1 ② 2');
+});
+
+test('수식으로 감싼 되풀이 번호($18.$, $19$.)도 걷어 낸다', () => {
+  const items = parsePageReading(
+    JSON.stringify({
+      items: [
+        { displayNumber: '18', text: '$18.$ 함수 f의 최솟값은?' },
+        { displayNumber: '19', text: '$19$. 삼차함수 f(x)' },
+      ],
+    }),
+  );
+  assert.deepEqual(
+    items.map((i) => i.text),
+    ['함수 f의 최솟값은?', '삼차함수 f(x)'],
+  );
+});
+
+test('JSON 판독에서 16진수가 따르지 않는 역슬래시 u(underline)는 글자로 남긴다', () => {
+  const [item] = parsePageReading(
+    tex('{"items":[{"displayNumber":"1","text":"~underline{AB}와 ~u0041"}]}'),
+  );
+  assert.equal(item.text, tex('~underline{AB}와 A'));
+});
+
+test('같은 유형이 두 번 나오면 쪽 전체를 실패시키지 않고, 판정이 같으면 하나로, 갈리면 보류로 남긴다', () => {
+  const [same] = verifyResponse(assignment, response([valid, valid]));
+  assert.deepEqual(
+    same.tags.map((t: { tagId: string; status: string }) => [
+      t.tagId,
+      t.status,
+    ]),
+    [['math-05', 'adopted']],
+  );
+  const [split] = verifyResponse(
+    assignment,
+    response([valid, { ...valid, status: 'held' }]),
+  );
+  assert.deepEqual(
+    split.tags.map((t: { tagId: string; status: string; reason: string }) => [
+      t.tagId,
+      t.status,
+      t.reason,
+    ]),
+    [['math-05', 'held', '같은 유형에 서로 다른 판정이 나옴']],
+  );
+});
+
+test('재시도 응답에서도 문항이 빠지거나 겹치면 그 문항만 판정 없음으로 두고 나머지는 살린다', () => {
+  const two = {
+    ...assignment,
+    items: [
+      ...assignment.items,
+      { itemId: 'q2', page: 1, displayNumber: '2', text: '값을 구하시오.' },
+    ],
+  };
+  const reply = response([valid]);
+  assert.throws(() => verifyResponse(two, reply), /문항 수/);
+  const [kept, missing] = verifyResponse(two, reply, { lenient: true });
+  assert.equal(kept.tags[0].status, 'adopted');
+  assert.equal(missing.disposition, 'unreadable');
+  const doubled = { items: [...reply.items, ...reply.items] };
+  const [dup] = verifyResponse(assignment, doubled, { lenient: true });
+  assert.equal(dup.reasoning, '분류 응답에 같은 문항이 여러 번 나옴');
+});
+
+test('인용 대조는 판독이 잃은 띄어쓰기와 $·중괄호·\\left·\\right 표기 차이를 같게 보되 다른 글자는 거절한다', () => {
+  const text = String.raw`두상수$a\left(a>1\right)$ 에 대하여 곡선$y=a^{x}$`;
+  assert.equal(
+    findQuote(text, String.raw`두 상수 $a (a > 1)$ 에 대하여 곡선 $y = a^x$`),
+    // 원문 구간은 마지막으로 대조된 글자(x)에서 끝난다.
+    String.raw`두상수$a\left(a>1\right)$ 에 대하여 곡선$y=a^{x`,
+  );
+  assert.equal(findQuote(text, '두 상수 a (a > 2)'), null);
+  assert.equal(findQuote(text, '세 상수'), null);
+});

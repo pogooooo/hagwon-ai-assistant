@@ -322,3 +322,273 @@ test('두 쪽의 분석 결과와 수기 문항 검수·배정, 학생 오답 �
   );
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
 });
+
+test('OCR 판독으로 수학 대분류를 추천하고, 배정해도 문항 원문은 남기지 않는다', async (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec('PRAGMA foreign_keys=ON');
+  initializeIdentity(db, 'workbook-ocr-test');
+  homeworkModule.setup(db);
+  setupLearning(db);
+  const teacher = {
+    db,
+    actor: getActor(db, 'TA_TEACHER')!,
+    url: new URL('http://localhost/homework'),
+  };
+  const saved = { ...process.env };
+  process.env.CLOVA_STUDIO_API_KEY = 'test';
+  process.env.CLOVA_OCR_INVOKE_URL = 'https://ocr.example.test/general';
+  process.env.CLOVA_OCR_SECRET = 'test-secret';
+  t.after(() => {
+    for (const k of [
+      'CLOVA_STUDIO_API_KEY',
+      'CLOVA_OCR_INVOKE_URL',
+      'CLOVA_OCR_SECRET',
+    ])
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+  });
+  // OCR 한 줄: 낱말마다 위치와 줄 끝 표시.
+  const line = (text: string, x: number, y: number) =>
+    text.split(' ').map((w, n, all) => ({
+      inferText: w,
+      inferConfidence: 0.99,
+      lineBreak: n === all.length - 1,
+      boundingPoly: {
+        vertices: [
+          { x: x + n * 40, y },
+          { x: x + (n + 1) * 40, y },
+          { x: x + (n + 1) * 40, y: y + 30 },
+          { x: x + n * 40, y: y + 30 },
+        ],
+      },
+    }));
+  const fields = [
+    ...line('5. 등차수열 a_n에서 a_2=5일 때 a_10의 값은?', 40, 40),
+    ...line('6. 등차수열 a_n의 합을 구하시오.', 40, 300),
+    ...line('7', 440, 720),
+  ];
+  const areaPrompts: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+    if (String(url).includes('ocr.example.test'))
+      return Response.json({ images: [{ inferResult: 'SUCCESS', fields }] });
+    const body = JSON.parse(String(init.body));
+    const content = (text: string) =>
+      Response.json({ result: { message: { content: text } } });
+    // 문항 잘라 읽기(HCX-005)
+    if (body.messages.length === 1)
+      return content(
+        '등차수열 $\{a_{n}\}$에서 $a_{2}=5$일 때 $a_{10}$의 값은?',
+      );
+    // 대분류 추천
+    if (String(body.messages[1].content).startsWith('문항:')) {
+      areaPrompts.push(body.messages[0].content);
+      return content('{"area":"이해"}');
+    }
+    // 기존 분류(소분류 태그): 계산·이해 태그를 함께 내도 대분류 추천과 같은 묶음만 남아야 한다.
+    const items = JSON.parse(body.messages[1].content).map(
+      (i: { itemId: string }) => ({
+        itemId: i.itemId,
+        disposition: 'assessed',
+        reasoning: '등차수열의 일반항',
+        tags: ['math-02', 'math-04'].map((tagId) => ({
+          tagId,
+          quote: '등차수열',
+          action: '일반항',
+          reason: '',
+          status: 'adopted',
+        })),
+      }),
+    );
+    return content(JSON.stringify({ items }));
+  });
+  const photo = new FormData();
+  photo.set('subject', 'M');
+  photo.set(
+    'photo',
+    new File(
+      [
+        readFileSync(
+          new URL(
+            '../question-classification/examples/math-page-demo.png',
+            import.meta.url,
+          ),
+        ),
+      ],
+      'page.png',
+    ),
+  );
+  const analyzed = await analyzeHomeworkPhoto(teacher, photo);
+  assert.deepEqual(
+    analyzed.map((a) => [a.number, a.page, a.area, a.tagIds]),
+    [
+      ['5', 7, '이해', ['math-04']],
+      ['6', 7, '이해', ['math-04']],
+    ],
+  );
+  assert.equal(areaPrompts.length, 2);
+  // 교사가 확인해 배정해도 문항 원문은 어디에도 남지 않는다(교재 문항은 쪽·번호·유형만).
+  const save = new FormData();
+  for (const [k, v] of Object.entries({
+    action: 'assign-workbook',
+    assignmentId: randomUUID(),
+    subject: 'M',
+    book: '고등 수학',
+    grade: '고3',
+    targetKind: 'class',
+    classId: 'TA_E_MATH',
+    date: '2020-01-10',
+    title: '교재 숙제',
+    items: JSON.stringify([
+      { page: 7, number: '5', tagIds: ['math-04'] },
+      { page: 7, number: '6', tagIds: ['math-02', 'math-04'] },
+    ]),
+  }))
+    save.set(k, v);
+  homeworkModule.submit(teacher, save);
+  assert.equal(
+    db
+      .prepare(
+        "SELECT count(*) n FROM sqlite_master WHERE name='classification_examples'",
+      )
+      .get()?.n,
+    0,
+  );
+  const stored = /에서 \$a_\{2\}=5\$일 때/;
+  for (const table of ['book_questions', 'homework_question_snapshots'])
+    assert.doesNotMatch(
+      JSON.stringify(db.prepare(`SELECT * FROM ${table}`).all()),
+      stored,
+    );
+  // 다음 분석의 대분류 추천도 지어낸 예시만 쓰므로 지시문이 그대로다.
+  await analyzeHomeworkPhoto(teacher, photo);
+  assert.equal(areaPrompts.at(-1), areaPrompts[0]);
+  assert.doesNotMatch(areaPrompts.at(-1)!, stored);
+});
+
+test('영어도 OCR 글로 대분류를 추천하고, 추천 대분류 안의 소분류만 남긴다', async (t) => {
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec('PRAGMA foreign_keys=ON');
+  initializeIdentity(db, 'workbook-ocr-english-test');
+  homeworkModule.setup(db);
+  setupLearning(db);
+  db.prepare(
+    "INSERT INTO classes (id, academy_id, name, subject, grade) VALUES ('TA_E_ENG','AC_TEST_A','초등 영어반','영어','초등')",
+  ).run();
+  db.prepare(
+    "INSERT INTO teacher_classes (teacher_id, class_id) VALUES ('TA_TEACHER','TA_E_ENG')",
+  ).run();
+  const teacher = {
+    db,
+    actor: getActor(db, 'TA_TEACHER')!,
+    url: new URL('http://localhost/homework'),
+  };
+  const saved = { ...process.env };
+  process.env.CLOVA_STUDIO_API_KEY = 'test';
+  process.env.CLOVA_OCR_INVOKE_URL = 'https://ocr.example.test/general';
+  process.env.CLOVA_OCR_SECRET = 'test-secret';
+  t.after(() => {
+    for (const k of [
+      'CLOVA_STUDIO_API_KEY',
+      'CLOVA_OCR_INVOKE_URL',
+      'CLOVA_OCR_SECRET',
+    ])
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+  });
+  const line = (text: string, x: number, y: number) =>
+    text.split(' ').map((w, n, all) => ({
+      inferText: w,
+      inferConfidence: 0.99,
+      lineBreak: n === all.length - 1,
+      boundingPoly: {
+        vertices: [
+          { x: x + n * 40, y },
+          { x: x + (n + 1) * 40, y },
+          { x: x + (n + 1) * 40, y: y + 30 },
+          { x: x + n * 40, y: y + 30 },
+        ],
+      },
+    }));
+  const fields = [
+    ...line('18. 다음 글의 목적으로 가장 적절한 것은?', 40, 40),
+    ...line('Dear residents, the pool will close.', 40, 80),
+    ...line('① 수영장 휴장을 안내하려고', 40, 120),
+    ...line('19. 다음 글의 주제로 가장 적절한 것은?', 40, 300),
+    ...line('Sleep helps memory.', 40, 340),
+  ];
+  const areaCalls: { system: string; user: string }[] = [];
+  let visionCalls = 0;
+  t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+    if (String(url).includes('ocr.example.test'))
+      return Response.json({ images: [{ inferResult: 'SUCCESS', fields }] });
+    const body = JSON.parse(String(init.body));
+    const content = (text: string) =>
+      Response.json({ result: { message: { content: text } } });
+    if (body.messages.length === 1) {
+      visionCalls++;
+      return content('');
+    }
+    if (String(body.messages[1].content).startsWith('문항:')) {
+      areaCalls.push({
+        system: body.messages[0].content,
+        user: body.messages[1].content,
+      });
+      return content(
+        /목적/.test(body.messages[1].content)
+          ? '{"area":"맥락 파악"}'
+          : '{"area":"중심 내용 파악"}',
+      );
+    }
+    // 기존 분류는 두 문항 모두 '목적·의견·주장 파악'(맥락 파악)으로 낸다.
+    const items = JSON.parse(body.messages[1].content).map(
+      (i: { itemId: string }) => ({
+        itemId: i.itemId,
+        disposition: 'assessed',
+        reasoning: '글을 쓴 목적',
+        tags: [
+          {
+            tagId: 'eng-04',
+            quote: '다음 글의',
+            action: '목적 파악',
+            reason: '',
+            status: 'adopted',
+          },
+        ],
+      }),
+    );
+    return content(JSON.stringify({ items }));
+  });
+  const photo = new FormData();
+  photo.set('subject', 'E');
+  photo.set(
+    'photo',
+    new File(
+      [
+        readFileSync(
+          new URL(
+            '../question-classification/examples/math-page-demo.png',
+            import.meta.url,
+          ),
+        ),
+      ],
+      'page.png',
+    ),
+  );
+  const analyzed = await analyzeHomeworkPhoto(teacher, photo);
+  assert.deepEqual(
+    analyzed.map((a) => [a.number, a.area, a.tagIds]),
+    [
+      ['18', '맥락 파악', ['eng-04']],
+      // 추천 대분류(중심 내용 파악) 밖의 소분류는 빼고 교사가 고르게 둔다.
+      ['19', '중심 내용 파악', []],
+    ],
+  );
+  // 영어는 문항을 잘라 다시 읽지 않고, 선택지까지 OCR 글을 그대로 보낸다.
+  assert.equal(visionCalls, 0);
+  assert.equal(areaCalls.length, 2);
+  assert.match(areaCalls[0].user, /① 수영장 휴장을 안내하려고/);
+  assert.match(areaCalls[0].system, /발문\(무엇을 고르라고 하는지\)/);
+  assert.match(areaCalls[0].system, /다음 글의 목적으로 가장 적절한 것은\?/);
+});

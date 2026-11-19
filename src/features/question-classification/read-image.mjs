@@ -7,20 +7,45 @@ const model = 'HCX-005';
 // Only fold presentation differences. Preserve digits, operators and the extent of each exponent.
 function comparableText(text) {
   const superscripts = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+  return (
+    text
+      .normalize('NFC')
+      .replaceAll('$', '')
+      .replaceAll('−', '-')
+      // LaTeX 표기 변형: 간격 명령, \limits, \left·\right, \dfrac·\tfrac, 같은 기호의 다른 이름.
+      .replace(/\\[,:;! ]/g, ' ')
+      .replace(/\\(?:limits|left|right|displaystyle)(?![a-zA-Z])/g, '')
+      .replace(/\\[dt]frac(?![a-zA-Z])/g, '\\frac')
+      .replace(/\\text(?:rm)?\{([^{}]*)\}/g, '$1')
+      .replace(/\^\{?\\prime\}?|′/g, "'")
+      .replace(/\\(?:geq|ge)(?![a-zA-Z])/g, '≥')
+      .replace(/\\(?:leq|le)(?![a-zA-Z])/g, '≤')
+      .replace(/\\(?:to|rightarrow)(?![a-zA-Z])/g, '→')
+      .replace(/\\times(?![a-zA-Z])/g, '×')
+      .replace(/\\(?:neq|ne)(?![a-zA-Z])/g, '≠')
+      .replace(/\\cdot\b/g, '·')
+      .replace(
+        /[⁰¹²³⁴⁵⁶⁷⁸⁹]+/gu,
+        (digits) =>
+          '^{' + [...digits].map((d) => superscripts.indexOf(d)).join('') + '}',
+      )
+      .replace(/\s*([=≠+\-·/^(){},.])\s*/gu, '$1')
+      .replace(/\^(\d)(?!\d)/g, '^{$1}')
+      // 공백은 숫자와 숫자 사이(1 2와 12의 구별)에서만 의미가 있다. 나머지 공백 차이
+      // ("3$ 일"과 "3$일", "33 개"와 "33개")는 접는다.
+      .replace(/\s+/gu, ' ')
+      .replace(/(?<!\d) | (?!\d)/gu, '')
+      .trim()
+  );
+}
+
+// 문항의 발문: 선택지(① 이후)와 배점 표시([3점])를 뺀 부분. 실제 시험지에서 두 판독은
+// 발문은 같고 선택지 분수만 달리 읽는 경우가 많다. 유형 판정에는 발문이면 충분하다.
+export function mathStem(text) {
   return text
-    .normalize('NFC')
-    .replaceAll('$', '')
-    .replaceAll('−', '-')
-    .replace(/\\neq\b/g, '≠')
-    .replace(/\\cdot\b/g, '·')
-    .replace(
-      /[⁰¹²³⁴⁵⁶⁷⁸⁹]+/gu,
-      (digits) =>
-        '^{' + [...digits].map((d) => superscripts.indexOf(d)).join('') + '}',
-    )
-    .replace(/\s*([=≠+\-·/^(){},.])\s*/gu, '$1')
-    .replace(/\^(\d)(?!\d)/g, '^{$1}')
-    .replace(/\s+/gu, ' ')
+    .replace(/\r/g, '')
+    .replace(/(^|\s)①[\s\S]*$/u, '$1')
+    .replace(/\[\s*\$?\d+\$?\s*점\s*\]/g, '')
     .trim();
 }
 

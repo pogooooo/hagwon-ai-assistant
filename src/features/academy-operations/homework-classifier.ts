@@ -17,7 +17,15 @@ import {
   readSheet,
   classifyAssignment,
 } from '../question-classification/pipeline.mjs';
-import { itemsFromPhoto } from '../question-classification/read-page.mjs';
+import {
+  itemsFromPhoto,
+  pagesFromReadings,
+} from '../question-classification/read-page.mjs';
+import {
+  ocrConfigured,
+  readSheetService,
+} from '../question-classification/ocr-page.mjs';
+import { suggestArea } from '../question-classification/area-suggest.mjs';
 
 function requireTeacher(ctx: PageContext) {
   ctx.assertCurrentAccess?.();
@@ -34,6 +42,30 @@ interface ReadingDraft {
   printedPage?: number;
   review?: Review;
   figure?: unknown;
+  /** 대분류 추천(수학·영어). 화면에서 대분류를 미리 골라 둔다. */
+  area?: string;
+}
+
+// 대분류를 따로 추천하고, 기존 분류의 소분류 태그 중 그 대분류에 속한 것만 남긴다.
+// 추천에 실패하면(호출 오류) 기존 분류 결과를 그대로 쓴다. 문항 원문은 예시로 저장하지 않는다.
+async function suggestAreas(subject: Subject, texts: Map<string, string>) {
+  const areas = new Map<string, string>();
+  for (const [itemId, text] of texts) {
+    if (!text.trim()) continue;
+    const area = await suggestArea(subject, text).catch(() => null);
+    if (area) areas.set(itemId, area);
+  }
+  return areas;
+}
+function withArea(item: ClassifiedItem, area: string | undefined) {
+  if (!area) return item;
+  const tags = item.tags.filter((t) => tagById.get(t.tagId)?.area === area);
+  const itemStatus =
+    item.itemStatus === 'classified' &&
+    !tags.some((t) => t.status === 'adopted')
+      ? 'no_adopted'
+      : item.itemStatus;
+  return { ...item, tags, itemStatus };
 }
 
 function requireSubject(
@@ -80,6 +112,11 @@ function storeDraft(
     text: draft.text,
     status: draft.item.itemStatus,
     review: draft.review,
+    area:
+      draft.area ??
+      tagById.get(
+        draft.item.tags.find((t) => t.status === 'adopted')?.tagId ?? '',
+      )?.area,
     type: draft.item.tags
       .filter((t) => t.status === 'adopted')
       .map((t) => tagById.get(t.tagId)!.name)
@@ -136,12 +173,13 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
     throw new OperationError('서버에 CLOVA API 키를 설정해 주세요.', 503);
   const pageId = randomUUID();
   let classification: Classification;
+  let areas = new Map<string, string>();
   const readings = new Map<string, Omit<ReadingDraft, 'item'>>();
   try {
-    const { detected, readingPasses } = await readSheet(
-      { bytes, mime },
-      subject,
-    );
+    // CLOVA OCR이 설정되어 있으면 OCR로 문항을 나누고(수학은 문항을 잘라 다시 판독), 아니면 기존 판독을 쓴다.
+    const { detected, readingPasses } = ocrConfigured()
+      ? await readSheetService({ bytes, mime }, subject)
+      : await readSheet({ bytes, mime }, subject);
     const items = itemsFromPhoto(pageId, page, detected).map((i) => ({
       ...i,
       text: i.holdReason ? '' : i.text,
@@ -160,22 +198,14 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
             .filter(Boolean),
         ),
       ];
-      const readPages = new Set<number>(
-        readingPasses
-          .flat()
-          .filter(
-            (r: { displayNumber: string }) =>
-              r.displayNumber === i.displayNumber,
-          )
-          .map((r: { printedPage?: number }) => r.printedPage)
-          .filter((p: number | undefined): p is number => !!p),
-      );
       readings.set(i.itemId, {
         printedPage: manualPage
           ? page
-          : readPages.size === 1
-            ? [...readPages][0]
-            : undefined,
+          : pagesFromReadings(
+              readingPasses.map((pass: { displayNumber: string }[]) =>
+                pass.filter((r) => r.displayNumber === i.displayNumber),
+              ),
+            ),
         text: i.text,
         figure: i.figure,
         review:
@@ -193,6 +223,10 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
       items,
     });
     classification = parseClassification(record);
+    areas = await suggestAreas(
+      subject,
+      new Map(items.map((i) => [i.itemId, i.text])),
+    );
   } catch {
     throw new OperationError(
       '사진을 분석하지 못했습니다. 사진과 CLOVA 연결을 확인한 뒤 다시 시도해 주세요.',
@@ -212,7 +246,13 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
           reason: '분류 모델이 원문을 읽기 불가로 판단했습니다.',
           candidates: [reading.text],
         };
-      return storeDraft(ctx, subject, { item, ...reading }, now + 24 * 3600000);
+      const area = areas.get(item.itemId);
+      return storeDraft(
+        ctx,
+        subject,
+        { item: withArea(item, area), ...reading, area },
+        now + 24 * 3600000,
+      );
     });
   });
 }
@@ -227,6 +267,7 @@ export async function reviewHomeworkReading(ctx: PageContext, form: FormData) {
   const { draft, expiresAt } = loadDraft(ctx, subject, sourceId);
   if (!draft.review) throw new OperationError('판독 검수 대상이 아닙니다.');
   let item: ClassifiedItem;
+  let area: string | undefined;
   try {
     const { record } = await classifyAssignment({
       assignmentId: sourceId,
@@ -234,6 +275,9 @@ export async function reviewHomeworkReading(ctx: PageContext, form: FormData) {
       items: [{ ...draft.item, text, figure: draft.figure }],
     });
     [item] = parseClassification(record).items;
+    area = (await suggestAreas(subject, new Map([[item.itemId, text]]))).get(
+      item.itemId,
+    );
   } catch {
     throw new OperationError(
       '원문을 분류하지 못했습니다. 잠시 후 다시 시도해 주세요.',
@@ -247,5 +291,10 @@ export async function reviewHomeworkReading(ctx: PageContext, form: FormData) {
     );
   requireSubject(ctx, subject);
   loadDraft(ctx, subject, sourceId);
-  return storeDraft(ctx, subject, { item, text }, expiresAt);
+  return storeDraft(
+    ctx,
+    subject,
+    { item: withArea(item, area), text, area },
+    expiresAt,
+  );
 }

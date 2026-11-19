@@ -45,7 +45,9 @@
     area.add(new Option('대분류 선택', ''));
     for (const name of new Set(tags.map((t) => t.area)))
       area.add(new Option(name, name));
-    area.value = tags.find((t) => selected.has(t.tagId))?.area || '';
+    // 소분류 추천이 없어도 대분류 추천(item.area)이 있으면 대분류를 미리 골라 둔다.
+    area.value =
+      tags.find((t) => selected.has(t.tagId))?.area || item.area || '';
     function update() {
       chosen.textContent =
         '선택 유형 · ' +
@@ -91,7 +93,10 @@
             const reviewed = await request('review', data);
             selected.clear();
             for (const id of reviewed.tagIds) selected.add(id);
-            area.value = tags.find((t) => selected.has(t.tagId))?.area || '';
+            area.value =
+              tags.find((t) => selected.has(t.tagId))?.area ||
+              reviewed.area ||
+              '';
             update();
             reading.textContent = reviewed.text;
             find('[data-review]').hidden = true;
