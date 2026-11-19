@@ -395,6 +395,31 @@ test('report drafts stay private, absence of evidence explicit; approval/edit/re
     () => studentReportsModule.render(s.ctx('TA_GUARDIAN_M2', url())),
     /접근/,
   );
+  const recordAttendance = (status: string) =>
+    studentReportsModule.submit(
+      s.ctx('TA_TEACHER'),
+      form({
+        action: 'attendance',
+        student: base.student,
+        class: base.class,
+        date: '2026-11-18',
+        status,
+      }),
+    );
+  const approvedVersion = report().version;
+  await recordAttendance('late');
+  assert.equal(report().version, approvedVersion);
+  await recordAttendance('present');
+  assert.equal(report().version, approvedVersion + 1);
+  const changed = await studentReportsModule.render(s.ctx('TA_TEACHER', url()));
+  assert.match(changed, /보호자 비공개 · 근거가 변경/);
+  assert.doesNotMatch(changed, /보호자 공개 중/);
+  await recordAttendance('late');
+  assert.throws(
+    () => studentReportsModule.render(s.ctx('TA_GUARDIAN_E_MATH', url())),
+    /승인/,
+  );
+  await write('approve', { reviewed: 'yes' });
   await write('save', { body: '수정됨', counsel: '교사 전용' });
   assert.throws(
     () => studentReportsModule.render(s.ctx('TA_GUARDIAN_E_MATH', url())),

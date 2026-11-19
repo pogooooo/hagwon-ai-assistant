@@ -256,6 +256,21 @@ function load(ctx: PageContext, id: string) {
     );
   return r;
 }
+function recordHistory(
+  ctx: PageContext,
+  report: Pick<Report, 'id' | 'version' | 'state' | 'body'>,
+) {
+  ctx.db
+    .prepare('INSERT INTO op_student_report_history VALUES(?,?,?,?,?,?)')
+    .run(
+      report.id,
+      report.version,
+      ctx.actor.id,
+      report.state,
+      report.body,
+      new Date().toISOString(),
+    );
+}
 function submit(ctx: PageContext, form: FormData) {
   if (!staff(ctx))
     throw new OperationError('담당 교사만 분석·편집·승인할 수 있습니다.', 403);
@@ -274,11 +289,22 @@ function submit(ctx: PageContext, form: FormData) {
         date > new Date(Date.now() + 32400000).toISOString().slice(0, 10)
       )
         throw new OperationError('과거 또는 오늘의 실제 출결을 선택해 주세요.');
-      ctx.db
+      const change = ctx.db
         .prepare(
-          'INSERT INTO op_student_attendance VALUES(?,?,?,?,?,?) ON CONFLICT(academy_id,student_id,class_id,date) DO UPDATE SET status=excluded.status,actor_id=excluded.actor_id',
+          'INSERT INTO op_student_attendance VALUES(?,?,?,?,?,?) ON CONFLICT(academy_id,student_id,class_id,date) DO UPDATE SET status=excluded.status,actor_id=excluded.actor_id WHERE op_student_attendance.status<>excluded.status',
         )
         .run(ctx.actor.academyId, student, klass, date, status, ctx.actor.id);
+      if (change.changes) {
+        const revoked = one<Pick<Report, 'id' | 'version' | 'state' | 'body'>>(
+          ctx.db,
+          "UPDATE op_student_reports SET state='draft', approved_by=NULL, version=version+1 WHERE academy_id=? AND student_id=? AND class_id=? AND period=? AND state='approved' RETURNING id,version,state,body",
+          ctx.actor.academyId,
+          student,
+          klass,
+          date.slice(0, 7),
+        );
+        if (revoked) recordHistory(ctx, revoked);
+      }
       return '/student-reports';
     }
     let r: Report;
@@ -345,7 +371,7 @@ function submit(ctx: PageContext, form: FormData) {
         r.class_id,
         r.period,
       );
-      if (current.fingerprint !== r.fingerprint)
+      if (action !== 'withdraw' && current.fingerprint !== r.fingerprint)
         throw new OperationError(
           '채점·출결 근거가 바뀌었습니다. 다시 분석하고 검토해 주세요.',
           409,
@@ -379,16 +405,7 @@ function submit(ctx: PageContext, form: FormData) {
         )
         .run(r.version, r.state, r.body, r.counsel, r.approved_by, r.id);
     }
-    ctx.db
-      .prepare('INSERT INTO op_student_report_history VALUES(?,?,?,?,?,?)')
-      .run(
-        r.id,
-        r.version,
-        ctx.actor.id,
-        r.state,
-        r.body,
-        new Date().toISOString(),
-      );
+    recordHistory(ctx, r);
     return '/student-reports?id=' + r.id;
   });
 }
@@ -426,7 +443,13 @@ function render(ctx: PageContext) {
     );
   const e = studentReportEvidence(ctx, r.student_id, r.class_id, r.period),
     hidden = `<input type="hidden" name="id" value="${h(r.id)}"><input type="hidden" name="version" value="${r.version}">`;
-  html += `<section class="panel"><p>${r.state === 'approved' ? '보호자 공개 중' : '교사 검토 초안 · 보호자 비공개'}${r.fingerprint !== e.fingerprint ? ' · 근거 변경됨, 다시 분석 필요' : ''}</p><form method="post">${hidden}<label>월간 리포트<textarea name="body" rows="12" maxlength="10000">${h(r.body)}</textarea></label><label>교사용 상담 자료 초안<textarea name="counsel" rows="12" maxlength="10000">${h(r.counsel)}</textarea></label><button name="action" value="save">수정 저장 · 비공개 초안</button></form><form method="post">${hidden}<label><input type="checkbox" name="reviewed" value="yes" required>저장된 내용을 검토했습니다</label><button name="action" value="approve">교사 승인 · 해당 보호자에게 공개</button></form><form method="post">${hidden}<button name="action" value="withdraw">공개 철회</button></form><form method="post">${hidden}<input type="hidden" name="student" value="${h(r.student_id)}"><input type="hidden" name="class" value="${h(r.class_id)}"><input type="hidden" name="period" value="${h(r.period)}"><button name="action" value="analyze">최신 근거로 다시 분석 · 승인 해제</button></form></section>`;
+  const publication =
+    r.fingerprint !== e.fingerprint
+      ? '보호자 비공개 · 근거가 변경되어 다시 분석해야 합니다.'
+      : r.state === 'approved'
+        ? '보호자 공개 중'
+        : '교사 검토 초안 · 보호자 비공개';
+  html += `<section class="panel"><p>${publication}</p><form method="post">${hidden}<label>월간 리포트<textarea name="body" rows="12" maxlength="10000">${h(r.body)}</textarea></label><label>교사용 상담 자료 초안<textarea name="counsel" rows="12" maxlength="10000">${h(r.counsel)}</textarea></label><button name="action" value="save">수정 저장 · 비공개 초안</button></form><form method="post">${hidden}<label><input type="checkbox" name="reviewed" value="yes" required>저장된 내용을 검토했습니다</label><button name="action" value="approve">교사 승인 · 해당 보호자에게 공개</button></form><form method="post">${hidden}<button name="action" value="withdraw">공개 철회</button></form><form method="post">${hidden}<input type="hidden" name="student" value="${h(r.student_id)}"><input type="hidden" name="class" value="${h(r.class_id)}"><input type="hidden" name="period" value="${h(r.period)}"><button name="action" value="analyze">최신 근거로 다시 분석 · 승인 해제</button></form></section>`;
   return html;
 }
 export const studentReportsModule: OperationModule = {
