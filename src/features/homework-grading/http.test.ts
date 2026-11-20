@@ -90,6 +90,14 @@ test('HTTP photo upload → teacher review → purge → approved report with li
     'teacher review must link the whole page, not just an inferred crop',
   );
   assert.match(reviewPage, /1쪽 전체 사진/);
+  assert.match(reviewPage, /data-review-item="0"/);
+  assert.match(reviewPage, /등록 정답/);
+  assert.match(reviewPage, /<button disabled>확정하고 원문 삭제/);
+  const studentDetail = await (await send(location, student)).text();
+  assert.doesNotMatch(
+    studentDetail,
+    /data-review-item|grade-key|class="grade-paper"/,
+  );
   const raw = await send(rawPath, teacher);
   assert.equal(raw.status, 200);
   assert.equal(raw.headers.get('cache-control'), 'no-store');

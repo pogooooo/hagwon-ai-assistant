@@ -146,6 +146,7 @@ export function createOperationsServer({
       'operations.css',
       'service-design.css',
       'service-ui.js',
+      'grading-ui.js',
       'app.webmanifest',
       '.well-known/assetlinks.json',
       'service-worker.js',

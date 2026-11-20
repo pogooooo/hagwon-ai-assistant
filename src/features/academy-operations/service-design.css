@@ -3151,3 +3151,253 @@ td {
     scroll-behavior: auto !important;
   }
 }
+
+/* Photo review uses the same page and question numbers as the saved draft. */
+.grade-overview,
+.grade-paper header,
+.grade-stat-list > div,
+.grade-footer,
+.grade-tools,
+.grade-filters,
+.grade-items {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.grade-overview,
+.grade-paper header,
+.grade-footer {
+  justify-content: space-between;
+}
+.grade-overview h2,
+.grade-paper h3,
+.grade-overview p {
+  margin: 0;
+}
+.grade-overview p,
+.grade-paper figcaption {
+  font-size: 0.875rem;
+  color: #515644;
+}
+.grade-status,
+.grade-filters a,
+.grade-steps li {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #f2f1e9;
+}
+.grade-status {
+  background: #fff1d9;
+  color: #69420b;
+}
+.grade-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0;
+  padding: 0;
+  list-style-position: inside;
+}
+.grade-steps [aria-current],
+.grade-filters a[aria-current] {
+  background: #526035;
+  color: white;
+}
+.grade-spread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.grade-paper,
+.grade-decisions {
+  min-width: 0;
+  border: 1px solid #d6d8ca;
+  border-radius: 14px;
+  background: #fff;
+  padding: 18px;
+}
+.grade-paper header label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.grade-paper figure,
+.grade-previews figure {
+  margin: 0;
+}
+.grade-tools {
+  margin: 12px 0;
+  padding: 6px;
+  background: #f5f4ef;
+  border-radius: 9px;
+}
+.grade-tools button,
+.grade-items button {
+  background: #f3f3e8;
+  color: #222c22;
+  border: 1px solid #d5d8c9;
+  min-height: 44px;
+}
+.grade-image {
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  background: #f6f5ef;
+  border-radius: 10px;
+  height: clamp(260px, 46vh, 620px);
+}
+.grade-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  min-height: 0;
+}
+.grade-paper .is-zoomed img {
+  width: 165%;
+  max-width: none;
+  height: auto;
+}
+.grade-paper [data-rotation='90'] img {
+  transform: rotate(90deg);
+}
+.grade-paper [data-rotation='180'] img {
+  transform: rotate(180deg);
+}
+.grade-paper [data-rotation='270'] img {
+  transform: rotate(270deg);
+}
+.grade-paper figcaption {
+  padding: 8px 0;
+}
+.grade-decisions fieldset {
+  padding: 0;
+  min-width: 0;
+  margin: 0 0 12px;
+  border: 0;
+}
+.grade-decisions legend {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.grade-decisions textarea {
+  min-height: 48px;
+}
+.grade-crop {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 26rem;
+  object-fit: contain;
+}
+.grade-verdict,
+.grade-key,
+.grade-check,
+.grade-footer {
+  border-radius: 9px;
+  padding: 12px;
+  background: #f3f3e8;
+}
+.grade-key {
+  display: flex;
+  gap: 1rem;
+  overflow-wrap: anywhere;
+}
+.grade-verdict {
+  background: #fff1d9;
+}
+.grade-items,
+.grade-filters {
+  padding: 12px 0;
+  gap: 6px;
+}
+.grade-items button {
+  min-width: 44px;
+  padding: 5px;
+}
+.grade-items button[data-reviewed='false'] {
+  border-color: #c98226;
+}
+.grade-items button[aria-pressed='true'] {
+  outline: 2px solid #536333;
+  outline-offset: -2px;
+  background: #e3e7cf;
+}
+.grade-footer {
+  margin-top: 14px;
+}
+.grade-footer form {
+  margin: 0;
+}
+.grade-picker {
+  border: 1px dashed #939b76;
+  border-radius: 14px;
+  background: #fafaf5;
+  padding: 20px;
+  text-align: center;
+}
+.grade-picker input {
+  width: 100%;
+  min-width: 0;
+}
+.grade-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+.grade-previews figure {
+  width: 100px;
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+}
+.grade-previews img {
+  width: 100%;
+  height: 88px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #f4f3ed;
+}
+.grade-stat-list > div {
+  padding: 8px 0;
+}
+.grade-stat-list progress {
+  accent-color: #687942;
+  max-width: 100%;
+}
+.report-owl {
+  float: right;
+  width: 78px;
+  height: 86px;
+  object-fit: contain;
+}
+.grade-review [hidden] {
+  display: none !important;
+}
+@media (max-width: 850px) {
+  .grade-spread {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .grade-image {
+    height: 280px;
+  }
+  .grading-workspace,
+  .grade-paper,
+  .grade-decisions {
+    padding: 12px;
+  }
+  .grade-steps {
+    gap: 4px;
+  }
+  .grade-steps li {
+    padding: 6px 8px;
+    font-size: 0.85rem;
+  }
+  .grade-footer form,
+  .grade-footer button,
+  .grade-decisions form > button {
+    width: 100%;
+  }
+}
