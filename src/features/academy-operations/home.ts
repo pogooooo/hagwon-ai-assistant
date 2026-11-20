@@ -160,28 +160,24 @@ export function renderHome(ctx: PageContext) {
     const queue = panel(
       '제출 확인 대기',
       '/homework?view=review',
-      review
-        .slice(0, 4)
-        .map((r) => ({
-          title: r.student_name + ' · ' + r.assignment_title,
-          meta: '제출 내용 확인',
-          href:
-            r.submission_mode === 'catalog'
-              ? '/homework?detail=' + encodeURIComponent(r.assignment_id)
-              : '/homework?submission=' + encodeURIComponent(r.id),
-        })),
+      review.slice(0, 4).map((r) => ({
+        title: r.student_name + ' · ' + r.assignment_title,
+        meta: '제출 내용 확인',
+        href:
+          r.submission_mode === 'catalog'
+            ? '/homework?detail=' + encodeURIComponent(r.assignment_id)
+            : '/homework?submission=' + encodeURIComponent(r.id),
+      })),
       '확인 대기 중인 제출물이 없습니다.',
     );
     const inbox = panel(
       '상담 요청',
       '/consultation?view=inbox',
-      pending
-        .slice(0, 3)
-        .map((r) => ({
-          title: r.title,
-          meta: r.label,
-          href: '/consultation?id=' + encodeURIComponent(r.id) + '&view=inbox',
-        })),
+      pending.slice(0, 3).map((r) => ({
+        title: r.title,
+        meta: r.label,
+        href: '/consultation?id=' + encodeURIComponent(r.id) + '&view=inbox',
+      })),
       '처리할 상담이 없습니다.',
     );
     const metrics = [
@@ -260,12 +256,10 @@ export function renderHome(ctx: PageContext) {
     ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><small>확인된 학습 기록</small><h2>${result ? h(result.assignment_title) : '학생 학습 리포트'}</h2>${result ? `<p>${h(result.student_name)} · ${result.score} / ${result.total}점</p>` : ''}<a href="/student-reports">학습 리포트 보기 ›</a></div></section>${panel(
         '학원 알림',
         '/messages',
-        messages
-          .slice(0, 3)
-          .map((m) => ({
-            title: m.title,
-            href: '/messages?id=' + encodeURIComponent(m.id),
-          })),
+        messages.slice(0, 3).map((m) => ({
+          title: m.title,
+          href: '/messages?id=' + encodeURIComponent(m.id),
+        })),
         '도착한 알림이 없습니다.',
       )}`
     : '';

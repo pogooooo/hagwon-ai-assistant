@@ -111,7 +111,7 @@ export function serviceNavigation(
   );
   const secondarySelected = !primary.some((p) => p.path === current);
   return {
-    sidebar: `<aside class="sidebar"><a class="rail-brand" href="/"><img src="/assets/ondap-logo.png" alt="온답 홈"></a><nav class="service-nav" aria-label="학원 메뉴">${grouped}</nav></aside>`,
+    sidebar: `<aside class="sidebar"><a class="rail-brand" href="/" aria-label="온답 홈"><span aria-hidden="true"></span></a><nav class="service-nav" aria-label="학원 메뉴">${grouped}</nav></aside>`,
     mobile: `<nav class="mobile-nav" aria-label="주요 메뉴">${primary.map((p) => link(p, true)).join('')}<button type="button" data-open-menu aria-haspopup="dialog" aria-controls="mobile-menu"${secondarySelected ? ' class="selected"' : ''}><span class="more-icon" aria-hidden="true">···</span><span>전체</span></button></nav><dialog id="mobile-menu" class="mobile-menu"><div class="mobile-menu-heading"><h2>전체 메뉴</h2><form method="dialog"><button class="secondary" aria-label="전체 메뉴 닫기" autofocus>닫기</button></form></div><nav class="service-nav" aria-label="전체 학원 메뉴">${grouped}</nav></dialog><noscript><details class="mobile-fallback"><summary>전체 메뉴</summary>${all.map((p) => link(p)).join('')}</details></noscript>`,
   };
 }
