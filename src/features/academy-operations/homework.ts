@@ -7,6 +7,7 @@ import {
 import {
   workbookRecipients,
   renderWorkbookDetail,
+  assignedQuestions,
   renderCatalogList,
   workbookAnalytics,
   approvedReview,
@@ -591,16 +592,24 @@ function renderStudentForm(ctx: PageContext, id: string): string {
       409,
     );
   }
-  if (assignment.submission_mode === 'workbook' || catalog)
-    return `<section class="panel"><h2>${escapeHtml(assignment.title)}</h2><p>${escapeHtml(assignment.class_name)} · ${escapeHtml(assignment.due_date)} ${escapeHtml(catalog?.due_time)} 마감</p>
-    <form method="post" action="/homework"><input type="hidden" name="action" value="report"><input type="hidden" name="assignmentId" value="${escapeHtml(id)}">
-    <fieldset><legend>틀린 문항을 선택하세요</legend>${questionsFor(ctx, id)
-      .map(
-        (q) =>
-          `<label class="check-label"><input type="checkbox" name="wrong" value="${escapeHtml(q.id)}"> ${escapeHtml(q.prompt)}</label>`,
-      )
-      .join('')}
-    <label class="check-label"><input type="checkbox" name="allCorrect" value="yes"> 모두 맞았어요</label></fieldset><button>결과 제출</button></form></section>`;
+  if (assignment.submission_mode === 'workbook' || catalog) {
+    const snapshots = new Map(
+      (catalog ? assignedQuestions(ctx, id) : []).map((q) => [q.id, q]),
+    );
+    const pages = new Map<string, { id: string; label: string }[]>();
+    for (const q of questionsFor(ctx, id)) {
+      const snapshot = snapshots.get(q.id);
+      const page = snapshot ? 'p.' + snapshot.page : '문항 목록';
+      const items = pages.get(page) ?? [];
+      items.push({ id: q.id, label: snapshot ? snapshot.number : q.prompt });
+      pages.set(page, items);
+    }
+    return `<section class="panel wrong-task"><a href="/homework">‹ 숙제</a><h2>${escapeHtml(assignment.title)}</h2><p>${escapeHtml(assignment.class_name)} · ${escapeHtml(assignment.due_date)} ${escapeHtml(catalog?.due_time)} 마감</p>
+    <form method="post" action="/homework" data-wrong-form><input type="hidden" name="action" value="report"><input type="hidden" name="assignmentId" value="${escapeHtml(id)}">
+    <h3>틀린 문항을 선택해 주세요</h3>${pages.size > 1 ? `<label hidden data-page-picker>쪽수<select>${[...pages.keys()].map((page, i) => `<option value="${i}">${escapeHtml(page)}</option>`).join('')}</select></label>` : ''}
+    ${[...pages].map(([page, qs], i) => `<fieldset data-question-page="${i}"><legend>${escapeHtml(page)}</legend><div class="question-tiles">${qs.map((q) => `<label><input type="checkbox" name="wrong" value="${escapeHtml(q.id)}" data-answer-label="${escapeHtml(page + ' ' + q.label)}"><span>${escapeHtml(q.label)}</span></label>`).join('')}</div></fieldset>`).join('')}
+    <p class="selection-summary" aria-live="polite" hidden></p><label class="all-correct"><input type="checkbox" name="allCorrect" value="yes"> 모두 맞았어요</label><p class="form-hint">제출 후 선생님이 확인해요.</p><button type="submit">결과 제출</button></form></section>`;
+  }
   return `<section class="panel">
     <h2>${escapeHtml(assignment.title)}</h2>${renderPhoto(ctx, id)}
     <p>${escapeHtml(assignment.class_name)} · ${escapeHtml(assignment.due_date)}까지</p>
