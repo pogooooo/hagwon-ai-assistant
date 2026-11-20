@@ -1,3 +1,5 @@
+import { homeworkDashboard } from './homework-dashboard.ts';
+import { visibleParentMessages } from './parent-messages-model.ts';
 import { visibleCalendarEntries } from './calendar.ts';
 import { consultationOverview } from './consultation.ts';
 import { recentPublishedDocuments } from './documents.ts';
@@ -81,11 +83,17 @@ export function renderHome(ctx: PageContext) {
   const today = new Date(now.getTime() + 9 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
-  const heading = `<div class="workspace-heading dashboard-heading"><div><h1>${staff ? '학원 현황' : '나의 학원'}</h1><p class="home-account">${h(actor.name)}님</p></div><div class="home-heading-tools"><time datetime="${today}">${h(date)}</time>${
-    staff
-      ? `<div class="actions">${actor.role === 'admin' ? '<a class="button-link subtle-link" href="/documents?view=create#document-edit">자료 등록</a>' : ''}<a class="button-link" href="/schedule?view=makeup">휴·보강 관리</a></div>`
-      : ''
-  }</div></div>`;
+  const title =
+    actor.role === 'teacher'
+      ? '오늘, 확인할 일부터'
+      : actor.role === 'admin'
+        ? '학원 운영'
+        : actor.role === 'guardian'
+          ? '오늘의 학원 소식'
+          : actor.role === 'student'
+            ? '나의 학원'
+            : '학원 상담';
+  const heading = `<div class="ondap-heading"><h1>${title}</h1><time datetime="${today}">${h(date)}</time></div>`;
   const { pending, recent } = consultationOverview(ctx);
   const homework = visitor ? undefined : homeworkOverview(ctx);
   const agenda = visitor ? '' : schedulePanel(ctx, today);
@@ -135,49 +143,77 @@ export function renderHome(ctx: PageContext) {
     <div class="home-search-bottom"><span>일정 · 수강료 · 학원 안내</span><a class="home-consultation-link" href="/consultation">상담 내역 <span aria-hidden="true">↗</span></a></div>
   </section>`;
   if (staff && homework) {
-    return `${heading}
-      <div class="home-overview is-staff"><section class="work-queue" aria-labelledby="work-queue-title">
-        <div class="work-queue-heading"><span class="work-status-dot" aria-hidden="true"></span><h2 id="work-queue-title">오늘 확인할 업무</h2></div>
-        <div class="queue-grid">
-          <a href="/consultation?view=inbox"><span class="queue-label">${serviceIcon('/consultation')}처리 중인 상담</span><strong>${pending.length}<small>건</small></strong><span class="queue-action">상담 확인 <span aria-hidden="true">↗</span></span></a>
-          <a href="/homework?view=review"><span class="queue-label">${serviceIcon('/homework')}확인할 제출물</span><strong>${homework.review.length}<small>건</small></strong><span class="queue-action">숙제 확인 <span aria-hidden="true">↗</span></span></a>
-        </div>
-      </section>${search}</div>
-      ${shortcuts}<div class="home-columns">
-        <div class="home-primary">${agenda}${panel(
-          '상담 요청',
-          '/consultation?view=inbox',
-          pending.slice(0, 4).map(({ id, title, label }) => ({
-            href: '/consultation?id=' + encodeURIComponent(id) + '&view=inbox',
-            title,
-            meta: label,
-          })),
-          '현재 처리할 상담이 없습니다.',
-        )}${panel(
-          '확인할 숙제 제출물',
-          '/homework?view=review',
-          homework.review
-            .slice(0, 4)
-            .map(
-              ({
-                id,
-                assignment_id,
-                submission_mode,
-                assignment_title,
-                student_name,
-              }) => ({
-                href:
-                  submission_mode === 'catalog'
-                    ? '/homework?detail=' + encodeURIComponent(assignment_id)
-                    : '/homework?submission=' + encodeURIComponent(id),
-                title: assignment_title,
-                meta: student_name,
-              }),
-            ),
-          '확인할 제출물이 없습니다.',
-        )}</div>
-        <div class="home-secondary">${documentList()}${recentConsultations()}</div>
-      </div>`;
+    const board = homeworkDashboard(ctx);
+    const dayEntries = visibleCalendarEntries(ctx, today, today);
+    const dayPanel = panel(
+      '오늘 일정',
+      '/schedule?day=' + today,
+      dayEntries
+        .slice(0, 4)
+        .map((e) => ({ title: e.title, href: '/schedule?day=' + today })),
+      '오늘 등록된 일정이 없습니다.',
+      '달력 보기',
+    );
+    const links = (title: string, items: [string, string, string][]) =>
+      `<section class="panel next-actions"><h2>${title}</h2>${items.map(([path, label, icon]) => `<a href="${h(path)}">${serviceIcon(icon)}${label}<span aria-hidden="true">›</span></a>`).join('')}</section>`;
+    const review = homework.review;
+    const queue = panel(
+      '제출 확인 대기',
+      '/homework?view=review',
+      review
+        .slice(0, 4)
+        .map((r) => ({
+          title: r.student_name + ' · ' + r.assignment_title,
+          meta: '제출 내용 확인',
+          href:
+            r.submission_mode === 'catalog'
+              ? '/homework?detail=' + encodeURIComponent(r.assignment_id)
+              : '/homework?submission=' + encodeURIComponent(r.id),
+        })),
+      '확인 대기 중인 제출물이 없습니다.',
+    );
+    const inbox = panel(
+      '상담 요청',
+      '/consultation?view=inbox',
+      pending
+        .slice(0, 3)
+        .map((r) => ({
+          title: r.title,
+          meta: r.label,
+          href: '/consultation?id=' + encodeURIComponent(r.id) + '&view=inbox',
+        })),
+      '처리할 상담이 없습니다.',
+    );
+    const metrics = [
+      ['/homework?view=review', '확인 대기', review.length, '/homework'],
+      [
+        '/consultation?view=inbox',
+        '처리 중 상담',
+        pending.length,
+        '/consultation',
+      ],
+      ['/schedule?day=' + today, '오늘 일정', dayEntries.length, '/schedule'],
+    ] as const;
+    return `${heading}<div class="ondap-board"><div class="ondap-column">
+       <section class="ondap-hero"><div><h2>${review.length ? '숙제 제출 ' + review.length + '건을 확인해 주세요' : '숙제 제출 현황을 확인하세요'}</h2><a class="button-link" href="/homework?view=review">제출 확인하기 <span aria-hidden="true">›</span></a></div><img src="/assets/ondap-review.png" alt=""></section>
+       <div class="ondap-metrics">${metrics.map(([url, label, value, icon]) => `<a href="${url}">${serviceIcon(icon)}<span>${label}</span><strong>${value}</strong></a>`).join('')}</div>
+       ${board.table}<div class="ondap-review-queue">${queue}</div>${inbox}
+       </div><div class="ondap-column">${dayPanel}${links('이어서 할 일', [
+         ['/briefing', '반 브리핑 보기', '/briefing'],
+         ['/learning', '학습 기록 검수', '/learning'],
+         ['/consultation?view=inbox', '상담함 확인', '/consultation'],
+       ])}
+       ${
+         actor.role === 'admin'
+           ? links('운영 관리', [
+               ['/directory', '원생·반 관리', '/directory'],
+               ['/messages', '학부모 안내', '/messages'],
+               ['/makeup-votes', '보강 투표 결과 확인', '/makeup-votes'],
+               ['/schools', '학교 시험 일정', '/schools'],
+             ])
+           : ''
+       }
+       ${board.summary}${agenda}${search}${documentList()}${recentConsultations()}</div></div>`;
   }
 
   const homeworkPanel =
@@ -217,7 +253,23 @@ export function renderHome(ctx: PageContext) {
         })),
         '확정된 학습 기록이 없습니다.',
       );
-  return `${heading}${pendingMakeupNotices(ctx)}${visitor ? `<div class="home-overview">${search}</div>` : ''}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
+  const guardian = actor.role === 'guardian';
+  const messages = guardian ? visibleParentMessages(ctx) : [];
+  const result = homework?.results[0];
+  const familyHero = guardian
+    ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><small>확인된 학습 기록</small><h2>${result ? h(result.assignment_title) : '학생 학습 리포트'}</h2>${result ? `<p>${h(result.student_name)} · ${result.score} / ${result.total}점</p>` : ''}<a href="/student-reports">학습 리포트 보기 ›</a></div></section>${panel(
+        '학원 알림',
+        '/messages',
+        messages
+          .slice(0, 3)
+          .map((m) => ({
+            title: m.title,
+            href: '/messages?id=' + encodeURIComponent(m.id),
+          })),
+        '도착한 알림이 없습니다.',
+      )}`
+    : '';
+  return `${heading}${familyHero}${pendingMakeupNotices(ctx)}${visitor ? `<div class="home-overview">${search}</div>` : ''}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
     <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
     ${visitor ? '' : `<div class="home-help">${search}</div>`}
     <div class="home-secondary">${visitor ? '' : documentList()}${recentConsultations()}</div>

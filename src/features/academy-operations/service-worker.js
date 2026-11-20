@@ -6,7 +6,7 @@ self.addEventListener('fetch', (event) => {
     fetch(event.request).catch(
       () =>
         new Response(
-          '<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>연결 확인 · AXR</title><main><h1>인터넷 연결을 확인해 주세요.</h1><p>학원 자료와 상담은 연결된 상태에서 이용할 수 있습니다. 작성 중인 내용의 저장 여부는 연결 후 확인해 주세요.</p><a href="/">다시 연결</a></main></html>',
+          '<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>연결 확인 · 온답</title><main><h1>인터넷 연결을 확인해 주세요.</h1><p>학원 자료와 상담은 연결된 상태에서 이용할 수 있습니다. 작성 중인 내용의 저장 여부는 연결 후 확인해 주세요.</p><a href="/">다시 연결</a></main></html>',
           {
             status: 503,
             headers: {
