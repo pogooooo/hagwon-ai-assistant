@@ -267,3 +267,42 @@ if (account) {
     /* Storage is optional; the form works without it. */
   }
 }
+
+for (const form of document.querySelectorAll('[data-wrong-form]')) {
+  const picks = [...form.querySelectorAll('[name="wrong"]')];
+  const all = form.elements.namedItem('allCorrect');
+  const summary = form.querySelector('.selection-summary');
+  const picker = form.querySelector('[data-page-picker]');
+  if (picker) {
+    picker.hidden = false;
+    const select = picker.querySelector('select');
+    const showPage = () => {
+      for (const group of form.querySelectorAll('[data-question-page]'))
+        group.hidden = group.dataset.questionPage !== select.value;
+    };
+    select.addEventListener('change', showPage);
+    showPage();
+  }
+  function update(event) {
+    if (event?.target === all && all.checked)
+      for (const pick of picks) pick.checked = false;
+    if (event?.target.name === 'wrong' && event.target.checked)
+      all.checked = false;
+    const chosen = picks.filter((el) => el.checked);
+    summary.hidden = false;
+    summary.textContent = chosen.length
+      ? '선택한 오답 · ' + chosen.map((el) => el.dataset.answerLabel).join(', ')
+      : all.checked
+        ? '모두 맞음'
+        : '선택한 오답이 없습니다.';
+    const submit = form.querySelector('button[type="submit"]');
+    submit.textContent = chosen.length
+      ? '오답 ' + chosen.length + '개 제출'
+      : all.checked
+        ? '모두 맞음 제출'
+        : '결과 제출';
+    submit.disabled = !chosen.length && !all.checked;
+  }
+  form.addEventListener('change', update);
+  update();
+}

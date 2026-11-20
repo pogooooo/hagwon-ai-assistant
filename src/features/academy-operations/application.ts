@@ -155,6 +155,9 @@ export function createOperationsServer({
       'assets/walnut.png',
       'assets/water.png',
       'assets/owl.png',
+      'assets/ondap-logo.png',
+      'assets/ondap-review.png',
+      'assets/ondap-report.png',
       'assets/app-192.png',
       'assets/app-512.png',
       'assets/study-room.webp',
@@ -276,19 +279,19 @@ export function createOperationsServer({
     const staff = actor?.role === 'admin' || actor?.role === 'teacher';
     const character = actor ? selectedCharacter({ db, actor }) : 'walnut';
     const navigation = serviceNavigation(pages, current, staff);
-    const brand = `<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">A</span><span>AXR 학원</span></a>`;
+    const brand = `<a class="brand" href="/"><img src="/assets/ondap-logo.png" alt="온답"></a>`;
     const title =
       pages.find((p) => p.path === current)?.label ?? (actor ? '홈' : '로그인');
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · AXR</title><meta name="theme-color" content="#ffffff"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=10"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap1"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
       '" data-role="' +
       h(actor?.role ?? 'guest') +
-      '"><script src="/service-ui.js?v=7" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=ondap1" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName
@@ -325,8 +328,8 @@ export function createOperationsServer({
       ['보호자', 'TA_GUARDIAN_E_MATH'],
       ['방문자', 'TA_VISITOR'],
     ];
-    return `<div class="sign-in-layout"><section class="sign-in-story" aria-label="AXR 학원"><p class="story-label">AXR ACADEMY</p><h2>학원의 하루,<br>함께 이어가요.</h2><p>상담부터 수업 일정, 학습 기록까지.<br>학원과 가정을 잇는 가장 가까운 공간.</p><div class="story-art" aria-hidden="true"><span class="story-orbit orbit-one"></span><span class="story-orbit orbit-two"></span><img src="/assets/walnut.png" alt=""><span class="story-caption">오늘도 반가워요!</span></div><div class="story-footer"><span>학원 상담</span><i></i><span>수업 일정</span><i></i><span>학습 기록</span></div></section><div class="sign-in-content"><section class="panel sign-in-form">
-    <div class="sign-in-heading"><img src="/assets/walnut.png" alt=""><h1>학원 로그인</h1><p>학원에서 발급받은 계정으로 로그인하세요.</p></div>
+    return `<div class="sign-in-layout"><section class="sign-in-story" aria-label="온답"><img class="login-logo" src="/assets/ondap-logo.png" alt="온답"><h2>학원 업무를 한눈에</h2><p>수업 일정, 숙제 확인, 학습 상담</p><img class="login-owl" src="/assets/ondap-review.png" alt=""></section><div class="sign-in-content"><section class="panel sign-in-form">
+    <div class="sign-in-heading"><h1>학원 로그인</h1><p>학원에서 발급받은 계정으로 로그인하세요.</p></div>
     ${message ? `<p class="notice" role="alert">${h(message)}</p>` : ''}
     <form method="post" action="/login">
       <label>계정 <input name="username" autocomplete="username" required maxlength="100"></label>
