@@ -145,9 +145,9 @@ test('independent solver sees only printed questions and rejects incomplete, dup
           ref: 'q' + i,
           no: String(i),
           complete: i !== 2,
-          problem: reference.problem,
+          problem: reference.problem + ' Answer: 5',
         }));
-      } else {
+      } else if (requests === 2) {
         assert.match(String(url), /HCX-007$/);
         const config = JSON.parse(String(init?.body)).responseFormat;
         assert.deepEqual(
@@ -160,6 +160,7 @@ test('independent solver sees only printed questions and rejects incomplete, dup
           ['1', '4', '5'],
         );
         assert.doesNotMatch(msg, /image_url|answer_observed|student_ref/);
+        assert.ok(!msg.includes('Answer: 5'));
         entries = [
           ['q5', '5'],
           ['q4', '1'],
@@ -171,6 +172,19 @@ test('independent solver sees only printed questions and rejects incomplete, dup
           comparison: 'number',
           answer: '4',
           explanation: reference.explanation,
+        }));
+      } else {
+        const { checks } = JSON.parse(msg);
+        assert.deepEqual(
+          checks.map((c: { ref: string }) => c.ref),
+          ['q5', 'q1'],
+        );
+        assert.doesNotMatch(msg, /"answer"|"reference"|image_url/);
+        entries = checks.map((c: { ref: string; no: string }) => ({
+          ref: c.ref,
+          no: c.no,
+          supported: true,
+          answer: c.ref === 'q5' ? '5' : '4',
         }));
       }
       return Response.json({
@@ -185,12 +199,9 @@ test('independent solver sees only printed questions and rejects incomplete, dup
     },
   );
   const results = await provider.solvePage!({ ...photo(), page_no: 1 }, defs);
-  assert.deepEqual(
-    [...results.keys()].sort(),
-    [defs[0].item_ref, defs[4].item_ref].sort(),
-  );
+  assert.deepEqual([...results.keys()].sort(), [defs[0].item_ref]);
   assert.equal(results.get(defs[0].item_ref)?.problem, reference.problem);
-  assert.equal(requests, 2);
+  assert.equal(requests, 3);
 });
 
 test('register without a key → student photo → teacher corrects or withholds → guardian receives only confirmed scores', async (t) => {

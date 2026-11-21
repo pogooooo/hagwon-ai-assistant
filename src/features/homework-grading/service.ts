@@ -31,7 +31,12 @@ import {
   validateRetained,
 } from './scoring.ts';
 import { MemoryRawStore, type RawStore } from './raw-store.ts';
-import { cropAnswer, decodeUploads, type ImagePage } from './media.ts';
+import {
+  cropAnswer,
+  decodeUploads,
+  maskStudentAnswers,
+  type ImagePage,
+} from './media.ts';
 import type { GradeProvider } from './provider.ts';
 import { comparePhotoAnswer } from './photo-solution.ts';
 
@@ -684,24 +689,33 @@ export class GradingService {
                 i.approval_status === 'approved',
             );
             if (!defs.length || unavailable) continue;
-            // Limit completion size and isolate a failed group from the rest of the submission.
-            for (let offset = 0; offset < defs.length; offset += 6) {
-              const group = defs.slice(offset, offset + 6);
-              readSubmission(ctx, id);
-              this.open(this.current(id));
-              try {
-                if (!provider.solvePage)
-                  throw new GradingError('PROVIDER_UNAVAILABLE');
-                for (const [ref, solution] of await provider.solvePage(
-                  page,
-                  group,
-                )) {
-                  if (group.some((d) => d.item_ref === ref))
-                    solutions.set(ref, solution);
+            const blind = await maskStudentAnswers(page, [
+              ...readings,
+              ...(verified.get(page.page_no) ?? []),
+            ]).catch(() => null);
+            if (!blind) continue;
+            try {
+              // Limit completion size and isolate a failed group from the rest of the submission.
+              for (let offset = 0; offset < defs.length; offset += 6) {
+                const group = defs.slice(offset, offset + 6);
+                readSubmission(ctx, id);
+                this.open(this.current(id));
+                try {
+                  if (!provider.solvePage)
+                    throw new GradingError('PROVIDER_UNAVAILABLE');
+                  for (const [ref, solution] of await provider.solvePage(
+                    blind,
+                    group,
+                  )) {
+                    if (group.some((d) => d.item_ref === ref))
+                      solutions.set(ref, solution);
+                  }
+                } catch {
+                  for (const def of group) failedSolves.add(def.item_ref);
                 }
-              } catch {
-                for (const def of group) failedSolves.add(def.item_ref);
               }
+            } finally {
+              blind.bytes.fill(0);
             }
           }
           for (const item of a.items) {
