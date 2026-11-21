@@ -600,7 +600,7 @@ export function pendingMakeupNotices(ctx: PageContext): string {
       )
       .map(
         (s) =>
-          `<li><a class="workspace-link" href="/makeup-votes?id=${encodeURIComponent(poll.id)}">${h(s.name)} · ${h(data.closure.label)} <span aria-hidden="true">›</span></a></li>`,
+          `<li><a class="workspace-link" href="/makeup-votes?id=${encodeURIComponent(poll.id)}">${h(s.name)} · ${h(data.closure.label)} · 가능 시간 응답 <span aria-hidden="true">›</span></a></li>`,
       );
   });
   return notices.length
