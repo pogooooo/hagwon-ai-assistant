@@ -3739,3 +3739,8 @@ a.workspace-link:focus-visible {
 .report-example-section + .report-example-section {
   margin-top: 20px;
 }
+
+#notices-bookings .actions a.workspace-link {
+  min-height: 44px;
+  white-space: nowrap;
+}
