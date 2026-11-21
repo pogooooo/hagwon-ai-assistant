@@ -46,6 +46,7 @@ export const reasons = [
   'ASSOCIATION_AMBIGUOUS',
   'UNSUPPORTED',
   'PROVIDER_UNAVAILABLE',
+  'PROBLEM_UNRESOLVED',
   'TEACHER_EXCLUDED',
 ] as const;
 export const decimal = z.string().regex(/^(0|[1-9][0-9]{0,5})(\.[0-9]{1,4})?$/);
@@ -117,6 +118,7 @@ export const keySchema = z
   .strict();
 export const itemSchema = z
   .object({
+    grading_mode: z.literal('photo_solution').optional(),
     item_ref: id,
     item_no: z.string().min(1).max(40),
     subject_id: z.enum(subjects),
@@ -207,7 +209,20 @@ export interface DraftItem {
   extraction: Reading;
   proposed: RetainedItem;
   reviewed: boolean;
+  // Temporary teacher-only evidence; the result serializer keeps only proposed.
+  solution?: PhotoSolution;
+  review_reference?: string;
+  initial_proposal?: Pick<RetainedItem, 'outcome' | 'score'>;
 }
+export const photoSolutionSchema = z
+  .object({
+    problem: z.string().trim().min(1).max(8000),
+    answer: z.string().trim().min(1).max(1200),
+    explanation: z.string().trim().min(1).max(1600),
+    comparison: z.enum(['number', 'choice', 'rubric']),
+  })
+  .strict();
+export type PhotoSolution = z.infer<typeof photoSolutionSchema>;
 export interface Draft {
   submission_id: string;
   draft_revision: number;

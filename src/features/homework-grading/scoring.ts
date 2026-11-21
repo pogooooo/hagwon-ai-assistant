@@ -29,6 +29,11 @@ export function validateAssignment(value: unknown): AssignmentInput {
     throw new GradingError('DUPLICATE_ITEM');
   for (const item of a.items) {
     if (
+      item.grading_mode === 'photo_solution' &&
+      (item.key || item.aggregation_rule === 'teacher_only')
+    )
+      throw new GradingError('INVALID_RUBRIC');
+    if (
       points(item.max_score) <= 0n ||
       new Set(item.criteria.map((c) => c.criterion_id)).size !==
         item.criteria.length
@@ -326,7 +331,11 @@ export function propose(item: Item, reading: Reading): RetainedItem {
   );
 }
 /** Check relationships after strict structural parsing; a valid DTO alone is insufficient. */
-export function validateRetained(item: Item, value: unknown): RetainedItem {
+export function validateRetained(
+  item: Item,
+  value: unknown,
+  reviewedReference?: string,
+): RetainedItem {
   const result = parse(retainedItemSchema, value);
   if (
     result.item_ref !== item.item_ref ||
@@ -357,8 +366,10 @@ export function validateRetained(item: Item, value: unknown): RetainedItem {
       throw new GradingError('INVALID_SCORE');
   } else {
     if (
-      !item.key ||
-      item.key.approval_status !== 'approved' ||
+      !(
+        item.key?.approval_status === 'approved' ||
+        (item.grading_mode === 'photo_solution' && reviewedReference?.trim())
+      ) ||
       item.approval_status !== 'approved'
     )
       throw new GradingError('KEY_OR_RUBRIC_PENDING');

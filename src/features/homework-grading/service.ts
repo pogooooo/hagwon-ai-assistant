@@ -18,6 +18,7 @@ import {
   type Assignment,
   type Draft,
   type DraftItem,
+  type PhotoSolution,
   type Reading,
   type Result,
 } from './contracts.ts';
@@ -32,6 +33,7 @@ import {
 import { MemoryRawStore, type RawStore } from './raw-store.ts';
 import { cropAnswer, decodeUploads, type ImagePage } from './media.ts';
 import type { GradeProvider } from './provider.ts';
+import { comparePhotoAnswer } from './photo-solution.ts';
 
 export const newId = (prefix: string) =>
   prefix + '_' + randomUUID().replaceAll('-', '');
@@ -82,6 +84,7 @@ export interface Receipt {
 }
 type Options = {
   provider: GradeProvider;
+  practiceProvider?: GradeProvider;
   rawStore?: RawStore;
   now?: () => number;
   rawTtlMs?: number;
@@ -104,6 +107,7 @@ export function setupGrading(db: OperationsDatabase) {
       FOREIGN KEY(tenant,assignment,assignment_version) REFERENCES grading_v3_assignments(tenant,id,version));
     CREATE TABLE IF NOT EXISTS grading_v3_results(tenant TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,submission TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(tenant,id,revision),FOREIGN KEY(submission) REFERENCES grading_v3_submissions(id));
     CREATE TABLE IF NOT EXISTS grading_v3_jobs(id TEXT PRIMARY KEY,submission TEXT NOT NULL UNIQUE,status TEXT NOT NULL,tries INTEGER NOT NULL DEFAULT 0,last_error TEXT);
+    CREATE TABLE IF NOT EXISTS grading_v3_practice_consent(submission TEXT PRIMARY KEY REFERENCES grading_v3_submissions(id), actor TEXT NOT NULL, policy TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS grading_v3_receipts(tenant TEXT NOT NULL,scope TEXT NOT NULL,generation INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(tenant,scope,generation));
     CREATE TABLE IF NOT EXISTS grading_v3_generations(tenant TEXT NOT NULL,student TEXT NOT NULL,generation INTEGER NOT NULL,PRIMARY KEY(tenant,student));
     CREATE TABLE IF NOT EXISTS grading_v3_snapshots(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,student TEXT NOT NULL,generation INTEGER NOT NULL,payload TEXT NOT NULL);
@@ -246,6 +250,7 @@ export class GradingService {
   readonly db: OperationsDatabase;
   readonly raw: RawStore;
   readonly provider: GradeProvider;
+  private readonly practiceProvider?: GradeProvider;
   readonly now: () => number;
   readonly ttl: number;
   readonly policy: Result['analysis_detail_policy'];
@@ -268,6 +273,7 @@ export class GradingService {
     this.raw = options.rawStore ?? previousStore ?? new MemoryRawStore();
     activeStores.set(db, this.raw);
     this.provider = options.provider;
+    this.practiceProvider = options.practiceProvider;
     this.now = options.now ?? Date.now;
     this.ttl = options.rawTtlMs ?? 60 * 60 * 1000;
     if (
@@ -308,6 +314,13 @@ export class GradingService {
       }
     });
   }
+  allowsPersonalPractice(ctx: PageContext) {
+    return (
+      !!this.practiceProvider?.inputAllowed &&
+      ctx.actor.academyId === 'AC_TEST_A' &&
+      ['TA_DIRECTOR', 'TA_TEACHER', 'TA_STUDENT_001'].includes(ctx.actor.id)
+    );
+  }
   register(ctx: PageContext, input: unknown, key: string) {
     requireStaff(ctx);
     const definition = validateAssignment(input);
@@ -339,6 +352,7 @@ export class GradingService {
       assignment_version: number;
       student_ref: string;
       expected_page_count: number;
+      practice_consent?: boolean;
       assessment_date?: string;
       submission_purpose?: 'assessment' | 'correction_evidence';
       target_result_set_id?: string;
@@ -374,6 +388,21 @@ export class GradingService {
       throw new GradingError('PAGE_COUNT_MISMATCH');
     if (input.assessment_date && !['teacher', 'admin'].includes(ctx.actor.role))
       throw new GradingError('FORBIDDEN', 403);
+    if (
+      input.practice_consent &&
+      !(
+        this.allowsPersonalPractice(ctx) &&
+        student === 'TA_STU_001' &&
+        !input.submission_purpose &&
+        a.items.every(
+          (i) =>
+            i.grading_mode === 'photo_solution' &&
+            !i.key &&
+            /^\d{1,3}$/.test(i.item_no),
+        )
+      )
+    )
+      throw new GradingError('PRACTICE_SCOPE', 403);
     if (
       input.assessment_date &&
       (!/^\d{4}-\d{2}-\d{2}$/.test(input.assessment_date) ||
@@ -434,6 +463,10 @@ export class GradingService {
             this.epoch,
             this.now() + this.ttl,
           );
+        if (input.practice_consent)
+          this.db
+            .prepare('INSERT INTO grading_v3_practice_consent VALUES(?,?,?)')
+            .run(id, ctx.actor.id, 'self-practice-deidentified-v1');
         return {
           submission_id: id,
           raw_scope_id: scope,
@@ -588,9 +621,20 @@ export class GradingService {
           pages.push({ bytes: p.bytes, mime: p.mime, page_no: n });
         }
         let readings: Reading[] = [];
+        const practice = this.db
+          .prepare(
+            'SELECT actor FROM grading_v3_practice_consent WHERE submission=? AND policy=?',
+          )
+          .get(id, 'self-practice-deidentified-v1');
+        if (
+          practice &&
+          (practice.actor !== ctx.actor.id || !this.allowsPersonalPractice(ctx))
+        )
+          throw new GradingError('PRACTICE_SCOPE', 403);
+        const provider = practice ? this.practiceProvider! : this.provider;
         let unavailable = false;
         try {
-          readings = await this.provider.read(pages, a);
+          readings = await provider.read(pages, a);
         } catch {
           unavailable = true;
         }
@@ -598,21 +642,48 @@ export class GradingService {
           readSubmission(ctx, id);
           this.open(this.current(id));
           const verified = new Map<number, Reading[]>();
-          if (this.provider.verifyPage) {
+          if (provider.verifyPage) {
             for (const page of pages) {
               readSubmission(ctx, id);
               this.open(this.current(id));
               try {
-                verified.set(
-                  page.page_no,
-                  await this.provider.verifyPage(page, a),
-                );
+                verified.set(page.page_no, await provider.verifyPage(page, a));
               } catch {
                 verified.set(page.page_no, []);
               }
             }
           }
           const items: DraftItem[] = [];
+          const solutions = new Map<string, PhotoSolution>();
+          const failedSolves = new Set<string>();
+          for (const page of pages) {
+            const defs = a.items.filter(
+              (i) =>
+                i.grading_mode === 'photo_solution' &&
+                i.expected_page_no === page.page_no &&
+                i.approval_status === 'approved',
+            );
+            if (!defs.length || unavailable) continue;
+            // Limit completion size and isolate a failed group from the rest of the submission.
+            for (let offset = 0; offset < defs.length; offset += 6) {
+              const group = defs.slice(offset, offset + 6);
+              readSubmission(ctx, id);
+              this.open(this.current(id));
+              try {
+                if (!provider.solvePage)
+                  throw new GradingError('PROVIDER_UNAVAILABLE');
+                for (const [ref, solution] of await provider.solvePage(
+                  page,
+                  group,
+                )) {
+                  if (group.some((d) => d.item_ref === ref))
+                    solutions.set(ref, solution);
+                }
+              } catch {
+                for (const def of group) failedSolves.add(def.item_ref);
+              }
+            }
+          }
           for (const item of a.items) {
             readSubmission(ctx, id);
             this.open(this.current(id));
@@ -648,7 +719,7 @@ export class GradingService {
             )
               r.ambiguity_codes = ['ASSOCIATION_AMBIGUOUS'];
             if (
-              this.provider.verifyPage &&
+              provider.verifyPage &&
               ['readable', 'blank'].includes(r.answer_status) &&
               r.association_status === 'matched'
             ) {
@@ -680,7 +751,7 @@ export class GradingService {
             } else if (
               r.answer_status === 'readable' &&
               r.association_status === 'matched' &&
-              this.provider.check
+              provider.check
             ) {
               const page = pages.find(
                 (p) => p.page_no === item.expected_page_no,
@@ -695,7 +766,7 @@ export class GradingService {
               });
               if (crop) {
                 try {
-                  const check = await this.provider.check(crop, item);
+                  const check = await provider.check(crop, item);
                   if (
                     check.answer_status !== r.answer_status ||
                     check.answer_observed.normalize('NFC').trim() !==
@@ -742,20 +813,49 @@ export class GradingService {
               !r.ambiguity_codes.length &&
               item.approval_status === 'approved' &&
               item.key?.approval_status === 'approved' &&
-              this.provider.semantic
+              provider.semantic
             ) {
               readSubmission(ctx, id);
               this.open(this.current(id));
               try {
-                proposed = aggregate(
-                  item,
-                  await this.provider.semantic(item, r),
-                );
+                proposed = aggregate(item, await provider.semantic(item, r));
               } catch {
                 proposed = emptyResult(item, 'UNSUPPORTED');
               }
             }
-            items.push({ extraction: r, proposed, reviewed: false });
+            if (item.grading_mode === 'photo_solution') {
+              const solution = solutions.get(item.item_ref);
+              if (
+                unavailable ||
+                failedSolves.has(item.item_ref) ||
+                r.ambiguity_codes.some((c) => c.startsWith('PROVIDER_'))
+              )
+                proposed = emptyResult(item, 'PROVIDER_UNAVAILABLE');
+              else if (!solution)
+                proposed = emptyResult(item, 'PROBLEM_UNRESOLVED');
+              else {
+                try {
+                  proposed = await comparePhotoAnswer(
+                    item,
+                    r,
+                    solution,
+                    provider,
+                  );
+                } catch {
+                  proposed = emptyResult(item, 'UNSUPPORTED');
+                }
+              }
+              items.push({
+                extraction: r,
+                proposed,
+                solution,
+                initial_proposal: {
+                  outcome: proposed.outcome,
+                  score: proposed.score,
+                },
+                reviewed: false,
+              });
+            } else items.push({ extraction: r, proposed, reviewed: false });
           }
           const live = this.current(id);
           readSubmission(ctx, id);
@@ -849,7 +949,29 @@ export class GradingService {
         extraction.regions.some((r) => r.page_no !== def.expected_page_no)
       )
         throw new GradingError('VALIDATION_FAILED');
-      const proposed = validateRetained(def, candidate.proposed);
+      const previous = old.items.find(
+        (i) => i.extraction.item_ref === def.item_ref,
+      )!;
+      const reviewReference = (
+        candidate.review_reference ?? previous.review_reference
+      )?.trim();
+      if (
+        def.grading_mode === 'photo_solution' &&
+        !reviewReference &&
+        !previous.solution &&
+        !['ungradable', 'excluded'].includes(candidate.proposed.outcome)
+      )
+        throw new GradingError('REVIEW_REFERENCE_REQUIRED');
+      if (
+        reviewReference &&
+        (def.grading_mode !== 'photo_solution' || reviewReference.length > 1200)
+      )
+        throw new GradingError('VALIDATION_FAILED');
+      const proposed = validateRetained(
+        def,
+        candidate.proposed,
+        reviewReference || previous.solution?.answer,
+      );
       if (
         candidate.reviewed &&
         !['ungradable', 'excluded'].includes(proposed.outcome) &&
@@ -860,7 +982,13 @@ export class GradingService {
           !extraction.regions.length)
       )
         throw new GradingError('REVIEW_UNRESOLVED');
-      return { extraction, proposed, reviewed: candidate.reviewed };
+      return {
+        ...previous,
+        extraction,
+        proposed,
+        reviewed: candidate.reviewed,
+        review_reference: reviewReference,
+      };
     });
     const next: Draft = {
       submission_id: id,
@@ -1039,7 +1167,12 @@ export class GradingService {
           remaining_object_count: 0,
           remaining_multipart_count: 0,
           stores_checked: [this.raw.name],
-          provider_retention_policy_ref: this.policyRef,
+          provider_retention_policy_ref:
+            one<{ policy: string }>(
+              this.db,
+              'SELECT policy FROM grading_v3_practice_consent WHERE submission=?',
+              s.id,
+            )?.policy ?? this.policyRef,
         };
         this.db
           .prepare(

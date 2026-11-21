@@ -10,9 +10,11 @@ import {
   type Assignment,
   type CriterionScore,
   type Item,
+  type PhotoSolution,
   type Reading,
 } from './contracts.ts';
 import type { ImagePage } from './media.ts';
+import { solvePrintedItems } from './photo-solution.ts';
 
 export interface GradeProvider {
   readonly modelId: string;
@@ -32,6 +34,10 @@ export interface GradeProvider {
     unit_observed: string;
   }>;
   semantic?(item: Item, reading: Reading): Promise<CriterionScore[]>;
+  solvePage?(
+    page: ImagePage,
+    items: Item[],
+  ): Promise<Map<string, PhotoSolution>>;
   report?(facts: unknown): Promise<unknown>;
 }
 function publicAlias(value: Record<string, unknown>) {
@@ -146,6 +152,7 @@ export function createNaverGrader(
   return {
     modelId: 'clova:HCX-005+HCX-007',
     inputAllowed: allowed,
+    solvePage: (page, items) => solvePrintedItems(chat, page, items),
     async read(pages, assignment, mode) {
       const items: Reading[] = [];
       let lastError: GradingError | undefined;
@@ -158,6 +165,12 @@ export function createNaverGrader(
             item_no: i.item_no,
             subject: i.subject_id,
             answer_type: i.answer_type,
+            ...(i.grading_mode === 'photo_solution'
+              ? {
+                  read_work:
+                    '풀이 과정을 요구하는 문제는 학생의 풀이도 원문대로 옮긴다. 정답만 요구하면 최종 답만 옮긴다.',
+                }
+              : {}),
           }));
         if (!manifest.length) continue;
         try {
@@ -300,6 +313,7 @@ export function createNaverGrader(
             key: item.key,
             criteria: criteria.map(publicAlias),
             answer_observed: reading.answer_observed,
+            unit_observed: reading.unit_observed,
           },
           undefined,
           {
