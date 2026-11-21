@@ -206,6 +206,10 @@ export async function answerCourseOverview(
     !frame.unknownPrograms.length &&
     !frame.unboundProgram;
   const simpleOffering = asksSchoolOffering && simpleOfferingQuestion.test(q);
+  const asksCourseList =
+    /^(?:(?:(?:이\s*)?학원|여기)(?:에서는|에서|은|는)?\s*)?(?:(?:어떤|무슨)\s*(?:수업|반|과정|강좌)(?:들이|이|가|을|를)?\s*(?:있나요|있어요|하나요|운영하나요)|(?:정규\s*)?(?:수업|과정|강좌|반)\s*(?:목록|종류)(?:을|를)?\s*(?:알려\s*주세요|알려\s*줘)?)[?!. ]*$/.test(
+      q,
+    );
   const asksDescription =
     /어떤\s*(?:걸|것을|내용).{0,20}(?:수업|배우|만들)|수업\s*(?:은|이)?\s*(?:어떻게|뭐|무슨\s*내용).{0,16}(?:진행|하|배우)|뭘\s*배우/.test(
       q,
@@ -227,6 +231,7 @@ export async function answerCourseOverview(
     !frame.matchedStudentIds.length &&
     !frame.selfReference;
   if (
+    !asksCourseList &&
     !asksDescription &&
     !asksEligibility &&
     !aim &&
@@ -243,8 +248,9 @@ export async function answerCourseOverview(
     studentIds: [],
     asOf: ctx.asOf,
     query:
-      (simpleOffering ? q + ' 교육 대상 개설 반' : ctx.question) +
-      ' 과정 구성 대상 수업 방식',
+      (simpleOffering || asksCourseList
+        ? q + ' 교육 대상 개설 반'
+        : ctx.question) + ' 과정 구성 대상 수업 방식',
     documentTypes: ['academy_info', 'curriculum'],
     limit: searchLimit,
   });
@@ -259,6 +265,28 @@ export async function answerCourseOverview(
         isCleanPublicEvidence(chunk, ctx.asOf) &&
         (chunk.classId === null || frame.classIds.includes(chunk.classId)),
     );
+  if (asksCourseList && hits.length < searchLimit) {
+    const catalogs = eligible.filter(
+      (c) =>
+        c.documentType === 'academy_info' &&
+        c.classId === null &&
+        c.location.kind === 'table_row' &&
+        scopeSection.test(compactText(c.location.section ?? '')),
+    );
+    if (
+      new Set(catalogs.map((c) => c.sourceId + '/' + c.location.tableIndex))
+        .size === 1
+    ) {
+      const evidence = declaredRegularCourses(catalogs, ctx.asOf);
+      if (evidence.length)
+        return schoolOfferingAnswer(
+          ctx,
+          '승인된 정규 수업 안내에서 확인한 과정입니다.',
+          evidence,
+        );
+    }
+    return;
+  }
   const paragraphs = eligible
     .filter((chunk) => chunk.location.kind === 'paragraph')
     .flatMap((chunk) =>

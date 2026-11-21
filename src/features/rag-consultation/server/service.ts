@@ -282,6 +282,23 @@ export function createRagConsultationService(
       trace.internalErrors.push('PROMPT_INJECTION_DIRECTIVE');
     }
 
+    if (
+      ctx.engine === 'planned' &&
+      /^(?:안녕(?:하세요|하십니까)?|반갑습니다|도움말|무엇을\s*물어볼\s*수\s*있나요|뭘\s*물어(?:볼\s*수\s*있(?:나요|어요)|보면\s*(?:돼요|되나요)))[\s?!.~]*$/u.test(
+        ctx.question.trim(),
+      )
+    ) {
+      trace.domain = 'info';
+      trace.intent = 'consultation_help';
+      return {
+        status: 'clarify',
+        text: '학원 위치, 운영 시간, 반별 수강료처럼 궁금한 내용을 적어 주세요. 예를 들어 “학원 위치가 어디예요?”라고 물어볼 수 있어요.',
+        citations: [],
+        usedFacts: [],
+        missingFields: ['질문 내용'],
+      };
+    }
+
     // 등수·석차는 자기 자녀라도 학원이 제공하지 않는 정보다(성적 자료에 없음).
     if (flags.rankRequest) {
       trace.intent = 'rank_request';
