@@ -596,7 +596,7 @@ async function renderDocuments(ctx: PageContext) {
             : activeIds.has(input.documentId + ':' + input.revision)
               ? '공개 중'
               : '승인됨';
-      return `<tr><td><a href="/documents?${link(input)}">${h(input.title)}</a></td>
+      return `<tr><td><a href="/documents?${link(input)}#document-preview">${h(input.title)}</a></td>
       <td>v${input.revision}</td><td>${h(visibilityLabels[input.visibility])}</td>
       <td>${h(label)}</td></tr>`;
     })
@@ -629,7 +629,7 @@ async function renderDocuments(ctx: PageContext) {
     </section>
     ${
       selected
-        ? `<section class="panel">
+        ? `<section class="panel" id="document-preview" tabindex="-1">
       <h2>${h(selected.input.title)} · v${selected.input.revision}</h2>
       ${selected.input.extraction?.warnings?.length ? `<p class="notice">검수 항목 ${h(selected.input.extraction.warnings.join(', '))}</p>` : ''}
       ${admin && selected.state === 'draft' && hasScanReview(selected.input) ? '<p class="notice">판독이 일치하지 않은 위치를 원본에서 확인하고 새 개정판의 본문을 수정해 주세요.</p>' : ''}
