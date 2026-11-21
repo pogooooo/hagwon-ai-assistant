@@ -85,14 +85,7 @@ export function serviceNavigation(
   const groups = [
     [
       '오늘의 업무',
-      [
-        '/',
-        '/homework',
-        '/grading',
-        '/learning',
-        '/briefing',
-        '/student-reports',
-      ],
+      ['/', '/grading', '/learning', '/briefing', '/student-reports'],
     ],
     [
       '소통과 일정',
@@ -117,7 +110,7 @@ export function serviceNavigation(
         : '';
     })
     .join('');
-  const primary = ['/', '/consultation', '/schedule', '/homework'].flatMap(
+  const primary = ['/', '/consultation', '/schedule', '/grading'].flatMap(
     (path) => all.filter((p) => p.path === path),
   );
   const secondarySelected = !primary.some((p) => p.path === current);

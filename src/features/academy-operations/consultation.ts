@@ -733,7 +733,7 @@ function renderMessage(
                     .slice(citation.title.length)
                     .replace(/^[\s·:>/—-]+/, '')
                 : citation.location;
-              return `<li>${citation.documentId.startsWith('workbook-') ? `<a href="/homework?view=source&amp;publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : citation.documentId.startsWith('learning-') ? `<a href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${location ? ' · ' + h(location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`;
+              return `<li>${citation.documentId.startsWith('workbook-') || citation.documentId.startsWith('learning-') ? `<a href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${location ? ' · ' + h(location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`;
             })
             .join('')}</ul></details>`
         : ''

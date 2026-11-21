@@ -290,11 +290,12 @@ export class GradingService {
         this.enqueue(s.id);
         invalidate(db, s.tenant, s.student);
       }
-      // Existing reports must be rechecked after runtime/backup recovery.
-      db.prepare(
-        "UPDATE grading_v3_reports SET status='stale' WHERE status='approved'",
-      ).run();
+      // Open drafts above invalidate their student's generation. An ordinary
+      // restart leaves already-verified results and their approved reports intact.
       if (options.restoredBackup) {
+        db.prepare(
+          "UPDATE grading_v3_reports SET status='stale' WHERE status='approved'",
+        ).run();
         for (const s of rows<Submission>(
           db,
           'SELECT * FROM grading_v3_submissions WHERE published_revision IS NOT NULL',

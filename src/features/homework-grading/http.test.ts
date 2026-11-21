@@ -1,10 +1,11 @@
+import { configureGrading } from './module.ts';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { createOperationsServer } from '../academy-operations/application.ts';
 import { fixture, item, photo } from './test-fixtures.ts';
-import { newId, readSubmission } from './service.ts';
+import { GradingService, newId, readSubmission } from './service.ts';
 import { consultationModule } from '../academy-operations/consultation.ts';
 import {
   configureOperationsGeneration,
@@ -60,9 +61,65 @@ test('HTTP photo upload → teacher review → purge → approved report with li
   }
   const teacher = await login('TA_DIRECTOR'),
     student = await login('TA_STUDENT_001');
+  const instructor = await login('TA_TEACHER'),
+    parent = await login('TA_GUARDIAN_E_MATH'),
+    other = await login('TA_GUARDIAN_M2');
+  for (const actor of [teacher, instructor, student, parent]) {
+    for (const path of ['/', '/grading', '/learning']) {
+      const page = await send(path, actor);
+      assert.equal(page.status, 200);
+      const html = await page.text();
+      assert.ok(
+        !html.includes('href="/homework') &&
+          !html.includes('action="/homework"'),
+      );
+      assert.ok(html.includes('href="/grading'));
+    }
+    assert.equal(
+      (await send('/homework', actor)).headers.get('location'),
+      '/grading',
+    );
+    assert.equal(
+      (
+        await send(
+          '/homework',
+          actor,
+          new URLSearchParams({ action: 'report' }),
+        )
+      ).status,
+      405,
+    );
+    assert.equal(
+      (
+        await send(
+          '/learning',
+          actor,
+          new URLSearchParams({ action: 'results' }),
+        )
+      ).status,
+      405,
+    );
+  }
+  assert.equal(
+    (await send('/homework?view=review', instructor)).headers.get('location'),
+    '/grading?queue=review',
+  );
+  const teacherPage = await (await send('/grading', instructor)).text();
+  assert.match(teacherPage, /제출·검수 현황/);
+  assert.doesNotMatch(teacherPage, /name="photos"/);
   assert.match(
-    await (await send('/grading', teacher)).text(),
-    /국어|영어|수학/,
+    await (await send('/grading?view=register', instructor)).text(),
+    /과제 등록/,
+  );
+  assert.equal((await send('/grading?view=register', student)).status, 404);
+  const selected = await (
+    await send('/grading?view=upload&assignment=' + a.assignment_id, student)
+  ).text();
+  assert.ok(selected.includes('value="' + a.assignment_id + '"'));
+  assert.match(selected, /name="photos"/);
+  assert.match(
+    await (await send('/grading', parent)).text(),
+    /<h2>공개된 채점 결과/,
   );
   const upload = new FormData();
   for (const [k, v] of Object.entries({
@@ -84,6 +141,11 @@ test('HTTP photo upload → teacher review → purge → approved report with li
   const location = uploaded.headers.get('location')!,
     submission = new URL(location, origin).searchParams.get('submission')!;
   const rawPath = '/grading/photo?submission=' + submission + '&page=1';
+  assert.ok((await (await send('/', instructor)).text()).includes(location));
+  assert.ok(
+    !(await (await send('/learning', parent)).text()).includes(location),
+  );
+  assert.equal((await send(location, other)).status, 404);
   const reviewPage = await (await send(location, teacher)).text();
   assert.ok(
     reviewPage.includes(rawPath),
@@ -139,6 +201,19 @@ test('HTTP photo upload → teacher review → purge → approved report with li
   assert.equal(approved.status, 303, await approved.text());
   assert.equal(readSubmission(f.ctx(), submission).raw_state, 'VERIFIED');
   assert.equal((await send(rawPath, teacher)).status, 410);
+  for (const actor of [instructor, student, parent])
+    assert.ok(
+      (await (await send('/learning', actor)).text()).includes(location),
+    );
+  assert.ok(
+    !(await (await send('/learning', other)).text()).includes(location),
+  );
+  const briefing = await send(
+    '/briefing?class=TA_E_MATH&month=2026-11',
+    instructor,
+  );
+  assert.equal(briefing.status, 200);
+  assert.ok((await briefing.text()).includes(location));
   const publicResult = await send(location, student);
   assert.equal(publicResult.status, 200);
   assert.match(await publicResult.text(), /원문은 삭제되었습니다/);
@@ -176,6 +251,30 @@ test('HTTP photo upload → teacher review → purge → approved report with li
   );
   assert.equal(published.status, 303);
   assert.equal((await send(reportPath, student)).status, 200);
+  const restart = (restoredBackup: boolean) =>
+    configureGrading(
+      f.db,
+      new GradingService(f.db, {
+        provider: f.service.provider,
+        now: f.service.now,
+        restoredBackup,
+      }),
+    );
+  restart(false);
+  assert.equal((await send(reportPath, parent)).status, 200);
+  assert.ok(
+    (await (await send('/grading?view=reports', parent)).text()).includes(
+      reportId,
+    ),
+  );
+  assert.equal((await send(reportPath, other)).status, 404);
+  restart(true);
+  assert.equal((await send(reportPath, parent)).status, 409);
+  assert.ok(
+    !(await (await send('/grading?view=reports', parent)).text()).includes(
+      reportId,
+    ),
+  );
 });
 
 test('RAG consultation keeps KOR, ENG and MATH facts and actual citations separate', async (t) => {

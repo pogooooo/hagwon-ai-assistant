@@ -1,0 +1,65 @@
+import { accessibleClasses } from '../academy-operations/directory.ts';
+import {
+  escapeHtml as h,
+  OperationError,
+  type PageContext,
+} from '../academy-operations/shared.ts';
+import { gradingOverview } from './overview.ts';
+import { computeFacts } from './facts.ts';
+import { kstDate, subjects } from './contracts.ts';
+
+export function gradingLearning(ctx: PageContext) {
+  const { results } = gradingOverview(ctx);
+  return `<div class="page-heading"><h1>학습 기록</h1></div><section class="panel"><div class="panel-heading"><h2>공개된 사진 채점 결과</h2><a href="/grading?view=reports">학습 리포트</a></div>
+    ${results.length ? `<ul class="item-list">${results.map((s) => `<li><a href="${h(s.href)}">${h(s.studentName)} · ${h(s.title)}</a><small>${h(s.assessment_date)} · 교사 검수 완료</small></li>`).join('')}</ul>` : '<p>교사 검수와 원본 삭제 확인을 마친 결과가 없습니다.</p>'}</section>`;
+}
+
+export function gradingBriefing(ctx: PageContext) {
+  const classes = accessibleClasses(ctx.db, ctx.actor);
+  const classId = ctx.url.searchParams.get('class') ?? classes[0]?.id;
+  const from =
+    ctx.url.searchParams.get('month') ?? kstDate(Date.now()).slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(from))
+    throw new OperationError('분석 월을 확인해 주세요.', 400);
+  if (classId && !classes.some((c) => c.id === classId))
+    throw new OperationError('조회 가능한 반이 아닙니다.', 404);
+  const header = '<div class="page-heading"><h1>반 브리핑</h1></div>';
+  if (!classId) return header + '<p>조회 가능한 반이 없습니다.</p>';
+  const { students, results } = gradingOverview(ctx);
+  const [year, month] = from.split('-').map(Number);
+  const end = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  const pupils = students.filter((s) => s.classIds.includes(classId));
+  const items = pupils.map((s) => {
+    const stats = computeFacts(
+      ctx.db,
+      ctx.actor.academyId,
+      {
+        student_ref: s.id,
+        from_date: from + '-01',
+        to_date_exclusive: end,
+        comparison_period: null,
+        subjects: [...subjects],
+        attempt_policy: 'latest_in_window',
+        statistics_policy_version: 'grading-stats-3.0',
+      },
+      Date.now(),
+      new Set([classId]),
+    );
+    const totals = stats.facts.filter(
+      (f) => f.period_role === 'primary' && f.primary_skill_id === null,
+    );
+    const correct = totals.reduce((n, f) => n + f.n_correct, 0),
+      evaluated = totals.reduce((n, f) => n + f.n_evaluable, 0);
+    const records = results.filter(
+      (r) =>
+        r.student === s.id &&
+        r.classId === classId &&
+        r.assessment_date.startsWith(from),
+    );
+    return `<li><strong>${h(s.name)}</strong><p>${evaluated ? `정답 ${correct} / 평가 가능 ${evaluated}문항` : '집계할 확정 문항이 없습니다.'}</p>${records.map((r) => `<a href="${h(r.href)}">${h(r.title)} · ${h(r.assessment_date)}</a>`).join(' · ')}</li>`;
+  });
+  return (
+    header +
+    `<section class="panel"><form method="get" action="/briefing" class="inline-form"><label>반<select name="class">${classes.map((c) => `<option value="${h(c.id)}"${c.id === classId ? ' selected' : ''}>${h(c.name)}</option>`).join('')}</select></label><label>분석 월<input type="month" name="month" required value="${h(from)}"></label><button>조회</button></form><h2>학생별 사진 채점 결과</h2><p>과제별로 해당 기간의 최근 풀이를 집계합니다. 확정·공개된 결과만 점수에 포함합니다.</p><ul class="item-list">${items.join('') || '<li>이 반에 조회 가능한 학생이 없습니다.</li>'}</ul><a href="/student-reports">학생 분석·월간 리포트</a></section>`
+  );
+}

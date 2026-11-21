@@ -1,8 +1,6 @@
+import { gradingOverview, gradingStates as names } from './overview.ts';
 import { createHash } from 'node:crypto';
-import {
-  accessibleClasses,
-  accessibleStudents,
-} from '../academy-operations/directory.ts';
+import { accessibleClasses } from '../academy-operations/directory.ts';
 import {
   escapeHtml as h,
   field,
@@ -28,11 +26,9 @@ import { createNaverGrader } from './provider.ts';
 import {
   assignmentFor,
   GradingService,
-  listAssignments,
   newId,
   readSubmission,
   setupGrading,
-  type Submission,
 } from './service.ts';
 import {
   approveReport,
@@ -40,7 +36,6 @@ import {
   readReport,
   readSnapshot,
   snapshot,
-  type Report,
 } from './facts.ts';
 import { cropAnswer, gradingMediaLimits } from './media.ts';
 import type { OperationsDatabase } from '../academy-operations/database.ts';
@@ -67,21 +62,6 @@ export function configureGrading(
 ) {
   services.set(db, service);
 }
-const names: Record<string, string> = {
-  RECEIVED: '사진 제출 대기',
-  PROCESSING: '판독 중',
-  REVIEW_REQUIRED: '강사 확인 필요',
-  READY_TO_CONFIRM: '확정 가능',
-  CONFIRMED: '검수 확정',
-  EXPIRED: '사진 보존기한 종료',
-  FAILED: '처리 실패',
-  CANCELLED: '처리 취소',
-  OPEN: '임시 보관',
-  CLOSING: '삭제 준비',
-  PURGE_PENDING: '삭제 확인 중',
-  PURGE_RETRY: '삭제 재시도 중',
-  VERIFIED: '자체 임시자료 삭제 확인',
-};
 const errorNames: Record<string, string> = {
   VALIDATION_FAILED: '입력값을 확인해 주세요.',
   INVALID_SCORE: '점수와 배점을 확인해 주세요.',
@@ -285,8 +265,14 @@ async function submit(ctx: PageContext, form: FormData) {
   try {
     await service.sweep();
     if (action === 'register') {
-      service.register(ctx, registration(form), field(form, 'request_key'));
-      return '/grading';
+      const assignment = service.register(
+        ctx,
+        registration(form),
+        field(form, 'request_key'),
+      );
+      return (
+        '/grading?assignment=' + encodeURIComponent(assignment.assignment_id)
+      );
     }
     if (action === 'upload') {
       const files: { bytes: Uint8Array; mime: string }[] = [];
@@ -535,7 +521,7 @@ function registerForm(ctx: PageContext) {
     structured_work: '풀이 과정 검수 보조',
     essay: '서술·영작 검수 보조',
   };
-  return `<details><summary>새 과제·정답 등록</summary><form method="get" action="/grading" class="inline-form">${input('count', '등록할 문항 수', String(count), 'number', 'min="1" max="50"')}<button class="secondary">입력 칸 만들기</button></form>${startForm('register')}${hidden('count', count)}${input('title', '과제 이름', '', 'text', 'required maxlength="200"')}${choice(
+  return `<details open><summary>새 과제·정답 등록</summary><form method="get" action="/grading" class="inline-form">${hidden('view', 'register')}${input('count', '등록할 문항 수', String(count), 'number', 'min="1" max="50"')}<button class="secondary">입력 칸 만들기</button></form>${startForm('register')}${hidden('count', count)}${input('title', '과제 이름', '', 'text', 'required maxlength="200"')}${choice(
     'class_id',
     '배정 반',
     accessibleClasses(ctx.db, ctx.actor).map((c) => c.id),
@@ -556,11 +542,12 @@ async function render(ctx: PageContext) {
     staff = ['admin', 'teacher'].includes(ctx.actor.role);
   try {
     await service.sweep();
-    const assignments = listAssignments(ctx),
-      students = accessibleStudents(ctx.db, ctx.actor);
+    const overview = gradingOverview(ctx);
+    const { assignments, students } = overview;
+    const requestedView = ctx.url.searchParams.get('view');
     let detail = '';
     const id = ctx.url.searchParams.get('submission');
-    if (id) {
+    if (id && requestedView !== 'upload') {
       const s = readSubmission(ctx, id);
       const a = assignmentFor(
         ctx.db,
@@ -577,7 +564,7 @@ async function render(ctx: PageContext) {
         const result = service.result(ctx, s.result_id);
         detail += `<p>확정 ${result.revision}차 · 수행일 ${h(result.assessment_date)} · 원문은 삭제되었습니다.</p><div class="table-wrap"><table><thead><tr><th>문항</th><th>과목·유형</th><th>결과</th><th>점수</th></tr></thead><tbody>${result.items.map((i) => `<tr><td>${h(a.items.find((d) => d.item_ref === i.item_ref)?.item_no)}</td><td>${subjectNames[i.subject_id]} · ${h(a.items.find((d) => d.item_ref === i.item_ref)?.skill_label)}</td><td>${outcomeNames[i.outcome]}</td><td>${h(i.score ?? '집계 제외')} / ${h(i.max_score)}</td></tr>`).join('')}</tbody></table></div>`;
         if (staff)
-          detail += `<details><summary>수행일 정정</summary>${startForm('date')}${hidden('result', s.result_id)}${hidden('revision', result.revision)}${input('date', '확인한 수행일', result.assessment_date, 'date', 'required')}<button>새 정정 이력으로 저장</button></form></details><p>점수 정정이 필요하면 같은 답안의 새 사진을 아래에서 정정 증거로 제출해 주세요. 다시 푼 숙제는 새 풀이로 제출합니다.</p>`;
+          detail += `<details><summary>수행일 정정</summary>${startForm('date')}${hidden('result', s.result_id)}${hidden('revision', result.revision)}${input('date', '확인한 수행일', result.assessment_date, 'date', 'required')}<button>새 정정 이력으로 저장</button></form></details><p>점수 정정이 필요하면 <a href="/grading?view=upload&amp;submission=${encodeURIComponent(s.id)}">같은 답안의 정정 사진 제출</a>을 이용해 주세요. 다시 푼 숙제는 새 풀이로 제출합니다.</p>`;
       } else if (
         staff &&
         ['REVIEW_REQUIRED', 'READY_TO_CONFIRM'].includes(s.processing)
@@ -648,73 +635,161 @@ async function render(ctx: PageContext) {
       );
       detail += `<section class="panel grade-report"><img class="report-owl" src="/assets/ondap-report.png" alt=""><h2>학습 리포트 ${report.status === 'approved' ? '공개본' : '초안'}</h2><p>${report.model_id === 'deterministic-template' ? '확정 기록을 정형 문장으로 정리했습니다.' : 'AI가 확정 기록에서 관찰 항목을 선택하고 정리했습니다.'}</p><div class="grade-stat-list">${stats.map((f) => `<div><strong>${h(f.skill_label || subjectNames[f.subject_id])}</strong><progress value="${f.n_correct}" max="${f.n_evaluable}" aria-label="${h(f.skill_label || subjectNames[f.subject_id])} 정답 수"></progress><span>${f.n_correct} / ${f.n_evaluable}문항 정답</span></div>`).join('')}</div><div class="record-body">${h(report.rendered_text).replaceAll('\n', '<br>')}</div>${staff && report.status === 'draft' ? `${startForm('approve_report')}${hidden('report', report.report_id)}${hidden('revision', report.revision)}${hidden('generation', report.source_generation)}${hidden('hash', report.facts_hash)}<label><input type="checkbox" name="review_complete" value="yes" required>근거와 내용을 검수했습니다.</label><button>학생·보호자에게 공개</button></form>` : ''}</section>`;
     }
-    const visibleStudents = new Set(students.map((s) => s.id));
-    const submissions = rows<Submission>(
-      ctx.db,
-      'SELECT * FROM grading_v3_submissions WHERE tenant=? AND purpose=? ORDER BY submitted_at DESC,id DESC LIMIT 200',
-      ctx.actor.academyId,
-      'assessment',
-    ).filter(
-      (s) =>
-        visibleStudents.has(s.student) &&
-        assignments.some((a) => a.assignment_id === s.assignment),
+
+    const params = ctx.url.searchParams;
+    const tabs: [string, string][] = staff
+      ? [
+          ['queue', '제출 검수'],
+          ['register', '과제·정답 등록'],
+          ['upload', '사진 대신 제출'],
+          ['reports', '채점 리포트'],
+        ]
+      : ctx.actor.role === 'student'
+        ? [
+            ['upload', '숙제 제출'],
+            ['queue', '제출 현황'],
+            ['results', '채점 결과'],
+            ['reports', '학습 리포트'],
+          ]
+        : [
+            ['results', '채점 결과'],
+            ['reports', '학습 리포트'],
+            ['queue', '제출 현황'],
+            ['upload', '사진 대신 제출'],
+          ];
+    const view =
+      requestedView ??
+      (reportId ? 'reports' : id || params.has('queue') ? 'queue' : tabs[0][0]);
+    if (!tabs.some(([key]) => key === view))
+      throw new GradingError('RESOURCE_NOT_FOUND', 404);
+    const intro =
+      '<script src="/grading-ui.js?v=1" defer></script><div class="page-heading"><h1>사진 숙제 채점</h1></div><nav class="grade-filters" aria-label="사진 채점 메뉴">' +
+      tabs
+        .map(
+          ([key, label]) =>
+            `<a href="/grading?view=${key}"${view === key ? ' aria-current="page"' : ''}>${label}</a>`,
+        )
+        .join('') +
+      '</nav>';
+    if (detail) return intro + detail;
+    if (view === 'register')
+      return (
+        intro + '<section class="panel">' + registerForm(ctx) + '</section>'
+      );
+    const assignmentId = params.get('assignment');
+    const requestedAssignment = assignments.find(
+      (a) => a.assignment_id === assignmentId,
     );
-    const reports = rows<{
-      id: string;
-      student: string;
-      status: string;
-      payload: string;
-    }>(
-      ctx.db,
-      "SELECT * FROM grading_v3_reports WHERE tenant=? AND status<>'stale' ORDER BY rowid DESC LIMIT 100",
-      ctx.actor.academyId,
-    ).filter(
-      (r) =>
-        visibleStudents.has(r.student) && (staff || r.status === 'approved'),
-    );
-    const target = id ? readSubmission(ctx, id) : undefined;
-    const mediaLimits = gradingMediaLimits(ctx.maxDocumentBytes);
+    if (assignmentId && !requestedAssignment)
+      throw new GradingError('RESOURCE_NOT_FOUND', 404);
+    if (view === 'upload') {
+      const target = id ? readSubmission(ctx, id, true) : undefined;
+      const selected = target
+        ? assignments.find((a) => a.assignment_id === target.assignment)
+        : (requestedAssignment ?? assignments[0]);
+      const eligible = students.filter(
+        (s) =>
+          s.classIds.includes(selected?.class_id ?? '') &&
+          (!target || target.student === s.id),
+      );
+      const picker =
+        !target && assignments.length > 1
+          ? `<form method="get" action="/grading" class="inline-form">${hidden('view', 'upload')}${choice(
+              'assignment',
+              '제출할 과제',
+              assignments.map((a) => a.assignment_id),
+              selected?.assignment_id ?? '',
+              Object.fromEntries(
+                assignments.map((a) => [a.assignment_id, a.title]),
+              ),
+            )}<button>과제 선택</button></form>`
+          : '';
+      const mediaLimits = gradingMediaLimits(ctx.maxDocumentBytes);
+      return (
+        intro +
+        `<section class="panel grade-upload"><h2>숙제 사진 제출</h2>${picker}${
+          selected && eligible.length
+            ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${hidden('assignment', selected.assignment_id)}<p><strong>${h(selected.title)}</strong> · ${selected.items.length}문항</p>${choice(
+                'student',
+                '학생',
+                eligible.map((s) => s.id),
+                target?.student ?? '',
+                Object.fromEntries(eligible.map((s) => [s.id, s.name])),
+              )}${input('pages', '총 페이지 수', '1', 'number', `min="1" max="${mediaLimits.pages}" required`)}<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label class="grade-picker"><strong>사진 또는 PDF 첨부</strong><span>문항 번호와 답안이 함께 보이는 파일을 선택하세요.</span><input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><div class="grade-previews" data-previews aria-live="polite"></div>${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
+            : '<p>제출할 수 있는 사진 채점 과제가 없습니다.</p>'
+        }</section>`
+      );
+    }
+    if (view === 'reports') {
+      const visible = new Set(students.map((s) => s.id));
+      const reports = rows<{ id: string; student: string; status: string }>(
+        ctx.db,
+        "SELECT id,student,status FROM grading_v3_reports WHERE tenant=? AND status<>'stale' ORDER BY rowid DESC",
+        ctx.actor.academyId,
+      )
+        .filter(
+          (r) => visible.has(r.student) && (staff || r.status === 'approved'),
+        )
+        .flatMap((r) => {
+          try {
+            return [{ ...readReport(ctx, r.id), student: r.student }];
+          } catch (error) {
+            if (
+              error instanceof GradingError &&
+              [403, 404, 409].includes(error.status)
+            )
+              return [];
+            throw error;
+          }
+        });
+      const list =
+        '<section class="panel"><h2>학습 리포트</h2>' +
+        (reports
+          .map(
+            (r) =>
+              `<p><a href="/grading?report=${encodeURIComponent(r.report_id)}">${h(students.find((s) => s.id === r.student)?.name)} 학습 리포트</a> · ${r.status === 'approved' ? '공개' : '초안'} · ${h(r.generated_at.slice(0, 10))}</p>`,
+          )
+          .join('') || '<p>조회 가능한 리포트가 없습니다.</p>') +
+        '</section>';
+      return (
+        intro +
+        list +
+        (staff
+          ? `<section class="panel"><h2>분석 리포트 만들기</h2>${startForm('report')}${choice(
+              'student',
+              '학생',
+              students.map((s) => s.id),
+              '',
+              Object.fromEntries(students.map((s) => [s.id, s.name])),
+            )}<div class="form-grid">${input('from', '기간 시작', kstDate(service.now()).slice(0, 8) + '01', 'date', 'required')}${input('to', '기간 끝 — 해당 날짜 미포함', kstDate(service.now() + 86400000), 'date', 'required')}${input('compare_from', '비교 기간 시작 — 선택', '', 'date')}${input('compare_to', '비교 기간 끝 — 해당 날짜 미포함', '', 'date')}</div>${subjects.map((s) => `<label><input type="checkbox" name="subject" value="${s}" checked>${subjectNames[s]}</label>`).join('')}${choice('attempt', '반복 풀이 집계', ['first_ever', 'latest_in_window'], 'first_ever', { first_ever: '기록된 첫 풀이', latest_in_window: '기간 내 최근 풀이' })}<button>확정 기록으로 초안 생성</button></form></section>`
+          : '')
+      );
+    }
     const queues = {
-      all: submissions,
-      review: submissions.filter((s) =>
-        ['REVIEW_REQUIRED', 'READY_TO_CONFIRM'].includes(s.processing),
-      ),
-      purge: submissions.filter((s) =>
-        ['PURGE_PENDING', 'PURGE_RETRY', 'CLOSING'].includes(s.raw_state),
-      ),
+      all: overview.entries,
+      review: overview.review,
+      purge: overview.purge,
     };
-    const filter = ctx.url.searchParams.get('queue');
+    const filter = params.get('queue');
     const queue =
       staff && (filter === 'review' || filter === 'purge') ? filter : 'all';
-    return `<script src="/grading-ui.js?v=1" defer></script><div class="page-heading"><h1>사진 숙제 채점</h1><p>국어·영어·수학 답안을 검수하고, 확정 결과로 학습 기록을 정리합니다.</p></div>${detail}<section class="panel grade-upload"><h2>숙제 사진 제출</h2>${
-      assignments.length
-        ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${choice(
-            'assignment',
-            '과제',
-            assignments.map((a) => a.assignment_id),
-            target?.assignment ?? '',
-            Object.fromEntries(
-              assignments.map((a) => [a.assignment_id, a.title]),
-            ),
-          )}${choice(
-            'student',
-            '학생',
-            students.map((s) => s.id),
-            target?.student ?? '',
-            Object.fromEntries(students.map((s) => [s.id, s.name])),
-          )}${input('pages', '총 페이지 수', '1', 'number', `min="1" max="${mediaLimits.pages}" required`)}<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label class="grade-picker"><strong>사진 또는 PDF 첨부</strong><span>문항 번호와 답안이 함께 보이는 파일을 선택하세요.</span><input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><div class="grade-previews" data-previews aria-live="polite"></div>${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
-        : '<p>강사가 과제와 문항·정답을 먼저 등록하면 제출할 수 있습니다.</p>'
-    }</section>${
-      staff
-        ? `<section class="panel">${registerForm(ctx)}</section><section class="panel"><h2>분석 리포트 만들기</h2>${startForm('report')}${choice(
-            'student',
-            '학생',
-            students.map((s) => s.id),
-            '',
-            Object.fromEntries(students.map((s) => [s.id, s.name])),
-          )}<div class="form-grid">${input('from', '기간 시작', kstDate(service.now()).slice(0, 8) + '01', 'date', 'required')}${input('to', '기간 끝 — 해당 날짜 미포함', kstDate(service.now() + 86400000), 'date', 'required')}${input('compare_from', '비교 기간 시작 — 선택', '', 'date')}${input('compare_to', '비교 기간 끝 — 해당 날짜 미포함', '', 'date')}</div>${subjects.map((s) => `<label><input type="checkbox" name="subject" value="${s}" checked>${subjectNames[s]}</label>`).join('')}${choice('attempt', '반복 풀이 집계', ['first_ever', 'latest_in_window'], 'first_ever', { first_ever: '기록된 첫 풀이', latest_in_window: '기간 내 최근 풀이' })}<button>확정 기록으로 초안 생성</button></form></section>`
-        : ''
-    }<section class="panel" id="grade-queue"><h2>제출·검수 현황</h2>${staff ? `<nav class="grade-filters" aria-label="제출 상태">${(['all', 'review', 'purge'] as const).map((k) => `<a href="/grading?queue=${k}#grade-queue"${queue === k ? ' aria-current="page"' : ''}>${{ all: '전체', review: '확인 필요', purge: '삭제 확인' }[k]} ${queues[k].length}</a>`).join('')}</nav>` : ''}<div class="table-wrap"><table><thead><tr><th>학생</th><th>과제</th><th>상태</th><th>원문</th></tr></thead><tbody>${queues[queue].map((s) => `<tr><td>${h(students.find((x) => x.id === s.student)?.name)}</td><td><a href="/grading?submission=${h(s.id)}">${h(assignments.find((a) => a.assignment_id === s.assignment)?.title)}</a></td><td>${h(names[s.processing])}</td><td>${h(names[s.raw_state])}</td></tr>`).join('') || '<tr><td colspan="4">제출된 숙제가 없습니다.</td></tr>'}</tbody></table></div><h2>리포트</h2>${reports.map((r) => `<p><a href="/grading?report=${h(r.id)}">${h(students.find((s) => s.id === r.student)?.name)} 학습 리포트</a> · ${r.status === 'approved' ? '공개' : '초안'} · ${h((JSON.parse(r.payload) as Report).generated_at.slice(0, 10))}</p>`).join('') || '<p>공개된 리포트가 없습니다.</p>'}</section>`;
+    const selectedEntries = (
+      view === 'results' ? overview.results : queues[queue]
+    ).filter((s) => !assignmentId || s.assignment === assignmentId);
+    const suffix = assignmentId
+      ? '&amp;assignment=' + encodeURIComponent(assignmentId)
+      : '';
+    const assignmentFilter =
+      staff && assignments.length
+        ? `<form method="get" action="/grading" class="inline-form">${hidden('queue', queue)}${choice('assignment', '과제별 제출 현황', ['', ...assignments.map((a) => a.assignment_id)], assignmentId ?? '', { '': '전체 과제', ...Object.fromEntries(assignments.map((a) => [a.assignment_id, a.title])) })}<button>조회</button></form>`
+        : '';
+    const filters = staff
+      ? `<nav class="grade-filters" aria-label="제출 상태">${(['all', 'review', 'purge'] as const).map((k) => `<a href="/grading?queue=${k}${suffix}#grade-queue"${queue === k ? ' aria-current="page"' : ''}>${{ all: '전체', review: '확인 필요', purge: '삭제 확인' }[k]} ${queues[k].filter((s) => !assignmentId || s.assignment === assignmentId).length}</a>`).join('')}</nav>`
+      : '';
+    return (
+      intro +
+      `<section class="panel" id="grade-queue"><h2>${view === 'results' ? '공개된 채점 결과' : staff ? '제출·검수 현황' : '제출 현황'}</h2>${requestedAssignment ? `<h3>${h(requestedAssignment.title)}</h3>` : ''}${assignmentFilter}${filters}<div class="table-wrap"><table><thead><tr><th>학생</th><th>과제</th><th>상태</th><th>원문</th></tr></thead><tbody>${selectedEntries.map((s) => `<tr><td>${h(s.studentName)}</td><td><a href="${h(s.href)}">${h(s.title)}</a></td><td>${h(names[s.processing])}</td><td>${h(names[s.raw_state])}</td></tr>`).join('') || `<tr><td colspan="4">${view === 'results' ? '공개된 채점 결과가 없습니다.' : queue === 'all' ? '제출된 숙제가 없습니다.' : '이 상태의 제출이 없습니다.'}</td></tr>`}</tbody></table></div></section>`
+    );
   } catch (error) {
     gradingError(error);
   }
