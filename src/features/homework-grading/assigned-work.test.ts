@@ -1,7 +1,7 @@
 import { photoReportStats } from './report-adapter.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fixture, reading } from './test-fixtures.ts';
+import { fixture, photo, reading } from './test-fixtures.ts';
 import { gradingModule } from './module.ts';
 import {
   assignmentFor,
@@ -10,7 +10,7 @@ import {
   submissionAssignment,
 } from './service.ts';
 import { type PrintedPage } from './assigned-work.ts';
-import { type GradeProvider } from './provider.ts';
+import { createNaverGrader, type GradeProvider } from './provider.ts';
 
 for (const material of ['workbook', 'worksheet']) {
   test(
@@ -135,3 +135,31 @@ for (const material of ['workbook', 'worksheet']) {
     },
   );
 }
+
+test('CLOVA page discovery reads the printed page and requires a complete numbered manifest', async () => {
+  const page = { ...photo(), page_no: 1 };
+  for (const [content, valid] of [
+    ['{printedPage: 42, numbers: [7], complete: true}', true],
+    ['{"printedPage":42,"numbers":[7],"complete":true}', true],
+    ['[7]', false],
+    ['{"printedPage":42,"numbers":[7],"complete":false}', false],
+  ] as const) {
+    const provider = createNaverGrader(
+      {
+        RAG_CLOVA_API_KEY: 'fixture',
+        AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
+        AXR_GRADING_INPUT_POLICY_REF: 'fixture',
+      },
+      undefined,
+      async () => Response.json({ result: { message: { content } } }),
+    );
+    const result = provider.discoverPage!(page);
+    if (valid)
+      assert.deepEqual(await result, {
+        printedPage: 42,
+        numbers: [7],
+        complete: true,
+      });
+    else await assert.rejects(result, /PHOTO_SCOPE_UNCLEAR/);
+  }
+});
