@@ -15,7 +15,6 @@ import {
 } from './facts.ts';
 import { gradingEvidence } from './evidence.ts';
 import { decodeUploads } from './media.ts';
-import { registerGradingReports } from './report-adapter.ts';
 import {
   setupStudentReports,
   studentReportEvidence,
@@ -26,7 +25,7 @@ test('common student analysis adapter includes only published v3 results, withou
   const f = fixture(t);
   setupLearning(f.db);
   setupStudentReports(f.db);
-  registerGradingReports(f.db);
+
   const id = await f.upload(f.register());
   assert.equal(
     studentReportEvidence(f.ctx(), 'TA_STU_001', 'TA_E_MATH', '2026-11').total,
@@ -48,6 +47,29 @@ test('common student analysis adapter includes only published v3 results, withou
   );
 });
 
+test('repeated mistakes, practice suggestions and stable approval use confirmed photo items', async (t) => {
+  const f = fixture(t);
+  setupStudentReports(f.db);
+  const items = [item('MATH'), item('MATH', { item_no: '2' })];
+  for (const definition of items)
+    f.answers.set(definition.item_ref, { answer_observed: '3' });
+  const submission = await f.upload(f.register(items));
+  const evidence = () =>
+    studentReportEvidence(f.ctx(), 'TA_STU_001', 'TA_E_MATH', '2026-11');
+  assert.deepEqual(evidence().repeated, []);
+  await f.confirm(submission);
+  const current = evidence();
+  assert.deepEqual(current.repeated, [
+    {
+      id: 'v3:MATH:academy-1:skill_MATH',
+      name: items[0].skill_label,
+      total: 2,
+      wrong: 2,
+    },
+  ]);
+  assert.deepEqual(current.suggestions, current.repeated);
+  assert.equal(evidence().fingerprint, current.fingerprint);
+});
 function code(expected: string) {
   return (error: unknown) =>
     error instanceof GradingError && error.code === expected;

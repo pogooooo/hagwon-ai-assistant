@@ -1,3 +1,4 @@
+import { askArchived } from './test-fixtures/archived-consultation.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -143,7 +144,7 @@ function setup(t: TestContext) {
     studentId = 'TA_STU_001',
   ) => {
     const conversationId = randomUUID();
-    await consultationModule.submit(
+    await askArchived(
       ctx(user),
       form({ action: 'ask', conversationId, question, studentId }),
     );

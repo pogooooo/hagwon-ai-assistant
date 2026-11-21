@@ -350,10 +350,12 @@ function consultationAccess({ db, actor }: PageContext): RagAccessScope {
   };
 }
 
-function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
-  const grading = gradingEvidence(db, academyId);
-  const learning = learningEvidence(db, academyId);
-  const workbook = workbookEvidence(db, academyId);
+function supplementaryEvidence(
+  db: OperationsDatabase,
+  academyId: string,
+  readGrades = gradingEvidence,
+) {
+  const grading = readGrades(db, academyId);
   const team = teamScheduleEvidence(db, academyId);
   const polls = pollScheduleEvidence(db, academyId);
   const schedule = {
@@ -375,20 +377,18 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
       ...knowledgeEvidence(db, academyId),
       ...schoolEvidence(db, academyId),
       ...schedule.documents,
-      ...learning.documents,
-      ...workbook.documents,
       ...grading.documents,
     ],
-    facts: [
-      ...schedule.facts,
-      ...learning.facts,
-      ...workbook.facts,
-      ...grading.facts,
-    ],
+    facts: [...schedule.facts, ...grading.facts],
   };
 }
 
-export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
+export async function ask(
+  ctx: PageContext,
+  form: FormData,
+  existing?: Thread,
+  readGrades = gradingEvidence,
+) {
   const { db, actor } = ctx;
   if (
     existing &&
@@ -418,7 +418,7 @@ export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
     documents: notices,
     facts: noticeFacts,
     schedule,
-  } = supplementaryEvidence(db, actor.academyId);
+  } = supplementaryEvidence(db, actor.academyId, readGrades);
   const indexVersion = documentsIndexVersion(
     db,
     actor.academyId,
@@ -482,7 +482,7 @@ export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
         '상담 열람 권한이 변경되었습니다. 다시 질문해 주세요.',
         403,
       );
-    const liveEvidence = supplementaryEvidence(db, actor.academyId);
+    const liveEvidence = supplementaryEvidence(db, actor.academyId, readGrades);
     const liveVersion = documentsIndexVersion(
       db,
       actor.academyId,
@@ -688,8 +688,13 @@ function submitThreadAction(
 export function currentCitationRevisions(ctx: PageContext) {
   const access = consultationAccess(ctx);
   const revisions = currentDocumentRevisions(ctx);
-  for (const notice of supplementaryEvidence(ctx.db, ctx.actor.academyId)
-    .documents) {
+  const academy = ctx.actor.academyId;
+  // Approved historical citations can still be read, subject to current revisions and access.
+  for (const notice of [
+    ...supplementaryEvidence(ctx.db, academy).documents,
+    ...learningEvidence(ctx.db, academy).documents,
+    ...workbookEvidence(ctx.db, academy).documents,
+  ]) {
     if (
       canReadRecord(
         access,

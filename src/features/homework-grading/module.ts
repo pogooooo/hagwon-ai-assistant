@@ -39,7 +39,6 @@ import {
 } from './facts.ts';
 import { cropAnswer, gradingMediaLimits } from './media.ts';
 import type { OperationsDatabase } from '../academy-operations/database.ts';
-import { registerGradingReports } from './report-adapter.ts';
 
 const services = new WeakMap<OperationsDatabase, GradingService>();
 export function gradingService(db: OperationsDatabase) {
@@ -824,7 +823,6 @@ export const gradingModule: OperationModule = {
   roles: ['admin', 'teacher', 'student', 'guardian'],
   setup: (db) => {
     setupGrading(db);
-    registerGradingReports(db);
   },
   render,
   submit,

@@ -1,3 +1,4 @@
+import { setupGrading } from '../homework-grading/service.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -52,6 +53,7 @@ function setup(
   learningModule.setup(db);
   homeworkModule.setup(db);
   makeupPollsModule.setup(db);
+  setupGrading(db);
   studentReportsModule.setup(db);
   db.prepare(
     "INSERT OR IGNORE INTO student_class_memberships(academy_id,student_id,class_id,enrolled_at) VALUES('AC_TEST_A','TA_STU_002','TA_E_MATH','2026-11-01')",
@@ -605,7 +607,7 @@ test('report drafts stay private, absence of evidence explicit; approval/edit/re
     /승인/,
   );
 });
-test('only latest confirmed classification is used; repeated errors use observed type counts', (t) => {
+test('legacy classifications, including confirmed revisions, cannot supply photo-report scores or recommendations', (t) => {
   const s = setup(t);
   const c = {
     formatVersion: '1.0',
@@ -663,8 +665,8 @@ test('only latest confirmed classification is used; repeated errors use observed
     'TA_E_MATH',
     '2026-11',
   );
-  assert.equal(e.total, 2);
-  assert.equal(e.repeated[0].wrong, 2);
+  assert.equal(e.total, 0);
+  assert.deepEqual(e.repeated, []);
   insert(2, 'draft');
   assert.equal(
     studentReportEvidence(s.ctx(), 'TA_STU_001', 'TA_E_MATH', '2026-11').total,

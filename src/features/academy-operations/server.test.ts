@@ -1,5 +1,6 @@
 import { getActor } from './directory.ts';
 import { homeworkModule } from './homework.ts';
+import { askArchived } from './test-fixtures/archived-consultation.ts';
 import { learningModule } from './learning.ts';
 import { OperationError } from './shared.ts';
 import assert from 'node:assert/strict';
@@ -134,7 +135,43 @@ async function startOperations(t: TestContext, publicOrigin = '') {
       db.close();
     }
   }
-  return { origin, send, login, readDatabase, historical, filename };
+  async function archivedAnswer(cookie: string, question: string) {
+    const db = new DatabaseSync(filename);
+    try {
+      const username = accounts.get(cookie);
+      assert.ok(username);
+      const account = db
+        .prepare('SELECT id FROM accounts WHERE username=?')
+        .get(username);
+      assert.ok(account);
+      const actor = getActor(db, String(account.id))!;
+      const conversationId = randomUUID(),
+        form = new FormData();
+      for (const [k, v] of Object.entries({
+        question,
+        conversationId,
+        studentId: 'TA_STU_001',
+      }))
+        form.set(k, v);
+      await askArchived(
+        { db, actor, url: new URL('/consultation', origin) },
+        form,
+      );
+      return conversationId;
+    } finally {
+      db.close();
+    }
+  }
+
+  return {
+    origin,
+    send,
+    login,
+    readDatabase,
+    historical,
+    archivedAnswer,
+    filename,
+  };
 }
 
 test('기존 교재 분석의 HTTP 상담 인용·권한·정정 후 철회', async (t) => {
@@ -227,7 +264,13 @@ test('기존 교재 분석의 HTTP 상담 인용·권한·정정 후 철회', as
     ).status,
     303,
   );
-  const answer = await s.send('/consultation?id=' + conversationId, parent);
+  const fresh = await s.send('/consultation?id=' + conversationId, parent);
+  assert.doesNotMatch(fresh.text, /2문항 중 1문항|\/learning\?publication=/);
+  const archivedId = await s.archivedAnswer(
+    parent,
+    '11월 수학 전체 정답률 알려줘',
+  );
+  const answer = await s.send('/consultation?id=' + archivedId, parent);
   assert.match(answer.text, /2문항 중 1문항/);
   const publicationId = /\/learning\?publication=(workbook-[a-f0-9]+)/.exec(
     answer.text,
@@ -249,7 +292,7 @@ test('기존 교재 분석의 HTTP 상담 인용·권한·정정 후 철회', as
   );
   assert.equal((await s.send(source, parent)).status, 404);
   assert.match(
-    (await s.send('/consultation?id=' + conversationId, parent)).text,
+    (await s.send('/consultation?id=' + archivedId, parent)).text,
     /답변을 표시할 수 없습니다/,
   );
   assert.equal((await s.historical('/homework', teacher, fields)).status, 409);
@@ -777,7 +820,8 @@ test(
   '이전 분류·제출 데이터의 HTTP 상담 출처·재분류 철회',
   { timeout: 20000 },
   async (t) => {
-    const { historical, send, login, readDatabase } = await startOperations(t);
+    const { historical, archivedAnswer, send, login, readDatabase } =
+      await startOperations(t);
     const admin = await login('TA_DIRECTOR');
     const student = await login('TA_STUDENT_001');
     const guardian = await login('TA_GUARDIAN_E_MATH');
@@ -915,7 +959,13 @@ test(
       ).status,
       303,
     );
-    const answer = await send('/consultation?id=' + cid, guardian);
+    const fresh = await send('/consultation?id=' + cid, guardian);
+    assert.doesNotMatch(fresh.text, /2문항 중 1문항|publication=/);
+    const archivedId = await archivedAnswer(
+      guardian,
+      '11월 전체 정답률 알려줘',
+    );
+    const answer = await send('/consultation?id=' + archivedId, guardian);
     assert.match(answer.text, /2문항 중 1문항/);
     const source = /href="(\/learning\?publication=[^"]+)"/.exec(
       answer.text,
@@ -928,7 +978,7 @@ test(
     document.classifiedAt = '2026-11-11T10:00:00+09:00';
     document.items[0].tags[0].tagId = 'math-09';
     assert.equal((await upload('1')).status, 303);
-    const stale = await send('/consultation?id=' + cid, guardian);
+    const stale = await send('/consultation?id=' + archivedId, guardian);
     assert.match(stale.text, /답변을 표시할 수 없습니다/);
     assert.doesNotMatch(stale.text, /2문항 중 1문항/);
     assert.equal((await send(source, guardian)).status, 404);
