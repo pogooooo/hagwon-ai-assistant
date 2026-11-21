@@ -56,7 +56,8 @@ const picker = document.querySelector('.grade-picker input');
 if (picker && typeof DataTransfer === 'function') {
   const previews = picker.form.querySelector('[data-previews]');
   const status = picker.form.querySelector('[data-file-status]');
-  const submit = picker.form.querySelector('button:not([type=button])');
+  const submit = picker.form.querySelector('[data-grade-submit]');
+  picker.form.classList.add('photos-enhanced');
   const limit = Number(picker.dataset.maxFiles);
   let entries = [];
   let busy = false;
@@ -76,6 +77,7 @@ if (picker && typeof DataTransfer === 'function') {
       label.textContent = i + 1 + '. ' + entry.file.name;
       const remove = document.createElement('button');
       remove.type = 'button';
+      remove.className = 'secondary';
       remove.textContent = '빼기';
       remove.setAttribute('aria-label', label.textContent + ' 빼기');
       remove.onclick = () => {
@@ -88,13 +90,20 @@ if (picker && typeof DataTransfer === 'function') {
       previews.append(figure);
     }
     picker.files = transfer.files;
+    const imagesOnly = entries.every(({ file }) =>
+      file.type.startsWith('image/'),
+    );
+    submit.disabled = busy || !entries.length;
+    submit.textContent = entries.length
+      ? (imagesOnly
+          ? '사진 ' + entries.length + '장'
+          : '파일 ' + entries.length + '개') + ' 제출'
+      : '숙제 제출';
     status.textContent = [
       message,
       entries.length
-        ? '첨부 ' +
-          entries.length +
-          '개 · 다른 사진을 이어서 추가할 수 있습니다.'
-        : '사진을 여러 장 선택하거나 한 장씩 추가할 수 있습니다.',
+        ? '첨부 ' + entries.length + '개. 파일을 더 추가할 수 있습니다.'
+        : '',
     ]
       .filter(Boolean)
       .join(' ');
@@ -164,7 +173,7 @@ if (picker && typeof DataTransfer === 'function') {
       message = error.message || '파일을 읽을 수 없습니다. 다시 선택해 주세요.';
     } finally {
       busy = false;
-      picker.disabled = submit.disabled = false;
+      picker.disabled = false;
       update(message);
     }
   });

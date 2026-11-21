@@ -4379,3 +4379,243 @@ a.assessment-entry.button-link {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Work screens share neutral rows. Strong fills mark the current action or a status. */
+.home-clear {
+  margin: 0;
+  padding: 14px 18px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.consultation-layout[data-consultation-view='queue'] .item-list li + li {
+  border-top: 1px solid var(--border);
+}
+.consultation-layout[data-consultation-view='queue'] .item-list a {
+  min-width: 0;
+  padding: 12px 10px;
+}
+.consultation-history .item-list .consultation-row-heading,
+.staff-thread-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.consultation-history .item-list .consultation-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.staff-thread-heading p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.consultation-status {
+  flex-shrink: 0;
+  background: var(--surface-alt, #f2f1eb);
+}
+.consultation-status:is([data-state='reply'], [data-state='unassigned']) {
+  background: #f8ecd2;
+  color: #634514;
+}
+
+.poll-index,
+.poll-people,
+.poll-cancel,
+.report-periods,
+.report-save {
+  border-top: 1px solid var(--border);
+}
+.poll-index summary,
+.poll-people summary,
+.poll-cancel summary,
+.report-periods summary,
+.report-save summary {
+  width: fit-content;
+  padding: 9px 0;
+  min-height: 44px;
+  cursor: pointer;
+  font-weight: 650;
+}
+.poll-response-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  padding: 10px 0 15px;
+}
+.poll-response-summary strong {
+  font-size: 1.15rem;
+}
+.poll-response-summary span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.poll-candidate-list {
+  list-style: none;
+  border-block: 1px solid var(--border);
+  margin: 6px 0 14px;
+  padding: 0;
+}
+.poll-candidate-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+.poll-candidate-list li + li {
+  border-top: 1px solid var(--border);
+}
+.poll-candidate-list :is(li > span, .poll-conflict) {
+  font-size: 0.875rem;
+}
+.poll-candidate-list li > span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.poll-candidate-list .poll-conflict {
+  margin: 3px 0 0;
+  color: #7d391b;
+}
+.poll-waiting {
+  color: var(--ink);
+}
+.poll-approve {
+  margin-block: 16px;
+}
+.poll-approve label {
+  gap: 10px;
+}
+.report-periods {
+  max-width: 920px;
+}
+.report-periods .report-library {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+}
+.report-save {
+  padding: 0 clamp(16px, 3vw, 32px) 8px;
+}
+.report-save a {
+  margin-bottom: 8px;
+}
+.report-highlights {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 14px clamp(16px, 3vw, 32px);
+  border-bottom: 1px solid var(--border);
+}
+.report-highlights dt {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+.report-highlights dd {
+  margin: 3px 0 0;
+  color: var(--ink);
+}
+.report-highlights div:first-child dd {
+  font-weight: 720;
+}
+@media (min-width: 781px) {
+  .report-highlights {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+}
+.grade-assignment h2 {
+  margin: 0;
+}
+.grade-assignment p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.grade-file-status:empty,
+.grade-previews:empty,
+.grade-picker-prompt {
+  display: none;
+}
+.grade-upload .photos-enhanced .grade-picker {
+  position: relative;
+  cursor: pointer;
+  text-align: left;
+  justify-items: start;
+}
+.grade-upload .photos-enhanced .grade-picker:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.grade-upload .photos-enhanced .grade-picker input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.photos-enhanced .grade-picker-prompt {
+  display: inline-block;
+  justify-self: start;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-weight: 700;
+}
+.submission-actions button:disabled {
+  background: #e7e8e1;
+  border-color: #d6d9cf;
+  color: #545d4c;
+  opacity: 1;
+  cursor: default;
+}
+
+@media (max-width: 780px) {
+  .consultation-layout[data-consultation-view='queue'][data-has-thread='true']
+    .consultation-history,
+  .consultation-layout[data-consultation-view='queue'][data-has-thread='false']
+    .consultation-main {
+    display: none;
+  }
+  .grade-filters.grading-sections {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin-block: 0 12px;
+  }
+  .grading-sections a {
+    min-width: 0;
+    padding-inline: 5px;
+    text-align: center;
+    font-size: 0.84rem;
+    text-wrap: balance;
+  }
+  .grade-upload .grade-picker {
+    padding: 13px;
+  }
+  .submission-actions {
+    position: sticky;
+    z-index: 2;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding-block: 9px;
+  }
+  .submission-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+  .grade-upload,
+  .wrong-task {
+    scroll-margin-bottom: 138px;
+  }
+}

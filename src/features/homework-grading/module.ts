@@ -903,25 +903,25 @@ async function render(ctx: PageContext) {
           assignment.title === material.title,
       );
     const intro =
-      `<script src="/grading-ui.js?v=2" defer></script><div class="page-heading"><h1>${title}</h1></div><nav class="grade-filters" aria-label="숙제 메뉴">` +
+      `<script src="/grading-ui.js?v=3" defer></script><div class="page-heading grading-heading"><h1>${title}</h1></div><nav class="grade-filters grading-sections" aria-label="숙제 메뉴">` +
       tabs
         .map(
           ([key, label]) =>
             `<a href="/grading?view=${key}"${view === key ? ' aria-current="page"' : ''}>${label}</a>`,
         )
         .join('') +
-      '</nav>' +
-      (material && worksheet
+      '</nav>';
+    const materialLink = (forUpload: boolean, selected?: string) =>
+      material && worksheet
         ? renderHomeworkMaterial(
             material,
-            view === 'upload' &&
-              params.get('assignment') === worksheet.assignment_id
+            selected === worksheet.assignment_id
               ? undefined
               : '/grading?view=upload&assignment=' +
                   encodeURIComponent(worksheet.assignment_id),
-            view === 'upload' ? '이 과제 선택' : '이 과제 제출',
+            forUpload ? '이 과제 선택' : '이 과제 제출',
           )
-        : '');
+        : '';
     if (detail) return intro + detail;
     if (view === 'register')
       return (
@@ -973,9 +973,9 @@ async function render(ctx: PageContext) {
           : '';
       return (
         intro +
-        `<section class="panel grade-upload"><h2>${staff ? '대리 제출' : '과제와 답안'}</h2>${picker}${
+        `<section class="panel grade-upload">${staff ? '<h2>대리 제출</h2>' : ''}${picker}${
           selected && eligible.length
-            ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${hidden('assignment', selected.assignment_id)}<p><strong>${h(selected.title)}</strong> · ${selected.scope ? (selected.scope.kind === 'workbook' ? '책 쪽수와 문항 번호가 보이게 촬영 · 긴 범위는 나누어 제출 가능' : '나눠 준 문제지의 문항 번호가 보이게 촬영') : selected.items.length + '문항'}</p>${
+            ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${hidden('assignment', selected.assignment_id)}<div class="grade-assignment"><h2>${h(selected.title)}</h2><p>${selected.scope ? (selected.scope.kind === 'workbook' ? '책 쪽수와 문항 번호가 보이게 촬영 · 긴 범위는 나누어 제출 가능' : '나눠 준 문제지의 문항 번호가 보이게 촬영') : selected.items.length + '문항'}</p></div>${
                 eligible.length === 1
                   ? hidden('student', eligible[0].id)
                   : choice(
@@ -985,9 +985,9 @@ async function render(ctx: PageContext) {
                       target?.student ?? '',
                       Object.fromEntries(eligible.map((s) => [s.id, s.name])),
                     )
-              }<label class="grade-picker" data-jump-label="사진 첨부"><strong>사진 또는 PDF 추가</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><input type="file" name="photos" data-max-files="${mediaLimits.pages}" data-max-bytes="${mediaLimits.bytes}" data-max-pixels="${mediaLimits.pixels}" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><p class="muted">한 번에 ${mediaLimits.pages}쪽 · 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MB 이하</p><p data-file-status aria-live="polite"></p><div class="grade-previews" data-previews></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<button>숙제 제출</button><details class="grade-details"><summary>사진 보관과 결과 공개</summary>${gradingAvailability(service, canPractice)}<p>원본은 검수 전 최대 ${Math.round(service.ttl / 60000)}분 보관합니다. 선생님이 결과를 확인하고 원본 삭제가 확인되면 결과가 공개됩니다.</p><p>사진은 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 첨부할 수 있습니다.</p></details></form>`
+              }<label class="grade-picker" data-jump-label="사진 첨부"><strong>사진 또는 PDF 추가</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><span class="grade-picker-prompt" aria-hidden="true">파일 선택</span><input type="file" name="photos" data-max-files="${mediaLimits.pages}" data-max-bytes="${mediaLimits.bytes}" data-max-pixels="${mediaLimits.pixels}" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><p class="muted">한 번에 ${mediaLimits.pages}쪽 · 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MB 이하</p><p class="grade-file-status" data-file-status aria-live="polite"></p><div class="grade-previews" data-previews></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<div class="submission-actions"><button type="submit" data-grade-submit>숙제 제출</button></div><details class="grade-details"><summary>사진 보관과 결과 공개</summary>${gradingAvailability(service, canPractice)}<p>원본은 검수 전 최대 ${Math.round(service.ttl / 60000)}분 보관합니다. 선생님이 결과를 확인하고 원본 삭제가 확인되면 결과가 공개됩니다.</p><p>사진은 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 첨부할 수 있습니다.</p></details></form>`
             : '<p>제출할 수 있는 사진 채점 과제가 없습니다.</p>'
-        }${ctx.actor.academyId === 'AC_TEST_A' ? '<details class="grade-samples"><summary>연습용 답안 내려받기</summary><p>한 페이지씩 사진을 추가하거나 여러 페이지를 PDF 한 파일로 제출할 수 있습니다.</p><div><a download href="/assets/practice-math-1.png">1쪽 사진</a><a download href="/assets/practice-math-2.png">2쪽 사진</a><a download href="/assets/practice-math.pdf">두 쪽 PDF</a></div></details>' : ''}</section>`
+        }${material && worksheet ? `<details class="grade-details"><summary>숙제 자료 보기</summary>${materialLink(true, selected?.assignment_id)}</details>` : ''}${ctx.actor.academyId === 'AC_TEST_A' ? '<details class="grade-samples"><summary>연습용 답안 내려받기</summary><p>한 페이지씩 사진을 추가하거나 여러 페이지를 PDF 한 파일로 제출할 수 있습니다.</p><div><a download href="/assets/practice-math-1.png">1쪽 사진</a><a download href="/assets/practice-math-2.png">2쪽 사진</a><a download href="/assets/practice-math.pdf">두 쪽 PDF</a></div></details>' : ''}</section>`
       );
     }
     if (view === 'reports') {
@@ -1063,7 +1063,8 @@ async function render(ctx: PageContext) {
         selectedEntries.length
           ? `<ul class="grade-queue-list">${selectedEntries.map((s) => `<li><a class="grade-queue-entry" href="${h(s.href)}"><strong>${h(s.title)}</strong><span class="grade-student">${h(s.studentName)}</span><span class="pill">${h(names[s.processing])}</span></a></li>`).join('')}</ul>`
           : `<p class="muted">${view === 'results' ? '공개된 채점 결과가 없습니다.' : queue === 'all' ? '제출된 숙제가 없습니다.' : '이 상태의 제출이 없습니다.'}</p>`
-      }</section>`
+      }</section>` +
+      materialLink(false)
     );
   } catch (error) {
     gradingError(error);
