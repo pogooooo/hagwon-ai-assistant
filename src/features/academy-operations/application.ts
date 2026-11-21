@@ -46,7 +46,7 @@ import {
   reviewHomeworkReading,
 } from './homework-classifier.ts';
 import { homeworkModule, homeworkOverview, homeworkPhoto } from './homework.ts';
-import { learningModule } from './learning.ts';
+import { learningModule, recentLearningReports } from './learning.ts';
 import { briefingModule } from './briefing.ts';
 import { parentMessagesModule } from './parent-messages.ts';
 import { unreadParentCount } from './parent-messages-model.ts';
@@ -81,13 +81,20 @@ const modules: OperationModule[] = [
   {
     ...studentReportsModule,
     render: (ctx) =>
-      renderStudentReports(ctx, () =>
-        homeworkOverview(ctx).results.map((result) => ({
-          href: '/homework?submission=' + encodeURIComponent(result.id),
-          title: result.assignment_title,
-          studentName: result.student_name,
-          date: result.confirmed_at!.slice(0, 10),
-        })),
+      renderStudentReports(
+        ctx,
+        () =>
+          homeworkOverview(ctx).results.map((result) => ({
+            href: '/homework?submission=' + encodeURIComponent(result.id),
+            title: result.assignment_title,
+            studentName: result.student_name,
+            date: result.confirmed_at!.slice(0, 10),
+          })),
+        () =>
+          recentLearningReports(ctx).map(({ id, name, period }) => ({
+            href: '/learning?publication=' + encodeURIComponent(id),
+            title: name + ' · ' + period,
+          })),
       ),
   },
   documentsModule,

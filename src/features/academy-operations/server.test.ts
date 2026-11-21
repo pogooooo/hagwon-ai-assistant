@@ -867,8 +867,9 @@ test(
     assert.ok(source);
     assert.equal((await send(source, guardian)).status, 200);
     assert.equal((await send(source, other)).status, 404);
-    assert.ok((await send('/', guardian)).text.includes(source));
-    assert.ok(!(await send('/', other)).text.includes(source));
+    assert.match((await send('/', guardian)).text, /학습 리포트 보기/);
+    assert.ok((await send('/student-reports', guardian)).text.includes(source));
+    assert.ok(!(await send('/student-reports', other)).text.includes(source));
     document.classifiedAt = '2026-11-11T10:00:00+09:00';
     document.items[0].tags[0].tagId = 'math-09';
     assert.equal((await upload('1')).status, 303);

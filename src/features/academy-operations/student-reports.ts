@@ -420,6 +420,7 @@ interface AssignmentResult {
 export function renderStudentReports(
   ctx: PageContext,
   readAssignments: () => AssignmentResult[] = () => [],
+  readPublishedLearning: () => { href: string; title: string }[] = () => [],
 ) {
   const family = ctx.actor.role === 'guardian';
   const assignments =
@@ -463,14 +464,20 @@ export function renderStudentReports(
   });
   html += `<nav class="report-links">${list.map((r) => `<a class="workspace-link" href="/student-reports?id=${h(r.id)}">${h(students.find((s) => s.id === r.student_id)?.name)} ${h(r.period)} · ${r.state === 'approved' ? '승인' : '초안'}</a>`).join('')}</nav>`;
   const id = ctx.url.searchParams.get('id');
-  if (!id)
+  if (!id) {
+    const publishedLearning = family ? readPublishedLearning() : [];
+    const previous = publishedLearning.length
+      ? `<section class="panel"><h2>공개 학습 기록</h2><nav class="report-links">${publishedLearning.map((record) => `<a class="workspace-link" href="${h(record.href)}">${h(record.title)}</a>`).join('')}</nav></section>`
+      : '';
     return (
       html +
       (list.length
         ? '<p>리포트를 선택해 주세요.</p>'
         : '<p>아직 열람할 리포트가 없습니다.</p>') +
+      previous +
       renderReportExamples(ctx)
     );
+  }
   const r = load(ctx, id);
   if (!staff(ctx))
     return (
