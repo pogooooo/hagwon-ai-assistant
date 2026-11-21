@@ -12,7 +12,15 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
   const password = 'synthetic-selector-test';
   initializeIdentity(db, password);
   db.exec(`INSERT INTO accounts(id,academy_id,username,name,role,password_hash)
-    SELECT 'qa-parent-test',academy_id,'AXR_CHECK_GUARDIAN_20261119','체험 보호자',role,password_hash FROM accounts WHERE id='TA_GUARDIAN_E_MATH';`);
+    SELECT 'qa-parent-test',academy_id,'AXR_CHECK_GUARDIAN_20261119','체험 보호자',role,password_hash FROM accounts WHERE id='TA_GUARDIAN_E_MATH';
+    INSERT INTO accounts(id,academy_id,username,name,role,password_hash)
+    SELECT 'qa-teacher-test',academy_id,'AXR_CHECK_TEACHER_20261119','체험 교사',role,password_hash FROM accounts WHERE id='TA_TEACHER';
+    INSERT INTO teacher_classes(teacher_id,class_id) VALUES ('qa-teacher-test','TA_E_MATH');
+    INSERT INTO guardian_students(guardian_id,student_id) VALUES ('qa-parent-test','TA_STU_001');
+    CREATE TABLE op_demo_logins_v1 (
+      slot TEXT PRIMARY KEY, account_id TEXT UNIQUE REFERENCES accounts(id) ON DELETE SET NULL
+    );
+    INSERT INTO op_demo_logins_v1(slot,account_id) VALUES ('parent','qa-parent-test'),('teacher','qa-teacher-test');`);
   const server = createOperationsServer({
     db,
     demoPassword: password,
@@ -42,6 +50,27 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
     assert.ok(cookie);
     return cookie;
   }
+  const trialTeacher = await login('AXR_CHECK_TEACHER_20261119', '/academies');
+  const trialInbox = await (
+    await send('/consultation?status=reply', trialTeacher)
+  ).text();
+  assert.match(trialInbox, /분수 계산에서 같은 유형을 계속 틀려요/);
+  assert.doesNotMatch(trialInbox, /분수 뺄셈에서 통분하는 순서/);
+  assert.equal(
+    (
+      await send('/academies', trialTeacher, {
+        action: 'switch',
+        profile: 'ONDAP_LANGUAGE_qa-teacher-test',
+        _academyAccount: 'qa-teacher-test',
+      })
+    ).status,
+    303,
+  );
+  const languageTrial = await (
+    await send('/consultation?status=reply', trialTeacher)
+  ).text();
+  assert.match(languageTrial, /영어 문장을 소리 내어 읽는 연습/);
+  assert.doesNotMatch(languageTrial, /분수 계산에서 같은 유형/);
   for (const [id, role] of [
     ['TA_STUDENT_001', 'student'],
     ['TA_GUARDIAN_E_MATH', 'guardian'],
