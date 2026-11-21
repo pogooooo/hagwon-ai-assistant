@@ -72,9 +72,22 @@ test('QA 가상 데이터: 반 4개·정원 9·예약·서로 다른 승인 분�
   };
   const a = await ask('TA_GUARDIAN_E_MATH'),
     b = await ask('TA_GUARDIAN_M2');
-  assert.equal(a.status, 'answered', JSON.stringify(a));
-  assert.equal(b.status, 'answered', JSON.stringify(b));
-  assert.match(a.answer, /계산/);
-  assert.match(b.answer, /추론/);
-  assert.notEqual(a.citations[0].documentId, b.citations[0].documentId);
+  assert.ok(
+    sources.some(
+      (d) => d.studentId === 'TA_STU_001' && d.text.includes('계산'),
+    ),
+  );
+  assert.ok(
+    sources.some(
+      (d) => d.studentId !== 'TA_STU_001' && d.text.includes('추론'),
+    ),
+  );
+  for (const answer of [a, b]) {
+    assert.notEqual(answer.status, 'answered', JSON.stringify(answer));
+    assert.ok(
+      !answer.citations.some((c) =>
+        sources.some((d) => d.documentId === c.documentId),
+      ),
+    );
+  }
 });

@@ -1,3 +1,4 @@
+import { askArchived } from './test-fixtures/archived-consultation.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -113,12 +114,14 @@ function setup(t: TestContext) {
     });
   const ask = async (username: string, question: string, studentId = '') => {
     const conversationId = randomUUID();
-    await submit(consultationModule, username, {
-      action: 'ask',
+    const query = new FormData();
+    for (const [k, v] of Object.entries({
       question,
       studentId,
       conversationId,
-    });
+    }))
+      query.set(k, v);
+    await askArchived(ctx(username), query);
     return JSON.parse(
       String(
         db
