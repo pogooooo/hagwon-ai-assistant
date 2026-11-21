@@ -101,6 +101,38 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       const path = thread.headers.get('location')!;
       const answer = await (await send(path, cookie)).text();
       assert.match(answer, /오후 2시/);
+      for (const question of ['수업 대상이 누구인지', '중학생도 수업하는지']) {
+        const course = await send('/consultation', cookie, {
+          _academyAccount: alt,
+          action: 'ask',
+          conversationId: randomUUID(),
+          question,
+        });
+        assert.equal(course.status, 303);
+        const reply = await (
+          await send(course.headers.get('location')!, cookie)
+        ).text();
+        assert.match(reply, /data-answer-status="answered"/);
+        assert.match(reply, /영어 회화반/);
+        assert.doesNotMatch(reply, /중2 내신반/);
+        assert.match(reply, /온답 어학원 정규 수업 안내/);
+      }
+      const examples = await (
+        await send('/student-reports?example=3', cookie)
+      ).text();
+      assert.equal(
+        (examples.match(/href="\/student-reports\?example=/g) ?? []).length,
+        3,
+      );
+      assert.match(examples, /출결 기록 없음/);
+      assert.doesNotMatch(examples, /초등 수학 · 분수 계산/);
+      const documents = await (await send('/documents', cookie)).text();
+      assert.doesNotMatch(documents, /<th>공개 범위<\/th>/);
+      assert.doesNotMatch(
+        documents,
+        /<header[\s\S]*?profile-link[\s\S]*?<\/header>/,
+      );
+
       assert.equal((await choose(alt, id)).status, 303);
       assert.equal((await send(path, cookie)).status, 404);
     } else {

@@ -483,7 +483,7 @@ function renderNoticeForm(
         <label>보강 종료<input type="datetime-local" name="makeup_end" value="${localDateTime(editing?.makeup_end)}"></label>
       </div>
       <div class="actions"><button type="submit">${editing ? '변경 확정' : '공지 확정'}</button>
-      ${editing ? '<a href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
+      ${editing ? '<a class="workspace-link" href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
     </form>`;
 }
 
@@ -513,7 +513,7 @@ function renderNotices(ctx: PageContext): string {
         ? String.raw`<td><div class="actions">${
             manage(notice)
               ? String.raw`
-      <a href="/schedule?edit_notice=${encodeURIComponent(notice.id)}">편집</a>
+      <a class="workspace-link" href="/schedule?edit_notice=${encodeURIComponent(notice.id)}">편집</a>
       ${actionForm('revoke_notice', 'notice_id', notice.id, '공지 철회', hidden('revision', String(notice.revision)))}
     `
               : ''
@@ -524,7 +524,7 @@ function renderNotices(ctx: PageContext): string {
     .join('');
   return String.raw`
     <section class="panel"><h2>휴강·보강 공지</h2>
-    ${editing ? renderNoticeForm(ctx, editing) : isStaff(ctx.actor) ? '<p><a href="/schedule?view=makeup">휴·보강 일정 등록</a></p>' : ''}
+    ${editing ? renderNoticeForm(ctx, editing) : isStaff(ctx.actor) ? '<p><a class="workspace-link" href="/schedule?view=makeup">휴·보강 일정 등록</a></p>' : ''}
     ${renderTeamNotices(ctx)}
     ${
       notices.length
@@ -558,7 +558,7 @@ function renderSlotForm(ctx: PageContext, editing: Slot | undefined): string {
         <label>상담 종료<input type="datetime-local" name="slot_end" required value="${localDateTime(editing?.ends_at)}"></label>
       </div>
       <div class="actions"><button type="submit">${editing ? '상담 시간 저장' : '예약 가능 시간 추가'}</button>
-      ${editing ? '<a href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
+      ${editing ? '<a class="workspace-link" href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
     </form>`;
 }
 
@@ -578,7 +578,7 @@ function renderStaffSlots(ctx: PageContext, slots: Slot[]): string {
     ${
       slot.reserved
         ? ''
-        : '<a href="/schedule?edit_slot=' +
+        : '<a class="workspace-link" href="/schedule?edit_slot=' +
           encodeURIComponent(slot.id) +
           '">편집</a>' +
           actionForm('revoke_slot', 'slot_id', slot.id, '닫기')
@@ -630,7 +630,7 @@ function renderBookingForm(
         </select></label>
       </div>
       <div class="actions"><button type="submit">${editing ? '예약 변경' : '상담 예약'}</button>
-      ${editing ? '<a href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
+      ${editing ? '<a class="workspace-link" href="/schedule?view=bookings">편집 취소</a>' : ''}</div>
     </form>`;
 }
 
@@ -664,7 +664,7 @@ function renderBookings(ctx: PageContext): string {
       editable(booking)
         ? (isStaff(ctx.actor)
             ? ''
-            : '<a href="/schedule?edit_booking=' +
+            : '<a class="workspace-link" href="/schedule?edit_booking=' +
               encodeURIComponent(booking.id) +
               '">변경</a>') +
           actionForm('cancel_booking', 'booking_id', booking.id, '예약 취소')

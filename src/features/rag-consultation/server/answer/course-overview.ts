@@ -18,7 +18,15 @@ import {
 const requestedGrade = /(?<![가-힣\d])([초중고][1-6])(?!\d)/g;
 const courseColumn =
   /^(?:과정|과정명|반|반명|강좌|강좌명|개설반|개설과정|개설과목)$/;
-const targetColumn = /^(?:대상|대상학년)$/;
+const targetColumn = /^(?:대상|대상학년|수강대상|교육대상|모집대상|수강학년)$/;
+const audienceTopic =
+  /^(?:(?:여기|(?:이)?학원)(?:에서는|에서|은|는)?)?(?:정규)?(?:수업|수강|교육|등록|과정)(?:의)?대상(?:학년)?/;
+const audienceRequest =
+  /^(?:(?:이|은|는)?(?:누구|어떤학년|몇학년|어디까지|어떻게되)(?:인지|인가요|인가|예요|이에요|나요|는지|요)?|(?:을|를)?(?:알려(?:주실수있나요|주세요|줘)|궁금해요)?)(?:요)?[?!.]*$/;
+const alternateAudience =
+  /^(?:누가(?:수업을받을수|수강할수|다닐수)(?:있나요|있어요|있는지)|(?:어떤|몇)학년(?:을|부터|까지)?(?:가르치나요|가르쳐요|가르치는지)|(?:누구|어떤학년|몇학년)(?:를)?대상(?:으로)?(?:수업|교육)(?:하나요|해요|하는지))[?!.]*$/;
+const schoolLevel = /^([초중고])(?:등(?:학생|부|학교)?|학생|학교)$/;
+const unavailableCourse = /^(?:미개설|없음|운영안함|개설예정|[-—]+)$/;
 const contentColumn = /^(?:주요내용|수업방식|수업내용|학습내용|과정소개)$/;
 const scopeSection =
   /^(?:\d+\.?)?(?:교육|수강)대상(?:및|과|·)개설(?:과목|과정|반)$/;
@@ -31,6 +39,36 @@ const declaredGradeRange = new RegExp(
 );
 const shortGrade = (label: string) =>
   compactText(label).replace(/(?:등학교|학교|등|학년)/g, '');
+
+function courseGrades(label: string): number[] {
+  const fromText = (value: string): number[] => {
+    const level = schoolLevel.exec(compactText(value))?.[1];
+    return level
+      ? gradeBand(level + '1~' + (level === '초' ? '6' : '3'))
+      : gradeBand(shortGrade(value));
+  };
+  const whole = fromText(label);
+  if (whole.length) return whole;
+  const parts = label.split(/[·,/]/).map(fromText);
+  return parts.every((part) => part.length) ? parts.flat() : [];
+}
+
+function audienceFromParagraph(line: string): number[] {
+  const labeled =
+    /^\s*[-*]?\s*(?:(?:정규\s*)?수업\s*대상|수강\s*대상|교육\s*대상|대상\s*학년)\s*[:：]\s*(.+?)[.!]?$/.exec(
+      line,
+    );
+  if (labeled) return courseGrades(labeled[1]);
+  const range = declaredGradeRange.exec(line);
+  if (
+    !range ||
+    !/학원|교습소|아카데미|공방/.test(line) ||
+    !/가르치|수강\s*대상|과정.{0,15}운영|수업.{0,15}운영/.test(line) ||
+    /예전|작년|강사|출신|이전|예정|특강|운영하지/.test(line)
+  )
+    return [];
+  return gradeBand(shortGrade(range[1]) + '~' + shortGrade(range[2]));
+}
 
 function normalizeSchoolWord(question: string): string {
   const studentSyllable = '생'.charCodeAt(0) - 0xac00;
@@ -92,7 +130,7 @@ function declaredRegularCourses(
       )
         continue;
       const excerpt = row.project(target, course);
-      if (!excerpt || !gradeBand(row.cells[target] ?? '').length) {
+      if (!excerpt || !courseGrades(row.cells[target] ?? '').length) {
         complete = false;
         break;
       }
@@ -205,7 +243,20 @@ export async function answerCourseOverview(
     !frame.selfReference &&
     !frame.unknownPrograms.length &&
     !frame.unboundProgram;
-  const simpleOffering = asksSchoolOffering && simpleOfferingQuestion.test(q);
+  const topic = audienceTopic.exec(compactText(q));
+  const asksSchoolAudience =
+    !frame.classIds.length &&
+    !frame.matchedStudentIds.length &&
+    !frame.selfReference &&
+    (topic
+      ? audienceRequest.test(compactText(q).slice(topic[0].length))
+      : alternateAudience.test(compactText(q)));
+  const simpleOffering =
+    asksSchoolOffering &&
+    (simpleOfferingQuestion.test(q) ||
+      /^(?:(?:여기|(?:이)?학원)(?:에서는|에서|은|는)?)?(?:초등학생|중학생|고등학생|[초중고][1-6])(?:도|은|는)?(?:수강할수|등록할수)(?:있나요|있어요|있는지)[?!.]*$/.test(
+        compactText(q),
+      ));
   const asksCourseList =
     /^(?:(?:(?:이\s*)?학원|여기)(?:에서는|에서|은|는)?\s*)?(?:(?:어떤|무슨)\s*(?:수업|반|과정|강좌)(?:들이|이|가|을|를)?\s*(?:있나요|있어요|하나요|운영하나요)|(?:정규\s*)?(?:수업|과정|강좌|반)\s*(?:목록|종류)(?:을|를)?\s*(?:알려\s*주세요|알려\s*줘)?)[?!. ]*$/.test(
       q,
@@ -232,6 +283,7 @@ export async function answerCourseOverview(
     !frame.selfReference;
   if (
     !asksCourseList &&
+    !asksSchoolAudience &&
     !asksDescription &&
     !asksEligibility &&
     !aim &&
@@ -248,7 +300,7 @@ export async function answerCourseOverview(
     studentIds: [],
     asOf: ctx.asOf,
     query:
-      (simpleOffering || asksCourseList
+      (simpleOffering || asksCourseList || asksSchoolAudience
         ? q + ' 교육 대상 개설 반'
         : ctx.question) + ' 과정 구성 대상 수업 방식',
     documentTypes: ['academy_info', 'curriculum'],
@@ -300,6 +352,32 @@ export async function answerCourseOverview(
     return name ? [{ chunk, row, course, name }] : [];
   });
 
+  const offeringRows = rows.flatMap(({ row, course, name }) => {
+    if (unavailableCourse.test(compactText(name))) return [];
+    const target = row.column(targetColumn);
+    const band = courseGrades(row.cells[target] ?? '');
+    const excerpt = row.project(course, target);
+    return band.length && excerpt ? [{ band, excerpt }] : [];
+  });
+  const audienceParagraphs = paragraphs.flatMap((excerpt) => {
+    if (excerpt.chunk.classId !== null) return [];
+    const band = audienceFromParagraph(excerpt.line);
+    return band.length ? [{ band, excerpt }] : [];
+  });
+  const courseEvidence = [...offeringRows, ...audienceParagraphs];
+  if (asksSchoolAudience) {
+    return courseEvidence.length
+      ? schoolOfferingAnswer(
+          ctx,
+          '승인된 안내에서 확인한 수업 대상입니다.',
+          courseEvidence.map(({ excerpt }) => excerpt),
+        )
+      : abstain(
+          '공개된 학원 자료에서 수업 대상 학년을 확인할 수 없습니다.',
+          'INSUFFICIENT_EVIDENCE',
+        );
+  }
+
   let evidence: EvidenceExcerpt[] = [];
   if (letterPlacement) {
     evidence = letterPlacementProof(ctx, grades, letters, paragraphs);
@@ -316,9 +394,6 @@ export async function answerCourseOverview(
   if (asksSchoolOffering && !evidence.length) {
     const admits = (band: number[]) =>
       schoolGrades.some((grade) => band.includes(grade));
-    const matches = rows.filter(({ row }) =>
-      admits(gradeBand(row.cells[row.column(targetColumn)] ?? '')),
-    );
     const schoolLabel =
       grades[0] ??
       (schoolGrades[0] <= 6
@@ -326,22 +401,17 @@ export async function answerCourseOverview(
         : schoolGrades[0] <= 9
           ? '중학생'
           : '고등학생');
-    if (simpleOffering) {
-      const offeredRows = matches.flatMap(({ row, course, name }) => {
-        if (/^(?:미개설|없음|[-—]+)$/.test(compactText(name))) return [];
-        const excerpt = row.project(course, row.column(targetColumn));
-        return excerpt ? [excerpt] : [];
-      });
-      if (offeredRows.length)
-        return schoolOfferingAnswer(
-          ctx,
-          '현재 ' + schoolLabel + ' 대상 수업을 운영합니다.',
-          offeredRows.slice(0, 4),
-        );
-    }
+    const matches = courseEvidence.filter(({ band }) => admits(band));
+    if (simpleOffering && matches.length)
+      return schoolOfferingAnswer(
+        ctx,
+        '현재 ' + schoolLabel + ' 대상 수업을 운영합니다.',
+        matches.slice(0, 4).map(({ excerpt }) => excerpt),
+      );
     const offered =
-      ctx.catalog.classes.some(({ grade }) => admits(gradeBand(grade ?? ''))) ||
-      matches.length > 0;
+      ctx.catalog.classes.some(({ grade }) =>
+        admits(courseGrades(grade ?? '')),
+      ) || matches.length > 0;
     if (!offered) {
       evidence = paragraphs.filter(({ chunk, line }) => {
         const declared = declaredGradeRange.exec(line);

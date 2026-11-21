@@ -97,7 +97,7 @@ test('QA: 날짜·상대일 질문은 업로드 안내문 대신 달력 DB를 �
   await s.config();
   await assert.rejects(
     s.ask('초등 수학반 시간표 알려주세요', 'TA_DIRECTOR'),
-    /학부모만/,
+    /학생과 학부모만/,
   );
   for (const q of [
     '초등 수학반 11월 16일 수업 있나요?',
@@ -158,7 +158,7 @@ test('QA: 날짜·상대일 질문은 업로드 안내문 대신 달력 DB를 �
   }
 });
 
-test('QA: 근거 부족은 최신 질문·요청자·학생과 함께 담당자 목록에 자동 수집한다', async (t) => {
+test('QA: 연결을 요청한 상담만 미확인 질문과 학생을 담당자에게 표시한다', async (t) => {
   const s = setup(t);
   await s.config();
   await s.ask('초등 수학반 시간표 알려주세요');
@@ -180,10 +180,13 @@ test('QA: 근거 부족은 최신 질문·요청자·학생과 함께 담당자 
     s.db
       .prepare('SELECT status FROM op_consultation_threads WHERE id=?')
       .get(thread.id)!.status,
-    'requested',
+    'open',
   );
   const ctx = s.ctx('TA_DIRECTOR');
   ctx.url = new URL('http://localhost/consultation?view=inbox');
+  assert.doesNotMatch(await consultationModule.render(ctx), /주차 가능한가요/);
+  f.set('action', 'handoff');
+  await consultationModule.submit(s.ctx('TA_GUARDIAN_E_MATH'), f);
   const html = await consultationModule.render(ctx);
   assert.match(html, /주차 가능한가요/);
   assert.match(html, /가상학생A/);

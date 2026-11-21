@@ -720,7 +720,7 @@ function render(ctx: PageContext) {
             )
               .map(
                 (x) =>
-                  `<li>${h(x.date)} · ${h(x.start)}~${h(x.end)} ${h(x.className)} <span class="pill">${{ regular: '정규 수업', canceled: '휴강', absent: '결석', makeup: '보강' }[x.kind]}</span>${x.kind === 'makeup' ? `<a href="/schedule?view=makeup#event-${h(x.eventId)}">${h(state.events.find((e) => e.eventId === x.eventId)?.date)} 휴강·결석의 보강</a>` : ''}</li>`,
+                  `<li>${h(x.date)} · ${h(x.start)}~${h(x.end)} ${h(x.className)} <span class="pill">${{ regular: '정규 수업', canceled: '휴강', absent: '결석', makeup: '보강' }[x.kind]}</span>${x.kind === 'makeup' ? `<a class="workspace-link" href="/schedule?view=makeup#event-${h(x.eventId)}">${h(state.events.find((e) => e.eventId === x.eventId)?.date)} 보강 상세 <span aria-hidden="true">›</span></a>` : ''}</li>`,
               )
               .join('')}</ul></section>`,
         )
@@ -776,7 +776,7 @@ export function renderTeamNotices(ctx: PageContext) {
     .filter((e) => e.status === 'confirmed' && visible(ctx, e))
     .map(
       (e) =>
-        `<article class="message"><a href="/schedule?view=makeup#event-${h(e.eventId)}">${h(academy.classes.find((c) => c.classId === e.classId)?.name)} · ${h(e.date)} ${e.scope === 'student' ? '결석' : '휴강'}</a><p>${e.makeup ? `${h(e.makeup.date)} ${h(e.makeup.start)}~${h(e.makeup.end)} 보강` : '보강 일정 미정'}</p></article>`,
+        `<article class="message"><a class="workspace-link" href="/schedule?view=makeup#event-${h(e.eventId)}">${h(academy.classes.find((c) => c.classId === e.classId)?.name)} · ${h(e.date)} ${e.scope === 'student' ? '결석' : '휴강'}</a><p>${e.makeup ? `${h(e.makeup.date)} ${h(e.makeup.start)}~${h(e.makeup.end)} 보강` : '보강 일정 미정'}</p></article>`,
     )
     .join('');
 }

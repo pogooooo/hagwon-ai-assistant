@@ -1,7 +1,7 @@
 import { gradingOverview } from '../homework-grading/overview.ts';
 import { visibleParentMessages } from './parent-messages-model.ts';
 import { visibleCalendarEntries } from './calendar.ts';
-import { consultationOverview } from './consultation.ts';
+import { canAskConsultation, consultationOverview } from './consultation.ts';
 import { recentPublishedDocuments } from './documents.ts';
 import { pendingMakeupNotices } from './makeup-polls.ts';
 import { selectedCharacter } from './preferences.ts';
@@ -69,6 +69,7 @@ function schedulePanel(ctx: PageContext, from: string) {
 export function renderHome(ctx: PageContext) {
   const { actor } = ctx;
   const staff = actor.role === 'admin' || actor.role === 'teacher';
+  const showChat = canAskConsultation(actor);
   const visitor = actor.role === 'visitor';
   const now = new Date();
   const date = now.toLocaleDateString('ko-KR', {
@@ -120,7 +121,7 @@ export function renderHome(ctx: PageContext) {
     );
 
   const shortcuts = `<nav class="home-shortcuts" aria-label="자주 사용하는 서비스">${[
-    ...(actor.role === 'guardian' ? [['/consultation', '학원 상담']] : []),
+    ...(showChat ? [['/consultation', '학원 상담']] : []),
     ...(!visitor
       ? [
           ['/schedule', '수업 일정'],
@@ -275,7 +276,7 @@ export function renderHome(ctx: PageContext) {
   const messages = guardian ? visibleParentMessages(ctx) : [];
   const result = homework?.results[0];
   const familyHero = guardian
-    ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><small>확인된 학습 기록</small><h2>${result ? h(result.title) : '학생 학습 리포트'}</h2>${result ? `<p>${h(result.studentName)} · 교사 검수 완료</p>` : ''}<a href="/grading?view=reports">사진 채점 리포트 보기 ›</a></div></section>${panel(
+    ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><small>확인된 학습 기록</small><h2>${result ? h(result.title) : '학생 학습 리포트'}</h2>${result ? `<p>${h(result.studentName)} · 교사 검수 완료</p>` : ''}<a href="/grading?view=reports">사진 채점 리포트 보기 ›</a><a href="/student-reports">월간 리포트 보기 ›</a></div></section>${panel(
         '학원 알림',
         '/messages',
         messages.slice(0, 3).map((m) => ({
@@ -287,7 +288,7 @@ export function renderHome(ctx: PageContext) {
     : '';
   return `${heading}${familyHero}${pendingMakeupNotices(ctx)}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
     <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
-    ${guardian ? `<div class="home-help">${search}</div>` : ''}
-    <div class="home-secondary">${visitor ? '' : documentList()}${guardian ? recentConsultations() : ''}</div>
+    ${showChat ? `<div class="home-help">${search}</div>` : ''}
+    <div class="home-secondary">${visitor ? '' : documentList()}${showChat ? recentConsultations() : ''}</div>
   </div>`;
 }

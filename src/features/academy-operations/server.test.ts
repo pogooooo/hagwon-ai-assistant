@@ -1008,7 +1008,8 @@ test('통합 일정 경로와 캐릭터 설정은 로그인·동일 출처와 �
   assert.ok(own.text.includes('/assets/water.png'));
   const admin = await s.login('TA_DIRECTOR');
   const other = await s.send('/', admin);
-  assert.ok(other.text.includes('/assets/walnut.png'));
+  assert.doesNotMatch(other.text, /class="profile-link"/);
+  assert.match((await s.send('/settings', admin)).text, /assets\/walnut.png/);
   const image = await fetch(s.origin + '/assets/water.png');
   assert.equal(image.status, 200);
   assert.equal(image.headers.get('content-type'), 'image/png');
@@ -1043,8 +1044,23 @@ test('운영 홈과 상담 목록은 열람 범위와 처리 상태를 따른다
     303,
   );
   assert.match((await s.send('/', parent)).text, new RegExp(title));
-  // A question without evidence is now automatically added to the staff inbox.
-  assert.match((await s.send('/', admin)).text, new RegExp(title));
+  assert.doesNotMatch((await s.send('/', admin)).text, new RegExp(title));
+  assert.equal((await s.send(path, admin)).status, 404);
+  assert.match(
+    (await s.send(path, parent)).text,
+    /이어서 궁금한 점|chat-composer/,
+  );
+  assert.equal(
+    (await s.send(path, parent, { action: 'ask', id, question: '안녕하세요' }))
+      .status,
+    303,
+  );
+  assert.equal(
+    ((await s.send(path, parent)).text.match(/class="message answer"/g) ?? [])
+      .length,
+    2,
+  );
+  assert.equal((await s.send(path, admin)).status, 404);
   assert.equal((await s.send(path, other)).status, 404);
   assert.equal(
     (await s.send(path, parent, { action: 'handoff', id })).status,
@@ -1070,7 +1086,7 @@ test('운영 홈과 상담 목록은 열람 범위와 처리 상태를 따른다
   );
 });
 
-test('학부모만 질문하고 원장·배정 교사가 접수된 상담에 답변한다', async (t) => {
+test('학생·학부모가 질문하고 원장·배정 교사가 접수된 상담에 답변한다', async (t) => {
   const s = await startOperations(t);
   const guardian = await s.login('TA_GUARDIAN_E_MATH');
   const teacher = await s.login('TA_TEACHER');
@@ -1080,14 +1096,14 @@ test('학부모만 질문하고 원장·배정 교사가 접수된 상담에 답
   const other = await s.login('TA_GUARDIAN_M2');
   const id = randomUUID();
   const ask = { action: 'ask', conversationId: id, question: '안녕하세요' };
-  for (const cookie of [student, visitor]) {
+  for (const cookie of [visitor]) {
     assert.equal((await s.send('/consultation', cookie)).status, 403);
     assert.doesNotMatch(
       (await s.send('/', cookie)).text,
       /href="\/consultation|action="\/consultation/,
     );
   }
-  for (const cookie of [teacher, admin, student, visitor]) {
+  for (const cookie of [teacher, admin, visitor]) {
     assert.equal((await s.send('/consultation', cookie, ask)).status, 403);
   }
   for (const staff of [teacher, admin]) {
@@ -1100,6 +1116,42 @@ test('학부모만 질문하고 원장·배정 교사가 접수된 상담에 답
       /action="\/consultation"|최근 내 상담/,
     );
   }
+  const studentId = randomUUID();
+  assert.match((await s.send('/consultation', student)).text, /chat-composer/);
+  assert.equal(
+    (
+      await s.send('/consultation', student, {
+        ...ask,
+        conversationId: studentId,
+        studentId: 'TA_STU_002',
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await s.send('/consultation', student, {
+        ...ask,
+        conversationId: studentId,
+      })
+    ).status,
+    303,
+  );
+  const studentThread = '/consultation?id=' + studentId;
+  assert.equal((await s.send(studentThread, guardian)).status, 404);
+  assert.equal((await s.send(studentThread, admin)).status, 404);
+  assert.equal(
+    (await s.send(studentThread, student, { action: 'handoff', id: studentId }))
+      .status,
+    303,
+  );
+  assert.equal((await s.send(studentThread, admin)).status, 200);
+  assert.equal(
+    (await s.send(studentThread, student, { action: 'resume', id: studentId }))
+      .status,
+    303,
+  );
+  assert.equal((await s.send(studentThread, admin)).status, 404);
   assert.equal((await s.send('/consultation', guardian, ask)).status, 303);
   const thread = '/consultation?id=' + id;
   assert.equal((await s.send(thread, admin)).status, 404);
