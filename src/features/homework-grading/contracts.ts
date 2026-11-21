@@ -141,7 +141,27 @@ export const assignmentSchema = z
     title: z.string().min(1).max(200),
     class_id: z.string().min(1).max(100),
     rights_ref: id,
-    items: z.array(itemSchema).min(1).max(500),
+    scope: z
+      .discriminatedUnion('kind', [
+        z
+          .object({
+            kind: z.literal('workbook'),
+            subject: z.enum(subjects),
+            skill: z.string().min(1).max(120),
+            from: z.number().int().min(1).max(9999),
+            to: z.number().int().min(1).max(9999),
+          })
+          .strict(),
+        z
+          .object({
+            kind: z.literal('worksheet'),
+            subject: z.enum(subjects),
+            skill: z.string().min(1).max(120),
+          })
+          .strict(),
+      ])
+      .optional(),
+    items: z.array(itemSchema).max(500),
   })
   .strict();
 export const regionSchema = z

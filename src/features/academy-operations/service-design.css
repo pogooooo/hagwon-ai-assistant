@@ -3401,3 +3401,163 @@ td {
     width: 100%;
   }
 }
+
+/* Keep the first task and in-page destinations within reach. */
+.sign-in {
+  margin: clamp(12px, 3vh, 32px) auto;
+}
+.sign-in-layout {
+  min-height: 0;
+}
+.sign-in-story {
+  justify-content: center;
+  align-items: center;
+  padding: 28px;
+}
+.sign-in-story .login-logo {
+  width: min(65%, 192px);
+}
+.sign-in-story .login-owl {
+  display: none;
+}
+.sign-in-content {
+  padding: clamp(20px, 4vh, 40px) clamp(16px, 3vw, 42px);
+}
+.rail-brand {
+  padding: 4px 0 12px;
+}
+.rail-brand span {
+  width: 92px;
+  aspect-ratio: 6 / 5;
+}
+.brand img {
+  width: auto;
+  height: 44px;
+}
+.section-jump {
+  width: 6rem;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px;
+  font-size: 14px;
+}
+.section-jump[hidden] {
+  display: none;
+}
+.workspace :is(h2, [id], [data-jump-label]) {
+  scroll-margin-top: 76px;
+}
+.suggestion-list summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding-block: 10px;
+  color: var(--accent);
+}
+.chat-progress:empty {
+  display: none;
+}
+@media (min-width: 781px) and (max-height: 650px) {
+  body[data-page='login'] .topbar {
+    display: none;
+  }
+  .sign-in {
+    margin-block: 6px;
+  }
+  .sign-in-heading,
+  .sign-in-accounts {
+    margin-block: 6px;
+  }
+  .sign-in-form form {
+    gap: 8px;
+  }
+}
+@media (max-width: 780px) {
+  .sign-in {
+    margin: 12px auto;
+    width: min(calc(100% - 24px), 440px);
+  }
+  .sign-in-story {
+    display: none;
+  }
+  .sign-in-layout {
+    border-radius: 18px;
+  }
+  .sign-in-heading {
+    margin-bottom: 14px;
+  }
+  .sign-in-form form {
+    gap: 12px;
+  }
+  .sign-in-accounts {
+    margin-top: 12px;
+  }
+  .topbar-inner {
+    width: calc(100% - 20px);
+    gap: 6px;
+  }
+  .workspace {
+    padding: 14px 12px calc(72px + env(safe-area-inset-bottom));
+  }
+  .workspace-heading,
+  .page-heading,
+  .ondap-heading {
+    margin-bottom: 12px;
+  }
+  .ondap-column .panel,
+  .consultation-main {
+    padding: 14px;
+  }
+  .consultation-welcome {
+    flex-direction: row;
+    align-items: center;
+    margin: 0;
+  }
+  .consultation-welcome img {
+    width: 36px;
+    height: 42px;
+  }
+  .document-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+    gap: 8px;
+  }
+  .document-filters select,
+  .document-filters input[type='text'] {
+    width: 100%;
+  }
+  .mobile-menu {
+    padding: 12px;
+    overscroll-behavior: contain;
+  }
+  .mobile-menu-heading {
+    position: sticky;
+    top: -12px;
+    z-index: 1;
+    padding: 8px;
+    background: #f7f9f3;
+    margin-bottom: 8px;
+  }
+  .mobile-menu .nav-group {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px;
+  }
+  .mobile-menu .nav-group-label {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+  .mobile-menu .service-nav {
+    gap: 12px;
+  }
+  .mobile-menu .service-nav a {
+    padding: 6px;
+    gap: 6px;
+  }
+  .workspace :is(h2, [id], [data-jump-label]) {
+    scroll-margin-top: 68px;
+  }
+  .calendar-day,
+  .calendar-empty {
+    min-height: 44px;
+  }
+}

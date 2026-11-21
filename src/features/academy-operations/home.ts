@@ -180,7 +180,7 @@ export function renderHome(ctx: PageContext) {
       homework.assignments.slice(0, 5).map((a) => ({
         title: a.title,
         href: '/grading?assignment=' + encodeURIComponent(a.assignment_id),
-        meta: a.items.length + '문항',
+        meta: a.scope ? '사진에서 문항 확인' : a.items.length + '문항',
       })),
       '등록된 사진 채점 과제가 없습니다.',
       '과제 등록',
@@ -242,11 +242,16 @@ export function renderHome(ctx: PageContext) {
           '제출할 사진 숙제',
           '/grading?view=upload',
           homework.assignments
-            .filter((a) => !submitted.has(a.assignment_id))
+            .filter(
+              (a) =>
+                a.scope?.kind === 'workbook' || !submitted.has(a.assignment_id),
+            )
             .slice(0, 5)
             .map((a) => ({
               title: a.title,
-              meta: a.items.length + '문항 · 사진 또는 PDF',
+              meta: a.scope
+                ? '사진 또는 PDF 제출'
+                : a.items.length + '문항 · 사진 또는 PDF',
               href:
                 '/grading?view=upload&assignment=' +
                 encodeURIComponent(a.assignment_id),

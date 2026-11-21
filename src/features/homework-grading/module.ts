@@ -1,3 +1,4 @@
+import { photoItem } from './assigned-work.ts';
 import { gradingOverview, gradingStates as names } from './overview.ts';
 import { createHash } from 'node:crypto';
 import { accessibleClasses } from '../academy-operations/directory.ts';
@@ -24,7 +25,7 @@ import { decimalString, points } from './arithmetic.ts';
 import { aggregate, emptyResult, propose } from './scoring.ts';
 import { createNaverGrader } from './provider.ts';
 import {
-  assignmentFor,
+  submissionAssignment,
   GradingService,
   gradingProviderErrors,
   newId,
@@ -171,39 +172,7 @@ function photoItems(form: FormData): Item[] {
       for (let n = start; n <= end; n++) {
         if (seen.has(String(n))) throw new GradingError('INVALID_PHOTO_RANGE');
         seen.add(String(n));
-        items.push({
-          grading_mode: 'photo_solution',
-          key: null,
-          item_ref: newId('item'),
-          item_no: String(n),
-          expected_page_no: page + 1,
-          subject_id: subject,
-          answer_type: 'structured_work',
-          max_score: '1',
-          approval_status: 'approved',
-          primary_skill_id:
-            'skill_' +
-            createHash('sha256')
-              .update(subject + ':' + skill)
-              .digest('hex')
-              .slice(0, 20),
-          skill_label: skill,
-          taxonomy_version: 'academy-taxonomy-1',
-          rubric_id: newId('rubric'),
-          rubric_version: 'photo-solution-1',
-          aggregation_rule: 'sum_criteria',
-          criteria: [
-            {
-              criterion_id: newId('criterion'),
-              label: '문항 점수',
-              criterion_type: 'concept',
-              max_score: '1',
-              allowed_scores: ['0', '1'],
-              teacher_instruction:
-                '문제의 요구 조건과 독립 풀이를 기준으로 정오를 판단한다. 여러 답이 가능하면 타당한 동치 답안을 인정한다.',
-            },
-          ],
-        });
+        items.push(photoItem(subject, skill, page + 1, String(n)));
       }
     }
   }
@@ -219,6 +188,35 @@ function registration(form: FormData) {
       .digest('hex')
       .slice(0, 32);
   if (!field(form, 'rights_basis')) throw new GradingError('VALIDATION_FAILED');
+  const kind = field(form, 'material');
+  if (kind) {
+    if (kind !== 'workbook' && kind !== 'worksheet')
+      throw new GradingError('VALIDATION_FAILED');
+    const subject = field(form, 'subject') as Item['subject_id'];
+    const name = field(form, 'material_name', 140);
+    if (!name) throw new GradingError('VALIDATION_FAILED');
+    const skill = field(form, 'skill', 120) || subjectNames[subject] + ' 종합';
+    const scope =
+      kind === 'workbook'
+        ? {
+            kind,
+            subject,
+            skill,
+            from: number(form, 'page_from', 1, 9999),
+            to: number(form, 'page_to', 1, 9999),
+          }
+        : { kind, subject, skill };
+    return {
+      title:
+        scope.kind === 'workbook'
+          ? name + ' · ' + scope.from + '–' + scope.to + '쪽'
+          : name,
+      class_id: field(form, 'class_id'),
+      rights_ref: rights,
+      scope,
+      items: [],
+    };
+  }
   if (field(form, 'mode') === 'photo_solution')
     return {
       title: field(form, 'title'),
@@ -361,6 +359,30 @@ async function submit(ctx: PageContext, form: FormData) {
         '/grading?assignment=' + encodeURIComponent(assignment.assignment_id)
       );
     }
+    if (action === 'map_pages') {
+      const s = readSubmission(ctx, field(form, 'submission'), true);
+      const a = submissionAssignment(ctx.db, s);
+      if (!a.scope) throw new GradingError('VALIDATION_FAILED');
+      const pages = Array.from({ length: s.expected_pages }, (_, i) => {
+        const nums = field(form, 'numbers_' + i, 500);
+        if (!/^\d{1,3}(?:[ ,]+\d{1,3})*$/.test(nums))
+          throw new GradingError('INVALID_PHOTO_RANGE');
+        return {
+          printedPage:
+            a.scope!.kind === 'workbook'
+              ? number(form, 'printed_' + i, 1, 9999)
+              : null,
+          numbers: nums.split(/[ ,]+/).map(Number),
+        };
+      });
+      await service.correctPhotoMap(
+        ctx,
+        s.id,
+        number(form, 'revision', 1),
+        pages,
+      );
+      return '/grading?submission=' + encodeURIComponent(s.id);
+    }
     if (action === 'upload') {
       const files: { bytes: Uint8Array; mime: string }[] = [];
       for (const file of form.getAll('photos'))
@@ -413,7 +435,7 @@ async function submit(ctx: PageContext, form: FormData) {
       const id = field(form, 'submission'),
         draft = await service.draft(ctx, id),
         s = readSubmission(ctx, id, true),
-        a = assignmentFor(ctx.db, s.tenant, s.assignment, s.assignment_version);
+        a = submissionAssignment(ctx.db, s);
       const items: DraftItem[] = draft.items.map((old, n) => {
         const def = a.items.find(
             (i) => i.item_ref === old.extraction.item_ref,
@@ -599,13 +621,15 @@ function gradingAvailability(service: GradingService) {
 }
 function photoRegisterForm(ctx: PageContext) {
   const classes = accessibleClasses(ctx.db, ctx.actor);
-  return `<h2>AI 풀이로 채점할 과제</h2><p>학생이 올린 사진에서 문제를 읽고 풀어 채점 초안을 만듭니다. 교사가 결과를 검수한 뒤 공개합니다.</p>${startForm('register')}${hidden('mode', 'photo_solution')}${input('title', '과제 이름', '', 'text', 'required maxlength="200"')}${choice(
+  const worksheet = ctx.url.searchParams.get('material') === 'worksheet';
+  const kind = worksheet ? 'worksheet' : 'workbook';
+  return `<h2>AI 풀이로 채점할 과제</h2><nav class="grade-filters" aria-label="과제 종류"><a href="/grading?view=register&amp;material=workbook"${worksheet ? '' : ' aria-current="page"'}>문제집 범위</a><a href="/grading?view=register&amp;material=worksheet"${worksheet ? ' aria-current="page"' : ''}>나눠 준 문제지</a></nav>${startForm('register')}${hidden('mode', 'photo_solution')}${hidden('material', kind)}${input('material_name', worksheet ? '나눠 준 문제지 이름' : '문제집 이름', '', 'text', 'required maxlength="140"')}${worksheet ? '' : '<div class="form-grid">' + input('page_from', '시작 쪽', '', 'number', 'min="1" max="9999" required') + input('page_to', '마지막 쪽', '', 'number', 'min="1" max="9999" required') + '</div>'}${choice(
     'class_id',
     '배정 반',
     classes.map((c) => c.id),
     '',
     Object.fromEntries(classes.map((c) => [c.id, c.name])),
-  )}${choice('subject', '과목', subjects, 'MATH', subjectNames)}<label>쪽별 문항 번호<textarea name="question_pages" maxlength="1000" required placeholder="1-5, 7"></textarea></label><p>한 쪽에 한 줄씩 입력하세요. 1~50문항까지 문항당 1점으로 채점합니다.</p>${input('skill', '학습 유형 (선택)', '', 'text', 'maxlength="120"')}${input('rights_basis', '자료 이용 근거', '', 'text', 'required maxlength="500"')}<label><input type="checkbox" name="approved" value="yes" required>이 자료의 수업 이용 근거와 배정 범위를 확인했습니다.</label><button>과제 등록</button></form>`;
+  )}${choice('subject', '과목', subjects, 'MATH', subjectNames)}<p>학생이 푼 사진에서 문항 번호를 읽습니다.${worksheet ? '' : ' 책 쪽수가 사진에 보이게 제출해 주세요.'}</p>${input('skill', '학습 유형 (선택)', '', 'text', 'maxlength="120"')}${input('rights_basis', '자료 이용 근거', '', 'text', 'required maxlength="500"')}<label><input type="checkbox" name="approved" value="yes" required>자료 이용 근거와 배정 범위를 확인했습니다.</label><button>과제 등록</button></form>`;
 }
 function registerForm(ctx: PageContext) {
   const count = Math.max(
@@ -663,13 +687,8 @@ async function render(ctx: PageContext) {
     const id = ctx.url.searchParams.get('submission');
     if (id && requestedView !== 'upload') {
       const s = readSubmission(ctx, id);
-      const a = assignmentFor(
-        ctx.db,
-        s.tenant,
-        s.assignment,
-        s.assignment_version,
-      );
-      detail = `<section class="panel"><h2>${h(a.title)}</h2><p>${h(names[s.processing])} · ${h(names[s.raw_state])}</p>`;
+      const a = submissionAssignment(ctx.db, s);
+      detail = `<section class="panel"><h2>${h(a.title)}</h2><p>${h(names[s.processing])} · ${h(names[s.raw_state])}</p>${a.scope?.kind === 'workbook' && a.photoPages.length ? '<p>이번 제출의 책 쪽수 · ' + a.photoPages.map((p) => h(p.printedPage)).join(', ') + '쪽</p>' : ''}`;
       if (
         s.result_id &&
         s.current_revision === s.published_revision &&
@@ -697,11 +716,29 @@ async function render(ctx: PageContext) {
           encodeURIComponent(s.id) +
           '&page=' +
           page;
-        detail += `<div class="grade-review" data-review data-initial="${firstPending}"><header class="grade-overview"><div><p>사진 채점 / 제출 검수</p><h2>${h(a.title)} · ${h(students.find((student) => student.id === s.student)?.name)}</h2></div><span class="grade-status">검수 전 점수 비공개</span></header><ol class="grade-steps"><li>제출</li><li>AI 초안</li><li aria-current="step">교사 검수</li><li>결과 공개</li></ol>
-        <div class="grade-spread"><section class="grade-paper"><header><h3>제출 답안</h3><label>쪽 <select data-page-select>${Array.from({ length: s.expected_pages }, (_, n) => `<option value="${n + 1}">${n + 1} / ${s.expected_pages}</option>`).join('')}</select></label></header>
+        if (a.scope) {
+          const pictures = Array.from(
+            { length: s.expected_pages },
+            (_, i) =>
+              `<fieldset><legend>제출 사진 ${i + 1}</legend><a href="${pageUrl(i + 1)}" target="_blank" rel="noopener">원본 열기</a>${a.scope!.kind === 'workbook' ? input('printed_' + i, '인쇄된 책 쪽수', String(a.photoPages[i]?.printedPage ?? ''), 'number', 'min="' + a.scope!.from + '" max="' + a.scope!.to + '" required') : ''}${input(
+                'numbers_' + i,
+                '보이는 문항 번호 (쉼표로 구분)',
+                a.items
+                  .filter((item) => item.expected_page_no === i + 1)
+                  .map((x) => x.item_no)
+                  .join(', '),
+                'text',
+                'required maxlength="500"',
+              )}</fieldset>`,
+          ).join('');
+          detail += `<details${draft.items.length ? '' : ' open'}><summary>${draft.items.length ? '인식한 문항 범위 수정' : '원본에서 문항 범위 확인'}</summary>${startForm('map_pages')}${hidden('submission', s.id)}${hidden('revision', draft.draft_revision)}${pictures}<p>범위를 다시 적용하면 현재 검수 초안을 새로 만듭니다.</p><button>범위 적용·초안 다시 만들기</button></form></details>`;
+        }
+        if (draft.items.length)
+          detail += `<div class="grade-review" data-review data-initial="${firstPending}"><header class="grade-overview"><div><p>사진 채점 / 제출 검수</p><h2>${h(a.title)} · ${h(students.find((student) => student.id === s.student)?.name)}</h2></div><span class="grade-status">검수 전 점수 비공개</span></header><ol class="grade-steps"><li>제출</li><li>AI 초안</li><li aria-current="step">교사 검수</li><li>결과 공개</li></ol>
+        <div class="grade-spread"><section class="grade-paper" data-jump-label="제출 사진"><header><h3>제출 답안</h3><label>쪽 <select data-page-select>${Array.from({ length: s.expected_pages }, (_, n) => `<option value="${n + 1}">${n + 1} / ${s.expected_pages}</option>`).join('')}</select></label></header>
         <div class="grade-tools" data-enhance hidden><button type="button" data-turn>회전</button><button type="button" data-zoom>확대</button><button type="button" data-fit>맞춤</button></div>
         ${Array.from({ length: s.expected_pages }, (_, n) => `<figure data-page="${n + 1}"><div class="grade-image"><img src="${pageUrl(n + 1)}" alt="${n + 1}쪽 전체 사진" loading="lazy"></div><figcaption><a href="${pageUrl(n + 1)}" target="_blank" rel="noopener">${n + 1}쪽 원본 크기로 열기</a></figcaption></figure>`).join('')}</section>
-        <section class="grade-decisions">${startForm('review')}${hidden('submission', s.id)}${hidden('revision', draft.draft_revision)}${draft.items
+        <section class="grade-decisions" data-jump-label="문항 검수">${startForm('review')}${hidden('submission', s.id)}${hidden('revision', draft.draft_revision)}${draft.items
           .map((d, n) => {
             const def = a.items.find(
               (item) => item.item_ref === d.extraction.item_ref,
@@ -723,11 +760,11 @@ async function render(ctx: PageContext) {
                     ),
                   ].join(' / ') || '채점 기준 참조'
                 : '승인된 정답 없음';
-            return `<fieldset data-review-item="${n}" data-item-page="${def.expected_page_no}"><legend>문항 ${h(def.item_no)} · ${subjectNames[def.subject_id]} · ${h(def.skill_label)}</legend>${d.extraction.regions.length ? `<details><summary>AI 추정 답안 영역 보기</summary><img class="grade-crop" loading="lazy" src="${pageUrl(def.expected_page_no)}&item=${encodeURIComponent(def.item_ref)}" alt="${h(def.item_no)}번 추정 영역"></details>` : ''}<label>읽은 답안<textarea name="${p}answer" maxlength="12000">${h(d.extraction.answer_observed)}</textarea></label>${def.grading_mode === 'photo_solution' ? `<section class="grade-key"><strong>AI가 푼 답</strong><p>${h(d.solution?.answer ?? '풀이 확인 필요')}</p>${d.solution ? `<p>${h(d.solution.explanation)}</p><details><summary>AI가 읽은 문제</summary><p>${h(d.solution.problem)}</p></details>` : `<p>${d.proposed.exclusion_reason === 'PROVIDER_UNAVAILABLE' ? 'AI 호출을 완료하지 못했습니다.' : '문제 전체와 풀이 근거를 원본에서 확인해 주세요.'}</p>`}${input(p + 'reference', '교사가 바로잡은 정답 (필요한 경우)', d.review_reference ?? '', 'text', 'maxlength="1200"')}</section>` : `<div class="grade-key"><strong>등록 정답</strong><span>${h(answerKey)}</span></div>`}${input(p + 'unit', '적힌 단위', d.extraction.unit_observed)}${choice(p + 'answer_status', '판독 상태', ['readable', 'blank', 'unreadable', 'ambiguous'], d.extraction.answer_status, { readable: '읽음', blank: '빈 답안 영역 확인', unreadable: '읽을 수 없음', ambiguous: '여러 답·지움 등 불명확' })}<label class="grade-check"><input type="checkbox" name="${p}located" value="yes"${d.extraction.association_status === 'matched' ? ' checked' : ''}>이 문항의 답안과 위치가 맞습니다.</label><p class="grade-verdict">AI 초안 · ${outcomeNames[(d.initial_proposal ?? d.proposed).outcome]} · ${h((d.initial_proposal ?? d.proposed).score ?? '점수 없음')} / ${h(def.max_score)}</p>${choice(p + 'outcome', '교사 판정', Object.keys(outcomeNames), d.proposed.outcome, outcomeNames)}${def.criteria.map((c, i) => choice(p + 'score_' + i, `${c.label} (${c.max_score}점)`, c.allowed_scores, d.proposed.criteria_scores.find((x) => x.criterion_id === c.criterion_id)?.score ?? computed.criteria_scores.find((x) => x.criterion_id === c.criterion_id)?.score ?? '0')).join('')}<label class="grade-check"><input type="checkbox" name="${p}reviewed" value="yes"${d.reviewed ? ' checked' : ''}>답안·판정·점수·유형을 확인했습니다.</label></fieldset>`;
+            return `<fieldset data-review-item="${n}" data-item-page="${def.expected_page_no}"><legend>문항 ${a.scope ? def.expected_page_no + '번째 사진 · ' : ''}${h(def.item_no)} · ${subjectNames[def.subject_id]} · ${h(def.skill_label)}</legend>${d.extraction.regions.length ? `<details><summary>AI 추정 답안 영역 보기</summary><img class="grade-crop" loading="lazy" src="${pageUrl(def.expected_page_no)}&item=${encodeURIComponent(def.item_ref)}" alt="${h(def.item_no)}번 추정 영역"></details>` : ''}<label>읽은 답안<textarea name="${p}answer" maxlength="12000">${h(d.extraction.answer_observed)}</textarea></label>${def.grading_mode === 'photo_solution' ? `<section class="grade-key"><strong>AI가 푼 답</strong><p>${h(d.solution?.answer ?? '풀이 확인 필요')}</p>${d.solution ? `<p>${h(d.solution.explanation)}</p><details><summary>AI가 읽은 문제</summary><p>${h(d.solution.problem)}</p></details>` : `<p>${d.proposed.exclusion_reason === 'PROVIDER_UNAVAILABLE' ? 'AI 호출을 완료하지 못했습니다.' : '문제 전체와 풀이 근거를 원본에서 확인해 주세요.'}</p>`}${input(p + 'reference', '교사가 바로잡은 정답 (필요한 경우)', d.review_reference ?? '', 'text', 'maxlength="1200"')}</section>` : `<div class="grade-key"><strong>등록 정답</strong><span>${h(answerKey)}</span></div>`}${input(p + 'unit', '적힌 단위', d.extraction.unit_observed)}${choice(p + 'answer_status', '판독 상태', ['readable', 'blank', 'unreadable', 'ambiguous'], d.extraction.answer_status, { readable: '읽음', blank: '빈 답안 영역 확인', unreadable: '읽을 수 없음', ambiguous: '여러 답·지움 등 불명확' })}<label class="grade-check"><input type="checkbox" name="${p}located" value="yes"${d.extraction.association_status === 'matched' ? ' checked' : ''}>이 문항의 답안과 위치가 맞습니다.</label><p class="grade-verdict">AI 초안 · ${outcomeNames[(d.initial_proposal ?? d.proposed).outcome]} · ${h((d.initial_proposal ?? d.proposed).score ?? '점수 없음')} / ${h(def.max_score)}</p>${choice(p + 'outcome', '교사 판정', Object.keys(outcomeNames), d.proposed.outcome, outcomeNames)}${def.criteria.map((c, i) => choice(p + 'score_' + i, `${c.label} (${c.max_score}점)`, c.allowed_scores, d.proposed.criteria_scores.find((x) => x.criterion_id === c.criterion_id)?.score ?? computed.criteria_scores.find((x) => x.criterion_id === c.criterion_id)?.score ?? '0')).join('')}<label class="grade-check"><input type="checkbox" name="${p}reviewed" value="yes"${d.reviewed ? ' checked' : ''}>답안·판정·점수·유형을 확인했습니다.</label></fieldset>`;
           })
           .join('')}<button>검수 내용 저장</button></form></section></div>
         <nav class="grade-items" aria-label="검수 문항" data-enhance hidden>${draft.items.map((d, n) => `<button type="button" data-select-item="${n}" data-reviewed="${d.reviewed}" aria-label="문항 ${h(a.items.find((i) => i.item_ref === d.extraction.item_ref)?.item_no)} · ${d.reviewed ? '확인' : '확인 필요'}">${h(a.items.find((i) => i.item_ref === d.extraction.item_ref)?.item_no)}</button>`).join('')}</nav>
-        <footer class="grade-footer"><strong>${checked} / ${draft.items.length}문항 확인 · ${draft.items.length - checked}문항 남음</strong>${startForm('confirm')}${hidden('submission', s.id)}${hidden('revision', draft.draft_revision)}<label><input type="checkbox" name="review_complete" value="yes" required>모든 문항의 검수를 마쳤으며 확정 후 원문·전사·임시 응답 삭제에 동의합니다.</label><button${checked === draft.items.length ? '' : ' disabled'}>확정하고 원문 삭제</button></form></footer></div>`;
+        <footer class="grade-footer" data-jump-label="검수 확정"><strong>${checked} / ${draft.items.length}문항 확인 · ${draft.items.length - checked}문항 남음</strong>${startForm('confirm')}${hidden('submission', s.id)}${hidden('revision', draft.draft_revision)}<label><input type="checkbox" name="review_complete" value="yes" required>제출 사진의 문항 범위·누락 여부와 모든 판정을 확인했으며 확정 후 원문·전사·임시 응답 삭제에 동의합니다.</label><button${checked === draft.items.length ? '' : ' disabled'}>확정하고 원문 삭제</button></form></footer></div>`;
       }
       if (s.raw_state !== 'VERIFIED')
         detail += `${startForm('cancel')}${hidden('submission', s.id)}<button class="secondary">처리 취소·임시자료 삭제</button></form>`;
@@ -836,13 +873,17 @@ async function render(ctx: PageContext) {
         intro +
         `<section class="panel grade-upload"><h2>숙제 사진 제출</h2>${gradingAvailability(service)}${picker}${
           selected && eligible.length
-            ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${hidden('assignment', selected.assignment_id)}<p><strong>${h(selected.title)}</strong> · ${selected.items.length}문항</p>${choice(
-                'student',
-                '학생',
-                eligible.map((s) => s.id),
-                target?.student ?? '',
-                Object.fromEntries(eligible.map((s) => [s.id, s.name])),
-              )}${input('pages', '총 페이지 수', '1', 'number', `min="1" max="${mediaLimits.pages}" required`)}<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label class="grade-picker"><strong>사진 또는 PDF 첨부</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><div class="grade-previews" data-previews aria-live="polite"></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
+            ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${hidden('assignment', selected.assignment_id)}<p><strong>${h(selected.title)}</strong> · ${selected.scope ? (selected.scope.kind === 'workbook' ? '책 쪽수와 문항 번호가 보이게 촬영 · 긴 범위는 나누어 제출 가능' : '나눠 준 문제지의 문항 번호가 보이게 촬영') : selected.items.length + '문항'}</p>${
+                eligible.length === 1
+                  ? hidden('student', eligible[0].id)
+                  : choice(
+                      'student',
+                      '학생',
+                      eligible.map((s) => s.id),
+                      target?.student ?? '',
+                      Object.fromEntries(eligible.map((s) => [s.id, s.name])),
+                    )
+              }<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label class="grade-picker" data-jump-label="사진 첨부"><strong>사진 또는 PDF 첨부</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label>${input('pages', '총 페이지 수', '1', 'number', `min="1" max="${mediaLimits.pages}" required`)}<div class="grade-previews" data-previews aria-live="polite"></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
             : '<p>제출할 수 있는 사진 채점 과제가 없습니다.</p>'
         }</section>`
       );

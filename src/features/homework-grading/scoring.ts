@@ -23,6 +23,13 @@ import {
 export function validateAssignment(value: unknown): AssignmentInput {
   const a = parse(assignmentSchema, value);
   if (
+    a.scope
+      ? a.items.length ||
+        (a.scope.kind === 'workbook' && a.scope.from > a.scope.to)
+      : !a.items.length
+  )
+    throw new GradingError('VALIDATION_FAILED');
+  if (
     new Set(a.items.map((i) => i.item_ref)).size !== a.items.length ||
     new Set(a.items.map((i) => i.item_no)).size !== a.items.length
   )
