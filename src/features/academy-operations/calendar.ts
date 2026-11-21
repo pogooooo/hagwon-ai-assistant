@@ -64,7 +64,7 @@ function calendar(ctx: PageContext) {
     (_, i) => {
       const day = month + '-' + String(i + 1).padStart(2, '0');
       const items = entries(day);
-      return `<a class="calendar-day${day === today ? ' today' : ''}${day === selected ? ' selected' : ''}" href="/schedule?month=${month}&amp;day=${day}" aria-label="${day} 일정 ${items.length}건"${day === selected ? ' aria-current="date"' : ''}><strong>${i + 1}</strong>${items
+      return `<a class="calendar-day${day === today ? ' today' : ''}${day === selected ? ' selected' : ''}" href="/schedule?month=${month}&amp;day=${day}#day-detail" aria-label="${day} 일정 ${items.length}건"${day === selected ? ' aria-current="date"' : ''}><strong>${i + 1}</strong>${items
         .slice(0, 3)
         .map(
           (s) => `<small class="calendar-${h(s.kind)}">${h(s.title)}</small>`,
@@ -76,7 +76,7 @@ function calendar(ctx: PageContext) {
   ).join(
     '',
   )}${'<div class="calendar-empty"></div>'.repeat((7 - ((date.getUTCDay() + days) % 7)) % 7)}</div></section>
-  <section class="panel day-detail"><div class="panel-heading"><h2>${Number(selected.slice(5, 7))}월 ${Number(selected.slice(8))}일 일정</h2></div>
+  <section class="panel day-detail" id="day-detail" tabindex="-1"><div class="panel-heading"><h2>${Number(selected.slice(5, 7))}월 ${Number(selected.slice(8))}일 일정</h2></div>
   ${
     entries(selected).length
       ? `<ul class="record-list">${entries(selected)
