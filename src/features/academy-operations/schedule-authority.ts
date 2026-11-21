@@ -53,8 +53,27 @@ export async function scheduleAuthority(
       ),
     });
   }
-  return (frame: Readonly<QueryFrame>) =>
-    requestsOperationalSchedule(frame)
-      ? { facts: store, documents: store }
-      : undefined;
+  const hasRegularSchedule = documents.some(
+    ({ documentType }) => documentType === 'schedule',
+  );
+  return (frame: Readonly<QueryFrame>) => {
+    if (!requestsOperationalSchedule(frame)) return;
+    // If no operations timetable exists, a published timetable can describe a
+    // named course's regular schedule. Dated and change questions still use operations data.
+    if (
+      !hasRegularSchedule &&
+      frame.classIds.length === 1 &&
+      !frame.relativeWeek &&
+      !frame.relativePeriod &&
+      frame.relativeDay === null &&
+      !frame.explicitDates.length &&
+      !frame.months.length &&
+      frame.topics.length === 1 &&
+      frame.topics[0].id === 'schedule' &&
+      /시간표|수업시간/.test(frame.compact) &&
+      !/요일|휴강|보강|변경|이번|다음/.test(frame.compact)
+    )
+      return;
+    return { facts: store, documents: store };
+  };
 }

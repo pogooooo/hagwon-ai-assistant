@@ -33,6 +33,10 @@ export async function answerParkingEvidence(
 ): Promise<AnswerDraft | undefined> {
   const { frame } = ctx;
   const text = frame.normalized;
+  const bringsCar =
+    /^(?:학원에|상담갈때)?(?:차|자동차|자가용)(?:를|을)?(?:가져가도|끌고가도)(?:돼요|되나요|될까요|되는지)[?!.]*$/.test(
+      frame.compact,
+    );
   const noPurpose =
     /상담|레벨\s*(?:테스트|진단)|공개\s*수업|등원|하원/.test(text) &&
     /(?:안\s*(?:가|하|받)|없이|아니(?:고|라)|말고|제외)/.test(text);
@@ -48,8 +52,8 @@ export async function answerParkingEvidence(
     );
   const amenity = AMENITY.exec(text)?.[0];
   if (
-    !frame.topics.some(({ id }) => id === 'parking') ||
-    (!asksFee && !amenity) ||
+    (!bringsCar && !frame.topics.some(({ id }) => id === 'parking')) ||
+    (!asksFee && !amenity && !bringsCar) ||
     frame.topics.some(({ id }) => !['parking', 'location'].includes(id)) ||
     frame.explicitDates.length ||
     frame.months.length ||
@@ -143,7 +147,7 @@ export async function answerParkingEvidence(
     [...line.matchAll(/(?:무료|유료|\d[\d,]*\s*원|\d+\s*(?:시간|분))/g)]
       .map(([value]) => compactText(value))
       .join('|');
-  if (new Set(rates.map(({ line }) => priceKey(line))).size > 1)
+  if (!bringsCar && new Set(rates.map(({ line }) => priceKey(line))).size > 1)
     return abstain(
       '같은 방문 목적의 승인 주차 안내에서 요금 기준이 서로 다릅니다.',
       'CONFLICTING_EVIDENCE',
@@ -177,9 +181,11 @@ export async function answerParkingEvidence(
   ];
   const proofs = [
     ...new Set(
-      [asksUsage ? usage : undefined, rate, amenityProof].filter(
-        (item): item is EvidenceExcerpt => !!item,
-      ),
+      [
+        asksUsage ? usage : undefined,
+        !bringsCar || asksFee ? rate : undefined,
+        amenityProof,
+      ].filter((item): item is EvidenceExcerpt => !!item),
     ),
   ];
   if (!proofs.length)

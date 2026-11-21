@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { InMemoryConversationStore } from '../adapters/memory/index.ts';
 import { InMemoryRagStore } from '../store/in-memory-store.ts';
 import type {
   AcademyCatalog,
@@ -51,7 +52,10 @@ const visitor: RagAccessScope = {
   canViewPublicHistory: false,
 };
 
-function setup(fixtureCatalog = catalog) {
+function setup(
+  fixtureCatalog = catalog,
+  conversations?: InMemoryConversationStore,
+) {
   const store = new InMemoryRagStore();
   const register = (
     documentId: string,
@@ -89,6 +93,7 @@ function setup(fixtureCatalog = catalog) {
       },
       {
         engine: 'planned',
+        conversations,
         userId: scope.actorId,
         question,
         asOf: '2026-11-21T11:00:00+09:00',
@@ -351,6 +356,54 @@ test('대상 질문은 공개 안내의 학년과 반을 읽고 개설 예정 �
   assert.match(answer.answer, /회화반/);
   assert.doesNotMatch(answer.answer, /어휘 읽기반/);
   assert.match(answer.citations[0].location ?? '', /표 1 · 2행/);
+});
+
+test('학원 운영시간·상담 신청·수강료는 관련 문구가 있어도 서로 대체하지 않는다', async () => {
+  const { register, ask } = setup(catalog, new InMemoryConversationStore());
+  await register(
+    'FRONT_DESK',
+    'academy_info',
+    '학부모 상담 안내',
+    '## 상담 가능 시간\n\n학부모 상담 가능 시간은 평일 14:00~18:00입니다.\n\n## 상담 신청 방법\n\n학부모 상담은 일정·예약 메뉴에서 가능한 시간을 골라 신청합니다.',
+  );
+  await register(
+    'OPTIONS',
+    'academy_info',
+    '과정 안내',
+    '## 교육 대상 및 개설 과목\n\n| 과목 | 개설 반 | 수강 대상 |\n|---|---|---|\n| 영어 | 회화반 | 중등 |',
+  );
+  const missing = await ask('학원은 몇 시에 문 열어요?');
+  assert.equal(missing.answer.status, 'abstained', missing.answer.answer);
+  assert.deepEqual(missing.answer.citations, []);
+  assert.equal((await ask('수업 대상이 누구인지')).answer.status, 'answered');
+  const feeWithoutPrice = await ask('그럼 수강료는요?');
+  assert.equal(
+    feeWithoutPrice.answer.status,
+    'abstained',
+    feeWithoutPrice.answer.answer,
+  );
+  const method = await ask('학부모 상담 신청은 어떻게 하나요?');
+  assert.equal(method.answer.status, 'answered', method.answer.answer);
+  assert.match(method.answer.answer, /일정·예약 메뉴/);
+  assert.doesNotMatch(method.answer.answer, /14:00|18:00/);
+  await register(
+    'ACADEMY_HOURS',
+    'academy_info',
+    '운영 안내',
+    '학원 운영시간은 평일 13:00~22:00입니다.',
+  );
+  const opening = await ask('학원 운영시간은 어떻게 돼요?');
+  assert.equal(opening.answer.status, 'answered', opening.answer.answer);
+  assert.match(opening.answer.answer, /13:00~22:00/);
+  assert.deepEqual(
+    opening.answer.citations.map((c) => c.documentId),
+    ['ACADEMY_HOURS'],
+  );
+  const enroll = await ask('중학생도 다니나요?');
+  assert.equal(enroll.answer.status, 'answered', enroll.answer.answer);
+  const people = await ask('여기 어떤 학년 받아요?');
+  assert.equal(people.answer.status, 'answered', people.answer.answer);
+  assert.match(people.answer.answer, /회화반/);
 });
 
 test('일부 과목표는 개설 여부를 보류하고 승인된 전체 안내는 정규 과정 범위로 답한다', async () => {

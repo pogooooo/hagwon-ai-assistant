@@ -117,6 +117,39 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
         assert.doesNotMatch(reply, /중2 내신반/);
         assert.match(reply, /온답 어학원 정규 수업 안내/);
       }
+      for (const [question, expected, source] of [
+        ['그럼 수강료는요?', /210,000원/, /영어 회화반 수강료/],
+        [
+          '영어 회화반 시간표 알려주세요.',
+          /17:00~18:20/,
+          /영어 회화반 정규 시간표/,
+        ],
+        [
+          '학부모 상담 신청은 어떻게 하나요?',
+          /일정·예약 메뉴/,
+          /온답 어학원 방문과 상담 안내/,
+        ],
+        [
+          '차 가져가도 돼요?',
+          /방문자 주차장을 운영하지 않습니다/,
+          /온답 어학원 방문과 상담 안내/,
+        ],
+      ] as const) {
+        const answer = await send('/consultation', cookie, {
+          _academyAccount: alt,
+          action: 'ask',
+          conversationId: randomUUID(),
+          question,
+        });
+        assert.equal(answer.status, 303);
+        const html = await (
+          await send(answer.headers.get('location')!, cookie)
+        ).text();
+        assert.match(html, /data-answer-status="answered"/);
+        assert.match(html, expected);
+        assert.match(html, source);
+        assert.doesNotMatch(html, /180,000원|중2 내신반/);
+      }
       const examples = await (
         await send('/student-reports?example=3', cookie)
       ).text();
