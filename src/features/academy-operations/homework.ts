@@ -1,3 +1,7 @@
+import {
+  homeworkMaterial,
+  renderHomeworkMaterial,
+} from './demo-homework-materials.ts';
 import { renderStudentReports } from './student-reports.ts';
 import { randomUUID } from 'node:crypto';
 import {
@@ -947,6 +951,16 @@ export const homeworkModule: OperationModule = {
     const pending = staff && url.searchParams.get('view') === 'review';
     const { assignments, submissions } = visibleHomework(ctx, pending);
     const catalog = workbookRecipients(ctx);
+    const material = homeworkMaterial(ctx);
+    const worksheet =
+      material &&
+      one(
+        ctx.db,
+        'SELECT 1 FROM homework_assignments WHERE id=? AND class_id=? AND academy_id=?',
+        material.workbookId,
+        material.classId,
+        material.academyId,
+      );
     const needsReview = new Set(
       catalog
         .filter((r) => r.submission_id && !r.confirmed_at)
@@ -960,6 +974,14 @@ export const homeworkModule: OperationModule = {
         '</div>',
       staff
         ? `<nav class="view-tabs page-tabs" aria-label="숙제 보기"><a href="/homework"${!pending ? ' aria-current="page"' : ''}>전체 숙제</a><a href="/homework?view=review"${pending ? ' aria-current="page"' : ''}>확인할 제출물</a></nav>`
+        : familyTabs,
+      material && worksheet
+        ? renderHomeworkMaterial(
+            material,
+            catalog.some((r) => r.id === material.workbookId)
+              ? '/homework?detail=' + encodeURIComponent(material.workbookId)
+              : undefined,
+          )
         : '',
       staff
         ? '<nav class="actions"><a href="/homework?view=books">교재 목록</a><a href="/homework?view=analysis">학생별 분석</a><a href="/briefing">반 브리핑</a></nav>'
