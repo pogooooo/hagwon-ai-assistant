@@ -3350,3 +3350,218 @@ td {
     min-height: 44px;
   }
 }
+
+body[data-page='login'] {
+  min-height: 100svh;
+  background: #f8f8f3;
+}
+@media (min-width: 781px) {
+  .sign-in-layout {
+    height: clamp(540px, calc(100svh - 114px), 626px);
+  }
+  .sign-in-content {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 0;
+    overflow: auto;
+    padding-block: clamp(22px, 4vh, 42px);
+  }
+  .sign-in-form {
+    flex: none;
+    background: transparent;
+  }
+  .sign-in-heading {
+    margin-bottom: 20px;
+  }
+  .sign-in-form form {
+    gap: 12px;
+  }
+  .sign-in-accounts {
+    margin: 0;
+    padding: 0;
+  }
+  .sign-in-accounts summary {
+    padding-block: 10px;
+    font-size: 13px;
+  }
+  .demo-accounts {
+    margin-top: 0;
+  }
+}
+.consultation-layout {
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 18px;
+}
+.consultation-main {
+  min-height: 0;
+  gap: 16px;
+  padding: clamp(18px, 2.3vw, 32px);
+}
+.consultation-layout[data-consultation-view='conversation'][data-has-thread='false']
+  .consultation-main {
+  justify-content: center;
+}
+.consultation-welcome {
+  margin: 4px 0;
+  gap: 15px;
+}
+.consultation-welcome img {
+  width: 64px;
+  height: 70px;
+}
+.consultation-welcome h2 {
+  margin: 0;
+  font-size: clamp(21px, 2vw, 28px);
+}
+.consultation-welcome p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+.consultation-history {
+  min-width: 0;
+  min-height: 0;
+}
+.consultation-history .item-list {
+  max-height: min(54svh, 520px);
+  overflow-wrap: anywhere;
+}
+.consultation-history li span,
+.consultation-history li small {
+  display: block;
+}
+.consultation-history .view-tabs a,
+.consultation-history li a {
+  font-size: 13px;
+}
+.consultation-history a[aria-current='page'] {
+  border-radius: 8px;
+}
+.question-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+.question-suggestions button {
+  width: auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.thread-heading {
+  flex: none;
+  padding-bottom: 12px;
+}
+.thread-heading h2 {
+  overflow-wrap: anywhere;
+}
+.conversation-messages:empty {
+  display: none;
+}
+.conversation-messages:not(:empty) {
+  min-height: 0;
+  padding: 0;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.consultation-main form.chat-composer {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff;
+  gap: 6px;
+}
+.chat-composer .compose-question span {
+  font-weight: 650;
+  color: var(--ink);
+}
+.chat-composer .compose-question textarea {
+  padding: 3px 0;
+  min-height: 54px;
+  height: 62px;
+  max-height: 180px;
+  font-size: 16px;
+}
+.compose-actions {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  justify-content: space-between;
+}
+.compose-actions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.compose-actions select {
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+.chat-composer .compose-actions button {
+  flex: none;
+  margin-left: auto;
+}
+.compose-actions button span {
+  margin-left: 4px;
+}
+.consult-heading-actions {
+  gap: 8px;
+}
+.consult-heading-actions a {
+  text-decoration: none;
+}
+@media (min-width: 781px) {
+  .consultation-layout {
+    min-height: min(435px, 64svh);
+  }
+  .consultation-layout[data-has-thread='true'] .conversation-messages {
+    max-height: max(210px, calc(100svh - 410px));
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+}
+@media (max-width: 780px) {
+  .consultation-layout {
+    overflow: visible;
+    gap: 12px;
+  }
+  .consultation-main,
+  .consultation-history {
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .consultation-welcome {
+    margin: 0;
+  }
+  .consultation-welcome img {
+    width: 42px;
+    height: 50px;
+  }
+  .consultation-welcome p {
+    font-size: 12px;
+  }
+  .consultation-layout[data-has-thread='true'] .consultation-main {
+    grid-row: 1;
+  }
+  .consultation-layout[data-has-thread='true'] .consultation-history {
+    grid-row: 2;
+  }
+  .consultation-layout[data-consultation-view='queue'][data-has-thread='false']
+    .consultation-main {
+    display: none;
+  }
+  .compose-actions label {
+    flex-direction: column;
+    align-items: start;
+  }
+  .consult-heading-actions {
+    flex-wrap: wrap;
+  }
+}

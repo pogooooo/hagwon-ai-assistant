@@ -768,9 +768,9 @@ function renderConsultation(ctx: PageContext) {
   const hiddenThread = thread
     ? `<input type="hidden" name="id" value="${h(thread.id)}">`
     : '';
-  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions"><a class="consultation-history-jump" href="#consultation-history">상담 목록</a>${thread || inbox || archive ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
-    <div class="split consultation-layout" data-consultation-view="${queue ? 'queue' : 'conversation'}">
-      <aside class="panel consultation-history" id="consultation-history" tabindex="-1">
+  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="#consultation-history">상담 목록</a>${thread || inbox || archive ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
+    <div class="split consultation-layout" data-has-thread="${!!thread}" data-consultation-view="${queue ? 'queue' : 'conversation'}">
+      <aside class="consultation-history" id="consultation-history" tabindex="-1">
         <h2>상담 목록</h2>
         ${actorIsStaff ? `<nav class="view-tabs" aria-label="상담 목록 범위"><a href="/consultation?view=inbox"${inbox ? ' aria-current="page"' : ''}>처리 중</a><a href="/consultation"${!inbox && !archive ? ' aria-current="page"' : ''}>내 상담</a><a href="/consultation?view=archive"${archive ? ' aria-current="page"' : ''}>완료</a></nav>` : ''}
         ${
@@ -784,24 +784,23 @@ function renderConsultation(ctx: PageContext) {
             : `<p class="muted">${inbox ? '처리할 상담이 없습니다.' : archive ? '완료된 상담이 없습니다.' : '저장된 상담이 없습니다.'}</p>`
         }
       </aside>
-      <section class="panel consultation-main" id="conversation" tabindex="-1">
+      <section class="consultation-main" id="conversation" tabindex="-1">
         ${
           thread
             ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
             : inbox || archive
-              ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : ''}`
-              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><details class="suggestion-list"><summary>질문 예시 보기</summary><div class="question-suggestions" aria-label="질문 예시">${['학원 위치와 주차 안내가 궁금해요.', '상담 가능한 시간과 신청 방법은?', '자습실 위치와 이용 시간 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div></details>`
+              ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : '<p class="muted">현재 목록이 비어 있습니다.</p>'}`
+              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="질문 예시">${['학원 위치와 주차 안내가 궁금해요.', '상담 가능한 시간과 신청 방법은?', '자습실 위치와 이용 시간 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
         }
         <div class="conversation-messages">${messages.map((message) => renderMessage(message, currentRevisions)).join('')}</div>
         ${
           own && thread?.status !== 'closed' && (thread || !queue)
             ? `<form data-jump-label="질문 쓰기" class="chat-composer" method="post" action="${h(link)}">
           ${hiddenThread}<input type="hidden" name="conversationId" value="${thread?.id ?? randomUUID()}">
-          ${students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
-          <label>질문 <textarea name="question" rows="3" maxlength="500" required placeholder="궁금한 내용을 입력해 주세요.">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
-          <button name="action" value="ask">질문하기</button>
+          <label class="compose-question"><span>질문</span><textarea name="question" rows="2" maxlength="500" required placeholder="학원에 궁금한 점을 입력하세요">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
+          <div class="compose-actions">${students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
+          <button name="action" value="ask">질문 보내기 <span aria-hidden="true">↑</span></button></div>
           <p class="chat-progress" role="status" aria-live="polite"></p>
-          <p class="muted composer-note">확인할 수 없는 내용은 학원 담당자가 이어서 안내합니다.</p>
         </form>`
             : ''
         }
@@ -839,9 +838,6 @@ export const consultationModule: OperationModule = {
   label: '상담 및 이력',
   roles: ['admin', 'teacher', 'student', 'guardian', 'visitor'],
   setup: setupConsultation,
-  render: (ctx) =>
-    (['admin', 'teacher'].includes(ctx.actor.role)
-      ? '<p><a href="/student-reports">학생별 근거 분석·교사용 상담 자료 초안</a></p>'
-      : '') + renderConsultation(ctx),
+  render: renderConsultation,
   submit: submitConsultation,
 };
