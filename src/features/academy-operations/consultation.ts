@@ -1023,7 +1023,7 @@ function renderConsultation(ctx: PageContext) {
       : []),
   ];
   const status =
-    queue && statuses.some((s) => s.id === requestedStatus)
+    requestedStatus && queue && statuses.some((s) => s.id === requestedStatus)
       ? requestedStatus
       : 'all';
   const threads = indexed.filter((item) =>
