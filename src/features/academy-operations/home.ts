@@ -127,7 +127,7 @@ export function renderHome(ctx: PageContext) {
       ? [
           ['/schedule', '수업 일정'],
           [
-            '/grading',
+            guardian ? '/grading?view=queue' : '/grading',
             staff
               ? '사진 채점 검수'
               : actor.role === 'guardian'
@@ -180,7 +180,7 @@ export function renderHome(ctx: PageContext) {
     );
     const assignments = panel(
       '사진 채점 과제',
-      '/grading',
+      '/grading?view=register',
       homework.assignments.slice(0, 5).map((a) => ({
         title: a.title,
         href: '/grading?assignment=' + encodeURIComponent(a.assignment_id),
