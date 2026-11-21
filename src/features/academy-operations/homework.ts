@@ -1,3 +1,4 @@
+import { renderStudentReports } from './student-reports.ts';
 import { randomUUID } from 'node:crypto';
 import {
   assignWorkbook,
@@ -897,6 +898,22 @@ export const homeworkModule: OperationModule = {
     const { actor, url } = ctx;
     const view = url.searchParams.get('view'),
       detail = url.searchParams.get('detail');
+    const familyTabs =
+      actor.role === 'guardian'
+        ? '<nav class="view-tabs page-tabs" aria-label="숙제 보기">' +
+          '<a href="/homework"' +
+          (view !== 'reports' ? ' aria-current="page"' : '') +
+          '>과제별 결과</a>' +
+          '<a href="/homework?view=reports"' +
+          (view === 'reports' ? ' aria-current="page"' : '') +
+          '>학습 리포트</a></nav>'
+        : '';
+    if (view === 'reports' && actor.role === 'guardian')
+      return (
+        '<div class="workspace-heading"><h1>숙제</h1></div>' +
+        familyTabs +
+        renderStudentReports(ctx)
+      );
     if (view === 'source')
       return renderWorkbookSource(
         ctx,
