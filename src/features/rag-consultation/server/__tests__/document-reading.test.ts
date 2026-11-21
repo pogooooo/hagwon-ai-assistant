@@ -439,3 +439,21 @@ for (const [suiteId, ids] of [
     assert.equal(calls, 0);
   });
 }
+
+test('an explicit approved academy address survives reader outages without accepting unrelated or conflicting locations', async () => {
+  const env = await setup(() => ({}));
+  await env.register('room', '## 자습실 위치\n자습실은 별빛로 18에 있습니다.');
+  await env.register(
+    'campus',
+    '## 오시는 길\n학원 주소는 가상시 배움길 12, 3층입니다.',
+  );
+  const good = await env.ask('학원 위치가 어디예요?');
+  assert.equal(good.answer.status, 'answered', good.answer.answer);
+  assert.match(good.answer.answer, /배움길 12/);
+  assert.equal(env.inputs.length, 0);
+  await env.register('annex', '학원 주소는 가상시 시범로 52입니다.');
+  assert.equal(
+    (await env.ask('학원 주소 알려주세요')).answer.status,
+    'abstained',
+  );
+});
