@@ -41,27 +41,29 @@ import { cropAnswer, gradingMediaLimits } from './media.ts';
 import type { OperationsDatabase } from '../academy-operations/database.ts';
 
 const services = new WeakMap<OperationsDatabase, GradingService>();
-export function gradingService(db: OperationsDatabase) {
+export function gradingService(
+  db: OperationsDatabase,
+  env: Record<string, string | undefined> = process.env,
+) {
   let service = services.get(db);
   if (!service) {
     service = new GradingService(db, {
-      provider: createNaverGrader(process.env, db),
+      provider: createNaverGrader(env, db),
       practiceProvider:
-        process.env.AXR_GRADING_DEMO_PRACTICE_POLICY ===
-        'self-practice-deidentified-v1'
+        env.AXR_GRADING_DEMO_PRACTICE_POLICY === 'self-practice-deidentified-v1'
           ? createNaverGrader(
               {
-                ...process.env,
+                ...env,
                 AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
                 AXR_GRADING_INPUT_POLICY_REF:
-                  process.env.AXR_GRADING_DEMO_PRACTICE_POLICY,
+                  env.AXR_GRADING_DEMO_PRACTICE_POLICY,
               },
               db,
             )
           : undefined,
-      rawTtlMs: Number(process.env.AXR_GRADING_RAW_TTL_MS ?? 3600000),
-      inputPolicyRef: process.env.AXR_GRADING_INPUT_POLICY_REF,
-      restoredBackup: process.env.AXR_GRADING_RESTORED_BACKUP === 'true',
+      rawTtlMs: Number(env.AXR_GRADING_RAW_TTL_MS ?? 3600000),
+      inputPolicyRef: env.AXR_GRADING_INPUT_POLICY_REF,
+      restoredBackup: env.AXR_GRADING_RESTORED_BACKUP === 'true',
     });
     services.set(db, service);
   }

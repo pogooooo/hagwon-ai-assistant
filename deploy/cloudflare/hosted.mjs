@@ -91,6 +91,7 @@ export class AcademyDemo extends DurableObject {
       documentsRoot: fixtureRoot,
       maxDocumentBytes: 5 * 1024 * 1024,
     });
+    gradingService(this.parentMessageDb, env);
     server.listen(0);
     this.port = server.address().port;
     ctx.blockConcurrencyWhile(async () => {
