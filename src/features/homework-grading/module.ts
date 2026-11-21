@@ -1,3 +1,7 @@
+import {
+  homeworkMaterial,
+  renderHomeworkMaterial,
+} from '../academy-operations/demo-homework-materials.ts';
 import { renderStudentReports } from '../academy-operations/student-reports.ts';
 import { renderReportDocument } from '../academy-operations/report-document.ts';
 import { photoItem } from './assigned-work.ts';
@@ -886,6 +890,18 @@ async function render(ctx: PageContext) {
               ? '학습 리포트'
               : '채점 리포트'
             : '채점 결과';
+    const material =
+      !detail && ['upload', 'results', 'queue'].includes(view)
+        ? homeworkMaterial(ctx)
+        : undefined;
+    const worksheet =
+      material &&
+      assignments.find(
+        (assignment) =>
+          assignment.class_id === material.classId &&
+          assignment.rights_ref === material.rights &&
+          assignment.title === material.title,
+      );
     const intro =
       `<script src="/grading-ui.js?v=2" defer></script><div class="page-heading"><h1>${title}</h1></div><nav class="grade-filters" aria-label="숙제 메뉴">` +
       tabs
@@ -894,7 +910,18 @@ async function render(ctx: PageContext) {
             `<a href="/grading?view=${key}"${view === key ? ' aria-current="page"' : ''}>${label}</a>`,
         )
         .join('') +
-      '</nav>';
+      '</nav>' +
+      (material && worksheet
+        ? renderHomeworkMaterial(
+            material,
+            view === 'upload' &&
+              params.get('assignment') === worksheet.assignment_id
+              ? undefined
+              : '/grading?view=upload&assignment=' +
+                  encodeURIComponent(worksheet.assignment_id),
+            view === 'upload' ? '이 과제 선택' : '이 과제 제출',
+          )
+        : '');
     if (detail) return intro + detail;
     if (view === 'register')
       return (
