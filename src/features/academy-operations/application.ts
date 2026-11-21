@@ -5,6 +5,14 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
+import {
+  academyChoices,
+  renderAcademies,
+  selectAcademy,
+  sessionProfile,
+  setupAcademySelection,
+} from './academy-switcher.ts';
+import { seedAcademyChoices } from './academy-switcher-demo.ts';
 import type { OperationsDatabase } from './database.ts';
 import {
   createExternalServices,
@@ -20,7 +28,7 @@ import { consultationModule } from './consultation.ts';
 import {
   authenticate,
   directoryModule,
-  getSessionActor,
+  getActor,
   initializeIdentity,
 } from './directory.ts';
 import {
@@ -220,9 +228,11 @@ export function createOperationsServer({
     }
   }
   initializeIdentity(db, demoPassword, fixturesRoot);
+  setupAcademySelection(db);
   // Historical publications and monthly reports still reference workbook tables.
   homeworkModule.setup(db, documentsRoot);
   for (const operation of modules) operation.setup(db, documentsRoot);
+  if (showDemoAccounts) seedAcademyChoices(db);
   function hashSession(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
@@ -238,7 +248,8 @@ export function createOperationsServer({
   function findSession(request: IncomingMessage) {
     const token = getToken(request);
     if (!token || !/^[a-f0-9]{64}$/.test(token)) return;
-    return getSessionActor(db, hashSession(token), Date.now());
+    const id = sessionProfile(db, hashSession(token), Date.now());
+    return id ? getActor(db, id) : undefined;
   }
 
   function requireSession(request: IncomingMessage): Actor {
@@ -317,11 +328,12 @@ export function createOperationsServer({
     const navigation = serviceNavigation(pages, current, staff);
     const brand = `<a class="brand" href="/"><img src="/assets/ondap-logo.png" alt="온답"></a>`;
     const title =
-      pages.find((p) => p.path === current)?.label ?? (actor ? '홈' : '로그인');
+      pages.find((p) => p.path === current)?.label ??
+      (current === '/academies' ? '내 학원' : actor ? '홈' : '로그인');
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap2"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=academy-choice"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
@@ -331,7 +343,7 @@ export function createOperationsServer({
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName
-        ? '<span class="academy-name">' + h(academyName) + '</span>'
+        ? `<a class="academy-name academy-switch" href="/academies" aria-label="내 학원 선택 · ${h(academyName)}"><span>${h(academyName)}</span><span aria-hidden="true">⌄</span></a>`
         : '') +
       (actor
         ? '<select class="section-jump" data-section-jump aria-label="현재 화면의 항목으로 이동" hidden><option value="">바로가기</option></select><div class="session">' +
@@ -397,7 +409,20 @@ export function createOperationsServer({
     current?: string,
   ) {
     response.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8' });
-    response.end(layout(content, actor, current));
+    const html = layout(content, actor, current);
+    // Stamp the rendered account so a form left open in another tab cannot write to the new academy.
+    response.end(
+      actor
+        ? html.replace(/<form\b[^>]*>/gi, (tag) =>
+            /\bmethod=["']post["']/i.test(tag)
+              ? tag +
+                '<input type="hidden" name="_academyAccount" value="' +
+                h(actor.id) +
+                '">'
+              : tag,
+          )
+        : html,
+    );
   }
 
   function redirect(response: ServerResponse, target: string) {
@@ -511,7 +536,12 @@ export function createOperationsServer({
           return;
         }
         setSessionCookie(response, url.protocol === 'https:', token);
-        redirect(response, '/');
+        redirect(
+          response,
+          academyChoices(db, hashSession(token)).length > 1
+            ? '/academies'
+            : '/',
+        );
         return;
       }
       if (!actor) {
@@ -524,6 +554,38 @@ export function createOperationsServer({
         deleteSession(request);
         setSessionCookie(response, url.protocol === 'https:');
         redirect(response, '/login');
+        return;
+      }
+      const digest = hashSession(getToken(request)!);
+      const checkAcademyForm = (form: FormData) => {
+        const rendered = field(form, '_academyAccount', 128);
+        if (
+          (rendered && rendered !== actor!.id) ||
+          (!rendered && academyChoices(db, digest).length > 1)
+        )
+          throw new OperationError(
+            '이용 중인 학원이 바뀌었습니다. 화면을 다시 열어 주세요.',
+            409,
+          );
+      };
+      if (url.pathname === '/academies') {
+        if (request.method === 'POST') {
+          const form = await readForm(request, url);
+          transaction(db, () => {
+            assertCurrentSession(request, actor!);
+            checkAcademyForm(form);
+            selectAcademy(db, digest, actor!, form);
+          });
+          redirect(response, '/');
+        } else {
+          sendPage(
+            response,
+            200,
+            renderAcademies(db, digest, actor),
+            actor,
+            '/academies',
+          );
+        }
         return;
       }
       if (url.pathname === '/' && request.method === 'GET') {
@@ -614,6 +676,7 @@ export function createOperationsServer({
       }
       const form =
         request.method === 'POST' ? await readForm(request, url) : undefined;
+      if (form) checkAcademyForm(form);
       const sessionActor = actor;
       const assertCurrentAccess = () =>
         assertCurrentSession(request, sessionActor);

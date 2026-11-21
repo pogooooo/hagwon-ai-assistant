@@ -3952,3 +3952,50 @@ body[data-page='login'] {
     background: white;
   }
 }
+
+.academy-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+.academy-switch span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.academy-switch:hover,
+.academy-switch:focus-visible {
+  color: var(--accent);
+}
+.academy-picker {
+  max-width: 38rem;
+}
+.academy-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+}
+.academy-choice + .academy-choice {
+  border-top: 1px solid var(--border);
+}
+.academy-choice small {
+  display: block;
+  color: var(--muted);
+}
+.academy-picker summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+@media (max-width: 780px) {
+  .topbar-inner .academy-switch {
+    display: inline-flex;
+    max-width: 44vw;
+    font-size: 13px;
+  }
+}

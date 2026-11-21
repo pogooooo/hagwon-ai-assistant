@@ -151,20 +151,6 @@ export function getActor(
   );
 }
 
-export function getSessionActor(
-  db: OperationsDatabase,
-  digest: string,
-  now: number,
-): Actor | undefined {
-  return one<Actor>(
-    db,
-    `SELECT ${ACTOR_COLUMNS} FROM accounts
-     WHERE id = (SELECT account_id FROM op_sessions WHERE digest = ? AND expires_at > ?)`,
-    digest,
-    now,
-  );
-}
-
 export function authenticate(
   db: OperationsDatabase,
   username: string,
