@@ -56,7 +56,8 @@ export function createExternalServices(
       const response = await fetchImpl(url, {
         ...init,
         signal: AbortSignal.timeout(25000),
-        redirect: 'error',
+        // Workers supports manual redirects. The response check below rejects them.
+        redirect: 'manual',
       });
       if (!response.ok) {
         if (url.endsWith('/recognizer/upload'))
