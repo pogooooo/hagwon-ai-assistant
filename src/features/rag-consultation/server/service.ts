@@ -1721,6 +1721,7 @@ export function createRagConsultationService(
                 [
                   'explicit_academy_address',
                   'parking_fields',
+                  'public_course_unavailable',
                   'public_office_opening',
                   'public_office_method',
                 ].includes(trace.intent)) ||
