@@ -1,3 +1,4 @@
+import { teamScheduleModule } from './team-schedule.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -183,6 +184,12 @@ test('recommend → teacher selects → own-student votes → teacher approval �
   s.submit('vote', { student: 'TA_STU_002', rank1: '0' }, 'TA_GUARDIAN_M2');
   s.submit('approve', { choice: '0' }, 'TA_TEACHER');
   assert.equal(s.row().state, 'approved');
+  const finalized = await teamScheduleModule.render(
+    s.ctx('TA_GUARDIAN_E_MATH', '/schedule?view=makeup'),
+  );
+  assert.match(finalized, /보강 확정/);
+  assert.match(finalized, /\d{2}:\d{2}~\d{2}:\d{2} · 1강의실/);
+  assert.match(finalized, /학원 일정 보기/);
   assert.equal(
     s.db.prepare('SELECT COUNT(*) n FROM op_makeup_sessions').get()?.n,
     1,
