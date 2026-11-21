@@ -18,6 +18,7 @@ import {
   type Assignment,
   type Draft,
   type DraftItem,
+  type PhotoSolution,
   type Reading,
   type Result,
 } from './contracts.ts';
@@ -32,6 +33,7 @@ import {
 import { MemoryRawStore, type RawStore } from './raw-store.ts';
 import { cropAnswer, decodeUploads, type ImagePage } from './media.ts';
 import type { GradeProvider } from './provider.ts';
+import { comparePhotoAnswer } from './photo-solution.ts';
 
 export const newId = (prefix: string) =>
   prefix + '_' + randomUUID().replaceAll('-', '');
@@ -613,6 +615,36 @@ export class GradingService {
             }
           }
           const items: DraftItem[] = [];
+          const solutions = new Map<string, PhotoSolution>();
+          const failedSolves = new Set<string>();
+          for (const page of pages) {
+            const defs = a.items.filter(
+              (i) =>
+                i.grading_mode === 'photo_solution' &&
+                i.expected_page_no === page.page_no &&
+                i.approval_status === 'approved',
+            );
+            if (!defs.length || unavailable) continue;
+            // Limit completion size and isolate a failed group from the rest of the submission.
+            for (let offset = 0; offset < defs.length; offset += 6) {
+              const group = defs.slice(offset, offset + 6);
+              readSubmission(ctx, id);
+              this.open(this.current(id));
+              try {
+                if (!this.provider.solvePage)
+                  throw new GradingError('PROVIDER_UNAVAILABLE');
+                for (const [ref, solution] of await this.provider.solvePage(
+                  page,
+                  group,
+                )) {
+                  if (group.some((d) => d.item_ref === ref))
+                    solutions.set(ref, solution);
+                }
+              } catch {
+                for (const def of group) failedSolves.add(def.item_ref);
+              }
+            }
+          }
           for (const item of a.items) {
             readSubmission(ctx, id);
             this.open(this.current(id));
@@ -755,7 +787,39 @@ export class GradingService {
                 proposed = emptyResult(item, 'UNSUPPORTED');
               }
             }
-            items.push({ extraction: r, proposed, reviewed: false });
+            if (item.grading_mode === 'photo_solution') {
+              const solution = solutions.get(item.item_ref);
+              if (
+                unavailable ||
+                failedSolves.has(item.item_ref) ||
+                r.ambiguity_codes.some((c) => c.startsWith('PROVIDER_'))
+              )
+                proposed = emptyResult(item, 'PROVIDER_UNAVAILABLE');
+              else if (!solution)
+                proposed = emptyResult(item, 'PROBLEM_UNRESOLVED');
+              else {
+                try {
+                  proposed = await comparePhotoAnswer(
+                    item,
+                    r,
+                    solution,
+                    this.provider,
+                  );
+                } catch {
+                  proposed = emptyResult(item, 'UNSUPPORTED');
+                }
+              }
+              items.push({
+                extraction: r,
+                proposed,
+                solution,
+                initial_proposal: {
+                  outcome: proposed.outcome,
+                  score: proposed.score,
+                },
+                reviewed: false,
+              });
+            } else items.push({ extraction: r, proposed, reviewed: false });
           }
           const live = this.current(id);
           readSubmission(ctx, id);
@@ -849,7 +913,29 @@ export class GradingService {
         extraction.regions.some((r) => r.page_no !== def.expected_page_no)
       )
         throw new GradingError('VALIDATION_FAILED');
-      const proposed = validateRetained(def, candidate.proposed);
+      const previous = old.items.find(
+        (i) => i.extraction.item_ref === def.item_ref,
+      )!;
+      const reviewReference = (
+        candidate.review_reference ?? previous.review_reference
+      )?.trim();
+      if (
+        def.grading_mode === 'photo_solution' &&
+        !reviewReference &&
+        !previous.solution &&
+        !['ungradable', 'excluded'].includes(candidate.proposed.outcome)
+      )
+        throw new GradingError('REVIEW_REFERENCE_REQUIRED');
+      if (
+        reviewReference &&
+        (def.grading_mode !== 'photo_solution' || reviewReference.length > 1200)
+      )
+        throw new GradingError('VALIDATION_FAILED');
+      const proposed = validateRetained(
+        def,
+        candidate.proposed,
+        reviewReference || previous.solution?.answer,
+      );
       if (
         candidate.reviewed &&
         !['ungradable', 'excluded'].includes(proposed.outcome) &&
@@ -860,7 +946,13 @@ export class GradingService {
           !extraction.regions.length)
       )
         throw new GradingError('REVIEW_UNRESOLVED');
-      return { extraction, proposed, reviewed: candidate.reviewed };
+      return {
+        ...previous,
+        extraction,
+        proposed,
+        reviewed: candidate.reviewed,
+        review_reference: reviewReference,
+      };
     });
     const next: Draft = {
       submission_id: id,
