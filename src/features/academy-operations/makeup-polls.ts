@@ -600,11 +600,11 @@ export function pendingMakeupNotices(ctx: PageContext): string {
       )
       .map(
         (s) =>
-          `<li><a href="/makeup-votes?id=${encodeURIComponent(poll.id)}">${h(s.name)} · ${h(data.closure.label)} · 가능 시간 응답</a></li>`,
+          `<li><a class="workspace-link" href="/makeup-votes?id=${encodeURIComponent(poll.id)}">${h(s.name)} · ${h(data.closure.label)} · 가능 시간 응답 <span aria-hidden="true">›</span></a></li>`,
       );
   });
   return notices.length
-    ? `<section class="panel"><h2>응답할 보강 투표</h2><ul>${notices.join('')}</ul></section>`
+    ? `<section class="panel"><h2>응답할 보강 투표</h2><ul class="makeup-notice-list">${notices.join('')}</ul></section>`
     : '';
 }
 function render(ctx: PageContext) {

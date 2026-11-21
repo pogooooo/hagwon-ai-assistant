@@ -72,6 +72,7 @@ export function renderHome(ctx: PageContext) {
   const { actor } = ctx;
   const staff = actor.role === 'admin' || actor.role === 'teacher';
   const showChat = canAskConsultation(actor);
+  const guardian = actor.role === 'guardian';
   const visitor = actor.role === 'visitor';
   const now = new Date();
   const date = now.toLocaleDateString('ko-KR', {
@@ -128,7 +129,9 @@ export function renderHome(ctx: PageContext) {
       ? [
           ['/schedule', '수업 일정'],
           ['/homework', staff ? '숙제 관리' : '숙제 확인'],
-          ['/learning', '학습 기록'],
+          guardian
+            ? ['/student-reports', '학습 리포트']
+            : ['/learning', '학습 기록'],
         ]
       : []),
     ['/documents', '학원 자료'],
@@ -181,6 +184,29 @@ export function renderHome(ctx: PageContext) {
       })),
       '처리할 상담이 없습니다.',
     );
+    const lead = review.length
+      ? {
+          href: '/homework?view=review',
+          title: '답안 ' + review.length + '건이 검수를 기다립니다',
+          label: '검수하기',
+        }
+      : pending.length
+        ? {
+            href: '/consultation?view=inbox',
+            title: '처리할 상담이 ' + pending.length + '건 있습니다',
+            label: '상담함 열기',
+          }
+        : dayEntries.length
+          ? {
+              href: '/schedule?day=' + today,
+              title: '오늘 일정이 ' + dayEntries.length + '건 있습니다',
+              label: '오늘 일정 보기',
+            }
+          : {
+              href: '/homework?view=create',
+              title: '대기 중인 업무가 없습니다',
+              label: '숙제 등록',
+            };
     const metrics = [
       ['/homework?view=review', '확인 대기', review.length, '/homework'],
       [
@@ -192,9 +218,9 @@ export function renderHome(ctx: PageContext) {
       ['/schedule?day=' + today, '오늘 일정', dayEntries.length, '/schedule'],
     ] as const;
     return `${heading}<div class="ondap-board"><div class="ondap-column">
-       <section class="ondap-hero"><div><h2>${review.length ? '숙제 제출 ' + review.length + '건을 확인해 주세요' : '숙제 제출 현황을 확인하세요'}</h2><a class="button-link" href="/homework?view=review">제출 확인하기 <span aria-hidden="true">›</span></a></div><img src="/assets/ondap-review.png" alt=""></section>
+       <section class="ondap-hero"><div><h2>${lead.title}</h2><a class="button-link" href="${lead.href}">${lead.label} <span aria-hidden="true">›</span></a></div><img src="/assets/ondap-review.png" alt=""></section>
        <div class="ondap-metrics">${metrics.map(([url, label, value, icon]) => `<a href="${url}">${serviceIcon(icon)}<span>${label}</span><strong>${value}</strong></a>`).join('')}</div>
-       ${board.table}<div class="ondap-review-queue">${queue}</div>${inbox}
+       ${pending.length && !review.length ? inbox + board.table : board.table + `<div class="ondap-review-queue">${queue}</div>` + inbox}
        </div><div class="ondap-column">${dayPanel}${links('이어서 할 일', [
          ['/briefing', '반 브리핑 보기', '/briefing'],
          ['/learning', '학습 기록 검수', '/learning'],
@@ -226,35 +252,36 @@ export function renderHome(ctx: PageContext) {
           })),
           '제출할 숙제가 없습니다.',
         )
+      : guardian
+        ? ''
+        : panel(
+            '최근 숙제 결과',
+            '/homework',
+            homework.results.map(
+              ({ id, assignment_title, student_name, score, total }) => ({
+                href: '/homework?submission=' + encodeURIComponent(id),
+                title: assignment_title,
+                meta: student_name + ' · ' + score + ' / ' + total + '점',
+              }),
+            ),
+            '확정된 숙제 결과가 없습니다.',
+          ));
+  const learning =
+    visitor || guardian
+      ? ''
       : panel(
-          '최근 숙제 결과',
-          '/homework',
-          homework.results.map(
-            ({ id, assignment_title, student_name, score, total }) => ({
-              href: '/homework?submission=' + encodeURIComponent(id),
-              title: assignment_title,
-              meta: student_name + ' · ' + score + ' / ' + total + '점',
-            }),
-          ),
-          '확정된 숙제 결과가 없습니다.',
-        ));
-  const learning = visitor
-    ? ''
-    : panel(
-        '최근 학습 기록',
-        '/learning',
-        recentLearningReports(ctx).map(({ id, name, period }) => ({
-          href: '/learning?publication=' + encodeURIComponent(id),
-          title: name + ' 학습 기록',
-          meta: period,
-        })),
-        '확정된 학습 기록이 없습니다.',
-      );
-  const guardian = actor.role === 'guardian';
+          '최근 학습 기록',
+          '/learning',
+          recentLearningReports(ctx).map(({ id, name, period }) => ({
+            href: '/learning?publication=' + encodeURIComponent(id),
+            title: name + ' 학습 기록',
+            meta: period,
+          })),
+          '확정된 학습 기록이 없습니다.',
+        );
   const messages = guardian ? visibleParentMessages(ctx) : [];
-  const result = homework?.results[0];
   const familyHero = guardian
-    ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><small>확인된 학습 기록</small><h2>${result ? h(result.assignment_title) : '학생 학습 리포트'}</h2>${result ? `<p>${h(result.student_name)} · ${result.score} / ${result.total}점</p>` : ''}<a href="/student-reports">학습 리포트 보기 ›</a></div></section>${panel(
+    ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><h2>학습 리포트</h2><p>과제별 결과와 월간 학습 기록을 확인하세요.</p><a class="button-link assessment-entry" href="/student-reports">학습 리포트 보기 <span aria-hidden="true">›</span></a></div></section>${panel(
         '학원 알림',
         '/messages',
         messages.slice(0, 3).map((m) => ({
@@ -264,7 +291,7 @@ export function renderHome(ctx: PageContext) {
         '도착한 알림이 없습니다.',
       )}`
     : '';
-  return `${heading}${familyHero}${pendingMakeupNotices(ctx)}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
+  return `${heading}${pendingMakeupNotices(ctx)}${familyHero}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
     <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
     ${showChat ? `<div class="home-help">${search}</div>` : ''}
     <div class="home-secondary">${visitor ? '' : documentList()}${showChat ? recentConsultations() : ''}</div>

@@ -670,7 +670,11 @@ test(
       303,
     );
     assert.match((await send(submission, guardian)).text, /5\/5점/);
-    assert.ok((await send('/', guardian)).text.includes(submission));
+    assert.ok(
+      (await send('/student-reports?view=assignments', guardian)).text.includes(
+        submission,
+      ),
+    );
     assert.ok(
       !(await send('/homework?view=review', teacher)).text.includes(submission),
     );
@@ -867,8 +871,9 @@ test(
     assert.ok(source);
     assert.equal((await send(source, guardian)).status, 200);
     assert.equal((await send(source, other)).status, 404);
-    assert.ok((await send('/', guardian)).text.includes(source));
-    assert.ok(!(await send('/', other)).text.includes(source));
+    assert.match((await send('/', guardian)).text, /학습 리포트 보기/);
+    assert.ok((await send('/student-reports', guardian)).text.includes(source));
+    assert.ok(!(await send('/student-reports', other)).text.includes(source));
     document.classifiedAt = '2026-11-11T10:00:00+09:00';
     document.items[0].tags[0].tagId = 'math-09';
     assert.equal((await upload('1')).status, 303);
@@ -960,11 +965,20 @@ test('운영 홈과 상담 목록은 열람 범위와 처리 상태를 따른다
     (await s.send(path, parent, { action: 'handoff', id })).status,
     303,
   );
-  assert.match((await s.send('/', admin)).text, new RegExp(title));
+  const adminHome = await s.send('/', admin);
+  assert.match(adminHome.text, new RegExp(title));
+  assert.match(adminHome.text, /처리할 상담이 1건 있습니다/);
   assert.match(
     (await s.send('/consultation?view=inbox', admin)).text,
     new RegExp(title),
   );
+  const unassigned = (
+    await s.send('/consultation?view=inbox&status=unassigned', admin)
+  ).text;
+  const reply = (await s.send('/consultation?view=inbox&status=reply', admin))
+    .text;
+  assert.match(unassigned, new RegExp(title));
+  assert.doesNotMatch(reply, new RegExp(title));
   assert.doesNotMatch((await s.send('/', other)).text, new RegExp(title));
   assert.equal(
     (await s.send(path, admin, { action: 'close', id })).status,

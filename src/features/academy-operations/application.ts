@@ -12,6 +12,7 @@ import {
   sessionProfile,
   setupAcademySelection,
 } from './academy-switcher.ts';
+import { accountDisplayName } from './demo-presentation.ts';
 import { listedDemoLogins, setupDemoLogins } from './demo-logins.ts';
 import {
   seedAcademyChoices,
@@ -44,14 +45,17 @@ import {
   analyzeHomeworkPhoto,
   reviewHomeworkReading,
 } from './homework-classifier.ts';
-import { homeworkModule, homeworkPhoto } from './homework.ts';
-import { learningModule } from './learning.ts';
+import { homeworkModule, homeworkOverview, homeworkPhoto } from './homework.ts';
+import { learningModule, recentLearningReports } from './learning.ts';
 import { briefingModule } from './briefing.ts';
 import { parentMessagesModule } from './parent-messages.ts';
 import { unreadParentCount } from './parent-messages-model.ts';
 import { calendarModule } from './calendar.ts';
 import { makeupPollsModule } from './makeup-polls.ts';
-import { studentReportsModule } from './student-reports.ts';
+import {
+  renderStudentReports,
+  studentReportsModule,
+} from './student-reports.ts';
 import { previewTeamSchedule } from './team-schedule.ts';
 import { renderHome } from './home.ts';
 import { serviceNavigation } from './service-navigation.ts';
@@ -74,7 +78,25 @@ const modules: OperationModule[] = [
   briefingModule,
   calendarModule,
   makeupPollsModule,
-  studentReportsModule,
+  {
+    ...studentReportsModule,
+    render: (ctx) =>
+      renderStudentReports(
+        ctx,
+        () =>
+          homeworkOverview(ctx).results.map((result) => ({
+            href: '/homework?submission=' + encodeURIComponent(result.id),
+            title: result.assignment_title,
+            studentName: result.student_name,
+            date: result.confirmed_at!.slice(0, 10),
+          })),
+        () =>
+          recentLearningReports(ctx).map(({ id, name, period }) => ({
+            href: '/learning?publication=' + encodeURIComponent(id),
+            title: name + ' · ' + period,
+          })),
+      ),
+  },
   documentsModule,
   examBuilderModule,
   consultationModule,
@@ -285,7 +307,24 @@ export function createOperationsServer({
   function serviceMenu(actor: Actor) {
     const pages = visibleModules(actor);
     return menuOrder.flatMap((path) =>
-      pages.filter((page) => page.path === path),
+      pages
+        .filter(
+          (page) =>
+            page.path === path &&
+            !(actor.role === 'guardian' && path === '/learning'),
+        )
+        .map((page) =>
+          page.path === '/student-reports'
+            ? {
+                ...page,
+                label:
+                  actor.role === 'guardian' ? '학습 리포트' : '월간 리포트',
+              }
+            : page.path === '/grading' &&
+                (actor.role === 'student' || actor.role === 'guardian')
+              ? { ...page, label: '숙제' }
+              : page,
+        ),
     );
   }
 
@@ -297,6 +336,9 @@ export function createOperationsServer({
           actor.academyId,
         )?.name
       : 'AXR 학원';
+    const displayName = actor
+      ? accountDisplayName(actor.academyId, actor.name, actor.role)
+      : '';
     const pages = actor ? serviceMenu(actor) : [];
     const staff = actor?.role === 'admin' || actor?.role === 'teacher';
     const navigation = serviceNavigation(pages, current, staff);
@@ -307,7 +349,7 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=consult-followup"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=role-workflows"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
@@ -325,8 +367,8 @@ export function createOperationsServer({
             ? `<a class="parent-inbox-link" href="/messages" aria-label="학원 알림${unreadParentCount({ db, actor, url: new URL('http://localhost/') }) ? ' · 읽지 않은 알림 있음' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="m4 6 8 7 8-7"/></svg>${unreadParentCount({ db, actor, url: new URL('http://localhost/') }) ? '<span class="unread-dot" aria-hidden="true"></span>' : ''}</a>`
             : '') +
           '<span>' +
-          h(actor.name) +
-          (actor.name === roleLabels[actor.role]
+          h(displayName) +
+          (displayName !== actor.name || actor.name === roleLabels[actor.role]
             ? ''
             : '<small>' + h(roleLabels[actor.role]) + '</small>') +
           '</span><form method="post" action="/logout"><button class="secondary">로그아웃</button></form></div>'
