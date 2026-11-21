@@ -131,13 +131,17 @@ export function computeFacts(
   query: FactsQuery,
   now = Date.now(),
   allowedClasses?: ReadonlySet<string>,
+  submissionId?: string,
 ): Snapshot {
   const q = parse(querySchema, query);
   const submissions = rows<Submission>(
     db,
-    "SELECT * FROM grading_v3_submissions WHERE tenant=? AND student=? AND purpose='assessment' AND uploaded=1 AND attempt_no IS NOT NULL ORDER BY attempt_no,id",
+    "SELECT * FROM grading_v3_submissions WHERE tenant=? AND student=? AND purpose='assessment' AND uploaded=1 AND attempt_no IS NOT NULL" +
+      (submissionId ? ' AND id=?' : '') +
+      ' ORDER BY attempt_no,id',
     tenant,
     q.student_ref,
+    ...(submissionId ? [submissionId] : []),
   );
   const facts: Fact[] = [],
     selections: Selection[] = [],
@@ -463,9 +467,17 @@ export function readSnapshot(ctx: PageContext, id: string) {
   );
   if (!row) throw new GradingError('RESOURCE_NOT_FOUND', 404);
   requireStudent(ctx, row.student);
+  const pinned = one<{ current: number }>(
+    ctx.db,
+    "SELECT EXISTS(SELECT 1 FROM grading_v3_submissions s WHERE s.tenant=p.tenant AND s.result_id=p.result AND s.current_revision=p.revision AND s.published_revision=p.revision AND s.purpose='assessment') AS current FROM grading_v3_result_reports p WHERE p.tenant=? AND p.snapshot=?",
+    ctx.actor.academyId,
+    id,
+  );
   if (
-    row.generation !==
-    sourceGeneration(ctx.db, ctx.actor.academyId, row.student)
+    pinned
+      ? !pinned.current
+      : row.generation !==
+        sourceGeneration(ctx.db, ctx.actor.academyId, row.student)
   )
     throw new GradingError('SNAPSHOT_STALE', 409);
   const result = JSON.parse(row.payload) as Snapshot;
@@ -504,6 +516,7 @@ export const observationSchema = z
   .strict();
 export type Observation = z.infer<typeof observationSchema>;
 export interface Report {
+  assignment_title?: string;
   report_id: string;
   revision: number;
   snapshot_id: string;
@@ -618,6 +631,105 @@ export function renderObservations(s: Snapshot, observations: Observation[]) {
       );
   return text.join('\n\n');
 }
+function subjectObservations(s: Snapshot): Observation[] {
+  return s.facts
+    .filter((f) => f.period_role === 'primary' && !f.primary_skill_id)
+    .map((f) => ({
+      claim_type: f.n_evaluable ? 'observed_rate' : 'insufficient_evidence',
+      fact_ids: [f.fact_id],
+      template_key: f.n_evaluable ? 'rate' : 'insufficient',
+    }));
+}
+
+/** Build the draft in a transaction after the deletion receipt and result are committed. */
+export function ensureResultReport(
+  db: OperationsDatabase,
+  tenant: string,
+  resultId: string,
+  now: number,
+) {
+  const head = one<Submission>(
+    db,
+    "SELECT * FROM grading_v3_submissions WHERE tenant=? AND result_id=? AND purpose='assessment' AND current_revision=published_revision",
+    tenant,
+    resultId,
+  );
+  if (!head || !head.published_revision) return;
+  const existing = one<{ report: string }>(
+    db,
+    'SELECT report FROM grading_v3_result_reports WHERE tenant=? AND result=? AND revision=?',
+    tenant,
+    resultId,
+    head.published_revision,
+  );
+  if (existing) return existing.report;
+  const a = submissionAssignment(db, head);
+  const s = computeFacts(
+    db,
+    tenant,
+    {
+      student_ref: head.student,
+      from_date: head.assessment_date,
+      to_date_exclusive: new Date(
+        Date.parse(head.assessment_date + 'T00:00:00Z') + 86400000,
+      )
+        .toISOString()
+        .slice(0, 10),
+      subjects: [...new Set(a.items.map((i) => i.subject_id))],
+      comparison_period: null,
+      attempt_policy: 'latest_in_window',
+      statistics_policy_version: 'grading-stats-3.0',
+    },
+    now,
+    undefined,
+    head.id,
+  );
+  if (
+    !s.result_refs.some(
+      (r) =>
+        r.result_set_id === resultId && r.revision === head.published_revision,
+    )
+  )
+    return;
+  db.prepare('INSERT INTO grading_v3_snapshots VALUES(?,?,?,?,?)').run(
+    s.snapshot_id,
+    tenant,
+    head.student,
+    s.source_generation,
+    JSON.stringify(s),
+  );
+  const observations = subjectObservations(s);
+  for (const f of s.facts.filter(
+    (f) => f.primary_skill_id && f.n_incorrect + f.n_partial + f.n_blank > 0,
+  )) {
+    observations.push({
+      claim_type: 'study_suggestion',
+      fact_ids: [f.fact_id],
+      template_key: 'review',
+    });
+  }
+  const report = storeReport(
+    db,
+    s,
+    now,
+    observations,
+    'deterministic-template',
+    undefined,
+    a.title,
+  );
+  db.prepare('INSERT INTO grading_v3_result_reports VALUES(?,?,?,?,?)').run(
+    tenant,
+    resultId,
+    head.published_revision,
+    s.snapshot_id,
+    report.report_id,
+  );
+  db.prepare(
+    "UPDATE grading_v3_reports SET status='stale' WHERE id IN (SELECT report FROM grading_v3_result_reports WHERE tenant=? AND result=? AND revision<>?)",
+  ).run(tenant, resultId, head.published_revision);
+  return report.report_id;
+}
+
 export async function generateReport(
   ctx: PageContext,
   service: GradingService,
@@ -625,13 +737,7 @@ export async function generateReport(
 ) {
   requireStaff(ctx);
   const s = readSnapshot(ctx, snapshotId);
-  let observations: Observation[] = s.facts
-    .filter((f) => f.period_role === 'primary' && f.primary_skill_id === null)
-    .map((f) => ({
-      claim_type: f.n_evaluable ? 'observed_rate' : 'insufficient_evidence',
-      fact_ids: [f.fact_id],
-      template_key: f.n_evaluable ? 'rate' : 'insufficient',
-    }));
+  let observations = subjectObservations(s);
   let model = 'deterministic-template';
   let generationError: string | undefined;
   if (service.provider.report && service.provider.inputAllowed) {
@@ -656,37 +762,53 @@ export async function generateReport(
           : 'PROVIDER_TEMPORARY_FAILURE';
     }
   }
-  const rendered = renderObservations(s, observations);
   return transaction(ctx.db, () => {
     readSnapshot(ctx, snapshotId);
     requireStaff(ctx);
-    const report: Report = {
-      report_id: newId('report'),
-      revision: 1,
-      snapshot_id: snapshotId,
-      facts_hash: s.facts_hash,
-      source_generation: s.source_generation,
-      generated_at: new Date(service.now()).toISOString(),
-      template_version: 'grading-report-3.0',
-      model_id: model,
-      ...(generationError ? { generation_error: generationError } : {}),
-      status: 'draft',
+    return storeReport(
+      ctx.db,
+      s,
+      service.now(),
       observations,
-      rendered_text: rendered,
-    };
-    ctx.db
-      .prepare('INSERT INTO grading_v3_reports VALUES(?,?,?,?,?,?,?)')
-      .run(
-        report.report_id,
-        s.tenant_id,
-        s.student_ref,
-        1,
-        s.source_generation,
-        'draft',
-        JSON.stringify(report),
-      );
-    return report;
+      model,
+      generationError,
+    );
   });
+}
+function storeReport(
+  db: OperationsDatabase,
+  s: Snapshot,
+  now: number,
+  observations: Observation[],
+  model: string,
+  generationError?: string,
+  assignmentTitle?: string,
+) {
+  const report: Report = {
+    report_id: newId('report'),
+    revision: 1,
+    snapshot_id: s.snapshot_id,
+    ...(assignmentTitle ? { assignment_title: assignmentTitle } : {}),
+    facts_hash: s.facts_hash,
+    source_generation: s.source_generation,
+    generated_at: new Date(now).toISOString(),
+    template_version: 'grading-report-3.0',
+    model_id: model,
+    ...(generationError ? { generation_error: generationError } : {}),
+    status: 'draft',
+    observations,
+    rendered_text: renderObservations(s, observations),
+  };
+  db.prepare('INSERT INTO grading_v3_reports VALUES(?,?,?,?,?,?,?)').run(
+    report.report_id,
+    s.tenant_id,
+    s.student_ref,
+    1,
+    s.source_generation,
+    'draft',
+    JSON.stringify(report),
+  );
+  return report;
 }
 export function readReport(ctx: PageContext, id: string) {
   const row = one<{ payload: string; student: string; status: string }>(

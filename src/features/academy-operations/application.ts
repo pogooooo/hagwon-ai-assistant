@@ -181,6 +181,9 @@ export function createOperationsServer({
       'assets/ondap-logo.png',
       'assets/ondap-review.png',
       'assets/ondap-report.png',
+      'assets/practice-math-1.png',
+      'assets/practice-math-2.png',
+      'assets/practice-math.pdf',
       'assets/app-192.png',
       'assets/app-512.png',
       'assets/study-room.webp',
@@ -189,19 +192,21 @@ export function createOperationsServer({
       'assets/fonts/noto-latin-400.woff2',
       'assets/fonts/noto-latin-700.woff2',
     ]) {
-      const contentType = path.endsWith('.webp')
-        ? 'image/webp'
-        : path.endsWith('.woff2')
-          ? 'font/woff2'
-          : path.endsWith('.css')
-            ? 'text/css; charset=utf-8'
-            : path.endsWith('.json')
-              ? 'application/json; charset=utf-8'
-              : path.endsWith('.webmanifest')
-                ? 'application/manifest+json; charset=utf-8'
-                : path.endsWith('.js')
-                  ? 'text/javascript; charset=utf-8'
-                  : 'image/png';
+      const contentType = path.endsWith('.pdf')
+        ? 'application/pdf'
+        : path.endsWith('.webp')
+          ? 'image/webp'
+          : path.endsWith('.woff2')
+            ? 'font/woff2'
+            : path.endsWith('.css')
+              ? 'text/css; charset=utf-8'
+              : path.endsWith('.json')
+                ? 'application/json; charset=utf-8'
+                : path.endsWith('.webmanifest')
+                  ? 'application/manifest+json; charset=utf-8'
+                  : path.endsWith('.js')
+                    ? 'text/javascript; charset=utf-8'
+                    : 'image/png';
       staticFiles.set('/' + path, {
         contentType,
         bytes: readFileSync(new URL(path, assetsRoot)),

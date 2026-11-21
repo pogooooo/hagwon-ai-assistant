@@ -34,7 +34,7 @@
     "RAG_GENERATION_DAILY_CALL_LIMIT": "100",
     "RAG_CLOVA_ALLOW_PERSONAL_DATA": "false",
     "AXR_CLOVA_SCAN_ENABLED": "true",
-    "AXR_GRADING_DEMO_PRACTICE_POLICY": "self-practice-deidentified-v1",
+    "AXR_GRADING_DEMO_PRACTICE_POLICY": "demo-academy-deidentified-v2",
   },
   "durable_objects": {
     "bindings": [{ "name": "ACADEMY", "class_name": "AcademyDemo" }],

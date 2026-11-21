@@ -102,6 +102,7 @@ export function fixture(
   options: {
     provider?: GradeProvider;
     practiceProvider?: GradeProvider;
+    practicePolicy?: 'demo-academy-deidentified-v2';
     raw?: RawStore;
     ttl?: number;
     detail?: 'none' | 'criteria' | 'criteria_and_codes';
@@ -126,6 +127,7 @@ export function fixture(
   const service = new GradingService(db, {
     provider,
     practiceProvider: options.practiceProvider,
+    practicePolicy: options.practicePolicy,
     rawStore: raw,
     now: () => now,
     rawTtlMs: options.ttl,

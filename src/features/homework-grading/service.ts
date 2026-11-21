@@ -40,6 +40,7 @@ import {
 } from './media.ts';
 import type { GradeProvider } from './provider.ts';
 import { comparePhotoAnswer } from './photo-solution.ts';
+import { ensureResultReport } from './facts.ts';
 
 export const newId = (prefix: string) =>
   prefix + '_' + randomUUID().replaceAll('-', '');
@@ -110,9 +111,12 @@ export interface Receipt {
   stores_checked: string[];
   provider_retention_policy_ref: string;
 }
+export const demoPhotoPolicy = 'demo-academy-deidentified-v2';
+export const personalPhotoPolicy = 'self-practice-deidentified-v1';
 type Options = {
   provider: GradeProvider;
   practiceProvider?: GradeProvider;
+  practicePolicy?: typeof demoPhotoPolicy | typeof personalPhotoPolicy;
   rawStore?: RawStore;
   now?: () => number;
   rawTtlMs?: number;
@@ -141,6 +145,8 @@ export function setupGrading(db: OperationsDatabase) {
     CREATE TABLE IF NOT EXISTS grading_v3_generations(tenant TEXT NOT NULL,student TEXT NOT NULL,generation INTEGER NOT NULL,PRIMARY KEY(tenant,student));
     CREATE TABLE IF NOT EXISTS grading_v3_snapshots(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,student TEXT NOT NULL,generation INTEGER NOT NULL,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS grading_v3_reports(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,student TEXT NOT NULL,revision INTEGER NOT NULL,generation INTEGER NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS grading_v3_result_reports(tenant TEXT NOT NULL,result TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL UNIQUE,report TEXT NOT NULL UNIQUE,PRIMARY KEY(tenant,result,revision));
+    CREATE TABLE IF NOT EXISTS grading_v3_report_queue(tenant TEXT NOT NULL,result TEXT NOT NULL,next_try INTEGER NOT NULL,PRIMARY KEY(tenant,result));
     CREATE TABLE IF NOT EXISTS grading_v3_idempotency(tenant TEXT NOT NULL,actor TEXT NOT NULL,endpoint TEXT NOT NULL,key TEXT NOT NULL,digest TEXT NOT NULL,response TEXT NOT NULL,PRIMARY KEY(tenant,actor,endpoint,key));
     CREATE INDEX IF NOT EXISTS grading_v3_attempts ON grading_v3_submissions(tenant,student,assignment,assignment_version,attempt_no);
   `);
@@ -178,7 +184,7 @@ export function invalidate(
     'INSERT INTO grading_v3_generations VALUES(?,?,1) ON CONFLICT(tenant,student) DO UPDATE SET generation=generation+1',
   ).run(tenant, student);
   db.prepare(
-    "UPDATE grading_v3_reports SET status='stale' WHERE tenant=? AND student=?",
+    "UPDATE grading_v3_reports SET status='stale' WHERE tenant=? AND student=? AND id NOT IN (SELECT report FROM grading_v3_result_reports WHERE tenant=grading_v3_reports.tenant)",
   ).run(tenant, student);
 }
 type PhotoMap = { pages: string; items: string };
@@ -330,6 +336,7 @@ export class GradingService {
   readonly raw: RawStore;
   readonly provider: GradeProvider;
   private readonly practiceProvider?: GradeProvider;
+  readonly practicePolicy: typeof demoPhotoPolicy | typeof personalPhotoPolicy;
   readonly now: () => number;
   readonly ttl: number;
   readonly policy: Result['analysis_detail_policy'];
@@ -353,6 +360,7 @@ export class GradingService {
     activeStores.set(db, this.raw);
     this.provider = options.provider;
     this.practiceProvider = options.practiceProvider;
+    this.practicePolicy = options.practicePolicy ?? personalPhotoPolicy;
     this.now = options.now ?? Date.now;
     this.ttl = options.rawTtlMs ?? 60 * 60 * 1000;
     if (
@@ -397,7 +405,28 @@ export class GradingService {
     return (
       !!this.practiceProvider?.inputAllowed &&
       ctx.actor.academyId === 'AC_TEST_A' &&
-      ['TA_DIRECTOR', 'TA_TEACHER', 'TA_STUDENT_001'].includes(ctx.actor.id)
+      ctx.actor.role !== 'visitor' &&
+      (this.practicePolicy === demoPhotoPolicy ||
+        ['TA_DIRECTOR', 'TA_TEACHER', 'TA_STUDENT_001'].includes(ctx.actor.id))
+    );
+  }
+  canSubmitPractice(
+    ctx: PageContext,
+    student: string,
+    a: Assignment,
+    correction: boolean,
+  ) {
+    return (
+      this.allowsPersonalPractice(ctx) &&
+      (this.practicePolicy === demoPhotoPolicy ||
+        (!correction &&
+          student === 'TA_STU_001' &&
+          a.items.every(
+            (i) =>
+              i.grading_mode === 'photo_solution' &&
+              !i.key &&
+              /^\d{1,3}$/.test(i.item_no),
+          )))
     );
   }
   register(ctx: PageContext, input: unknown, key: string) {
@@ -449,6 +478,8 @@ export class GradingService {
       input.assignment_id,
       input.assignment_version,
     );
+    if (!accessibleClasses(this.db, ctx.actor).some((c) => c.id === a.class_id))
+      throw new GradingError('FORBIDDEN', 403);
     if (
       !this.db
         .prepare(
@@ -467,21 +498,21 @@ export class GradingService {
       throw new GradingError('PAGE_COUNT_MISMATCH');
     if (input.assessment_date && !['teacher', 'admin'].includes(ctx.actor.role))
       throw new GradingError('FORBIDDEN', 403);
-    if (
-      input.practice_consent &&
-      !(
-        this.allowsPersonalPractice(ctx) &&
-        student === 'TA_STU_001' &&
-        !input.submission_purpose &&
-        a.items.every(
-          (i) =>
-            i.grading_mode === 'photo_solution' &&
-            !i.key &&
-            /^\d{1,3}$/.test(i.item_no),
-        )
-      )
-    )
+    const canUsePractice = this.canSubmitPractice(
+      ctx,
+      student,
+      a,
+      input.submission_purpose === 'correction_evidence',
+    );
+    if (input.practice_consent && !canUsePractice)
       throw new GradingError('PRACTICE_SCOPE', 403);
+    if (
+      canUsePractice &&
+      this.practicePolicy === demoPhotoPolicy &&
+      !this.provider.inputAllowed &&
+      !input.practice_consent
+    )
+      throw new GradingError('PHOTO_CONSENT_REQUIRED');
     if (
       input.assessment_date &&
       (!/^\d{4}-\d{2}-\d{2}$/.test(input.assessment_date) ||
@@ -545,7 +576,7 @@ export class GradingService {
         if (input.practice_consent)
           this.db
             .prepare('INSERT INTO grading_v3_practice_consent VALUES(?,?,?)')
-            .run(id, ctx.actor.id, 'self-practice-deidentified-v1');
+            .run(id, ctx.actor.id, this.practicePolicy);
         return {
           submission_id: id,
           raw_scope_id: scope,
@@ -619,6 +650,7 @@ export class GradingService {
     id: string,
     files: { bytes: Uint8Array; mime: string }[],
     maxBytes?: number,
+    inferPageCount = false,
   ) {
     const current = readSubmission(ctx, id);
     if (current.uploaded || current.processing !== 'RECEIVED')
@@ -636,7 +668,11 @@ export class GradingService {
       await this.lease(id, async (s) => {
         const pages = await decodeUploads(files, maxBytes);
         try {
-          if (pages.length !== s.expected_pages)
+          if (
+            inferPageCount
+              ? pages.length < s.expected_pages
+              : pages.length !== s.expected_pages
+          )
             throw new GradingError('PAGE_COUNT_MISMATCH');
           for (let n = 0; n < files.length; n++)
             await this.write(s, 'original_' + n, files[n].bytes, files[n].mime);
@@ -660,9 +696,9 @@ export class GradingService {
             if (
               !this.db
                 .prepare(
-                  "UPDATE grading_v3_submissions SET uploaded=1,attempt_no=?,processing='PROCESSING' WHERE id=? AND uploaded=0 AND raw_state='OPEN'",
+                  "UPDATE grading_v3_submissions SET uploaded=1,attempt_no=?,expected_pages=?,processing='PROCESSING' WHERE id=? AND uploaded=0 AND raw_state='OPEN'",
                 )
-                .run(attempt, id).changes
+                .run(attempt, pages.length, id).changes
             )
               throw new GradingError('STATE_CONFLICT', 409);
             if (s.purpose === 'assessment')
@@ -720,22 +756,24 @@ export class GradingService {
         let readings: Reading[] = [];
         const practice = this.db
           .prepare(
-            'SELECT actor FROM grading_v3_practice_consent WHERE submission=? AND policy=?',
+            'SELECT actor,policy FROM grading_v3_practice_consent WHERE submission=?',
           )
-          .get(id, 'self-practice-deidentified-v1');
+          .get(id);
         if (staffRemap) requireStaff(ctx);
         if (
           practice &&
-          !staffRemap &&
-          (practice.actor !== ctx.actor.id || !this.allowsPersonalPractice(ctx))
+          (practice.policy !== this.practicePolicy ||
+            !this.canSubmitPractice(
+              ctx,
+              s.student,
+              a,
+              s.purpose === 'correction_evidence',
+            ) ||
+            (practice.actor !== ctx.actor.id &&
+              !(staffRemap && practice.policy === demoPhotoPolicy)))
         )
           throw new GradingError('PRACTICE_SCOPE', 403);
-        const provider =
-          practice &&
-          practice.actor === ctx.actor.id &&
-          this.allowsPersonalPractice(ctx)
-            ? this.practiceProvider!
-            : this.provider;
+        const provider = practice ? this.practiceProvider! : this.provider;
         let unavailable: string | undefined;
         try {
           if (a.scope && !a.items.length) {
@@ -1256,6 +1294,62 @@ export class GradingService {
     });
     await this.purge(id);
   }
+  private queueReport(tenant: string, result: string) {
+    this.db
+      .prepare(
+        'INSERT INTO grading_v3_report_queue VALUES(?,?,0) ON CONFLICT(tenant,result) DO UPDATE SET next_try=0',
+      )
+      .run(tenant, result);
+  }
+  linkedReport(ctx: PageContext, result: Result) {
+    const submission = readSubmission(ctx, result.submission_id);
+    if (
+      submission.result_id !== result.result_set_id ||
+      submission.published_revision !== result.revision
+    )
+      return;
+    const staff = ctx.actor.role === 'teacher' || ctx.actor.role === 'admin';
+    const lookup = () =>
+      one<{ report: string }>(
+        this.db,
+        "SELECT p.report FROM grading_v3_result_reports p JOIN grading_v3_reports r ON r.id=p.report AND r.tenant=p.tenant WHERE p.tenant=? AND p.result=? AND p.revision=? AND (r.status='approved' OR (?=1 AND r.status='draft'))",
+        ctx.actor.academyId,
+        result.result_set_id,
+        result.revision,
+      )?.report;
+    const found = lookup();
+    if (found || !staff) return found;
+    // Create a draft on first staff visit to a result published before automatic reports.
+    this.db
+      .prepare('INSERT OR IGNORE INTO grading_v3_report_queue VALUES(?,?,0)')
+      .run(ctx.actor.academyId, result.result_set_id);
+    this.createQueuedReports();
+    return lookup();
+  }
+  private createQueuedReports() {
+    for (const job of rows<{ tenant: string; result: string }>(
+      this.db,
+      'SELECT tenant,result FROM grading_v3_report_queue WHERE next_try<=? ORDER BY next_try,rowid LIMIT 5',
+      this.now(),
+    )) {
+      try {
+        transaction(this.db, () => {
+          ensureResultReport(this.db, job.tenant, job.result, this.now());
+          this.db
+            .prepare(
+              'DELETE FROM grading_v3_report_queue WHERE tenant=? AND result=?',
+            )
+            .run(job.tenant, job.result);
+        });
+      } catch {
+        this.db
+          .prepare(
+            'UPDATE grading_v3_report_queue SET next_try=? WHERE tenant=? AND result=?',
+          )
+          .run(this.now() + 60000, job.tenant, job.result);
+      }
+    }
+  }
   async purge(id: string) {
     let s = this.current(id);
     if (s.raw_state === 'VERIFIED') return true;
@@ -1323,8 +1417,11 @@ export class GradingService {
             .run(s.tenant, s.target, s.target_revision! + 1);
         }
         invalidate(this.db, s.tenant, s.student);
+        if (s.processing === 'CONFIRMED') {
+          const resultId = s.purpose === 'assessment' ? s.result_id : s.target;
+          if (resultId) this.queueReport(s.tenant, resultId);
+        }
       });
-      return true;
     } catch {
       this.db
         .prepare(
@@ -1338,6 +1435,8 @@ export class GradingService {
         .run(id);
       return false;
     }
+    this.createQueuedReports();
+    return true;
   }
   async sweep() {
     transaction(this.db, () => {
@@ -1360,6 +1459,7 @@ export class GradingService {
       "SELECT id FROM grading_v3_submissions WHERE raw_state NOT IN ('OPEN','VERIFIED') ORDER BY expires_at LIMIT 100",
     ))
       await this.purge(s.id);
+    this.createQueuedReports();
   }
   result(ctx: PageContext, id: string, revision?: number): Result {
     const head = one<Submission>(
@@ -1490,7 +1590,7 @@ export class GradingService {
         throw new GradingError('TEACHER_REVIEW_REQUIRED');
       replacement = this.retained(draft.items);
     }
-    return idempotent(ctx, 'revision:' + resultId, key, input, () => {
+    const revised = idempotent(ctx, 'revision:' + resultId, key, input, () => {
       const head = readSubmission(ctx, old.submission_id, true);
       if (head.current_revision !== old.revision)
         throw new GradingError('REVISION_MISMATCH', 412);
@@ -1551,7 +1651,10 @@ export class GradingService {
         this.enqueue(evidence.id);
       }
       invalidate(this.db, old.tenant_id, old.student_ref);
+      if (!evidence) this.queueReport(old.tenant_id, resultId);
       return { result_set_id: resultId, revision: result.revision };
     });
+    this.createQueuedReports();
+    return revised;
   }
 }

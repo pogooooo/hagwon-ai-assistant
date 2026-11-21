@@ -3308,6 +3308,65 @@ td {
 .grade-verdict {
   background: #fff1d9;
 }
+.grade-subjects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.grade-subjects label {
+  min-height: 38px;
+}
+.grade-report-row,
+.grade-samples a,
+body[data-page='/grading']
+  .workspace
+  :is(.grade-filters, td, figcaption, fieldset)
+  a {
+  color: #40532c;
+  text-decoration: none;
+  font-weight: 600;
+}
+.grade-report-row,
+.grade-samples a {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #d4dac9;
+  border-radius: 9px;
+  background: #fafbf6;
+}
+.grade-report-row {
+  flex-wrap: wrap;
+  margin-block: 6px;
+}
+.grade-report-row span {
+  color: #536049;
+  font-size: 0.875rem;
+}
+.grade-report-row:hover,
+.grade-samples a:hover {
+  background: #eff3e6;
+}
+.grade-samples {
+  margin-top: 16px;
+}
+.grade-samples div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.grade-samples summary {
+  cursor: pointer;
+}
+body[data-page='/grading'] .workspace .grade-filters a[aria-current] {
+  color: white;
+}
+.grade-previews figcaption {
+  overflow-wrap: anywhere;
+}
 .grade-items,
 .grade-filters {
   padding: 12px 0;
@@ -3443,6 +3502,45 @@ td {
 }
 .section-jump[hidden] {
   display: none;
+}
+.workspace form.inline-form,
+.workspace
+  form[method='get']:has(> label:only-of-type > select):has(> button):not(
+    :has(fieldset, textarea, div)
+  ) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+.workspace
+  :is(.inline-form, .task-filters, .document-filters, form[method='get'])
+  :is(select, button) {
+  box-sizing: border-box;
+  height: 44px;
+}
+.workspace form label:has(> input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.workspace form label > input[type='checkbox'] {
+  flex: none;
+  margin: 0;
+}
+@media (max-width: 780px) {
+  .topbar .section-jump {
+    display: none;
+  }
+}
+.workspace :where(a[href]) {
+  color: var(--accent, #526035);
+  text-decoration-color: #91a078;
+  text-underline-offset: 0.2em;
+}
+.workspace :where(a[href]):focus-visible {
+  outline: 2px solid #667b42;
+  outline-offset: 3px;
 }
 .workspace :is(h2, [id], [data-jump-label]) {
   scroll-margin-top: 76px;

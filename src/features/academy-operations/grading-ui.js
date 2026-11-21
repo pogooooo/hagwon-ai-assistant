@@ -53,34 +53,123 @@ if (work) {
   if (items.length) selectItem(Number(work.dataset.initial));
 }
 const picker = document.querySelector('.grade-picker input');
-if (picker) {
-  const previews = document.querySelector('[data-previews]');
-  let urls = [];
-  function clear() {
-    for (const url of urls) URL.revokeObjectURL(url);
-    urls = [];
+if (picker && typeof DataTransfer === 'function') {
+  const previews = picker.form.querySelector('[data-previews]');
+  const status = picker.form.querySelector('[data-file-status]');
+  const submit = picker.form.querySelector('button:not([type=button])');
+  const limit = Number(picker.dataset.maxFiles);
+  let entries = [];
+  let busy = false;
+  function update(message = '') {
+    const transfer = new DataTransfer();
     previews.replaceChildren();
-  }
-  picker.addEventListener('change', () => {
-    clear();
-    const files = Array.from(picker.files);
-    const pageCount = picker.form.elements.namedItem('pages');
-    if (files.length && files.every((file) => file.type.startsWith('image/')))
-      pageCount.value = String(files.length);
-    for (const [i, file] of files.entries()) {
+    for (const [i, entry] of entries.entries()) {
+      transfer.items.add(entry.file);
       const figure = document.createElement('figure');
-      if (['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      if (entry.url) {
         const image = document.createElement('img');
-        image.src = URL.createObjectURL(file);
-        urls.push(image.src);
+        image.src = entry.url;
         image.alt = '';
         figure.append(image);
       }
       const label = document.createElement('figcaption');
-      label.textContent = i + 1 + '. ' + file.name;
-      figure.append(label);
+      label.textContent = i + 1 + '. ' + entry.file.name;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '빼기';
+      remove.setAttribute('aria-label', label.textContent + ' 빼기');
+      remove.onclick = () => {
+        if (busy) return;
+        if (entry.url) URL.revokeObjectURL(entry.url);
+        entries.splice(i, 1);
+        update();
+      };
+      figure.append(label, remove);
       previews.append(figure);
     }
+    picker.files = transfer.files;
+    status.textContent = [
+      message,
+      entries.length
+        ? '첨부 ' +
+          entries.length +
+          '개 · 다른 사진을 이어서 추가할 수 있습니다.'
+        : '사진을 여러 장 선택하거나 한 장씩 추가할 수 있습니다.',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+  async function prepare(file) {
+    if (
+      !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
+      typeof createImageBitmap !== 'function'
+    )
+      return file;
+    const image = await createImageBitmap(file);
+    try {
+      const scale = Math.min(
+        1,
+        Math.sqrt(
+          Number(picker.dataset.maxPixels) / (image.width * image.height),
+        ),
+      );
+      if (scale === 1 && file.size <= Number(picker.dataset.maxBytes) / limit)
+        return file;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.floor(image.width * scale));
+      canvas.height = Math.max(1, Math.floor(image.height * scale));
+      const g = canvas.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', 0.88),
+      );
+      if (!blob) throw Error();
+      return new File([blob], file.name.replace(/\.[^.]*$/, '') + '.jpg', {
+        type: 'image/jpeg',
+        lastModified: file.lastModified,
+      });
+    } finally {
+      image.close();
+    }
+  }
+  picker.addEventListener('change', async () => {
+    const added = Array.from(picker.files);
+    const next = [];
+    busy = true;
+    picker.disabled = submit.disabled = true;
+    let message = '';
+    try {
+      for (const file of added) {
+        const key = JSON.stringify([file.name, file.size, file.lastModified]);
+        if ([...entries, ...next].some((e) => e.key === key)) continue;
+        if (entries.length + next.length >= limit)
+          throw Error(
+            '한 번에 최대 ' + limit + '개 파일까지 첨부할 수 있습니다.',
+          );
+        const prepared = await prepare(file);
+        next.push({ key, file: prepared, url: null });
+      }
+      if (
+        [...entries, ...next].reduce((n, e) => n + e.file.size, 0) >
+        Number(picker.dataset.maxBytes)
+      )
+        throw Error('첨부 용량을 초과했습니다. 파일을 나누어 제출해 주세요.');
+      for (const e of next)
+        if (e.file.type.startsWith('image/'))
+          e.url = URL.createObjectURL(e.file);
+      entries.push(...next);
+    } catch (error) {
+      message = error.message || '파일을 읽을 수 없습니다. 다시 선택해 주세요.';
+    } finally {
+      busy = false;
+      picker.disabled = submit.disabled = false;
+      update(message);
+    }
   });
-  window.addEventListener('pagehide', clear);
+  picker.form.addEventListener('submit', (e) => {
+    if (busy) e.preventDefault();
+  });
+  update();
 }

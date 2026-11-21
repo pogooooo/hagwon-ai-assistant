@@ -228,6 +228,8 @@ export function createNaverGrader(
                 : instruction,
               {
                 page_no: page.page_no,
+                instruction:
+                  'manifest의 문제마다 정확히 한 항목을 작성하세요. 각 문제에서 학생이 실제 적은 답을 찾으세요. 학생 답, Answer 같은 인쇄된 칸 이름은 답이 아닙니다. 숫자가 쓰인 칸은 숫자만 옮기고 정답을 추측하지 마세요. regions에는 문제 전체가 아닌 학생 답의 경계를 넣고 page_no는 이 요청의 page_no를 사용하세요.',
                 manifest: manifest.map(publicAlias),
               },
               page,
