@@ -6,7 +6,7 @@ import { fixture, item, photo, reading } from './test-fixtures.ts';
 import { assignmentFor, newId } from './service.ts';
 import { aggregate } from './scoring.ts';
 import { comparePhotoAnswer } from './photo-solution.ts';
-import type { PhotoSolution } from './contracts.ts';
+import { GradingError, type PhotoSolution } from './contracts.ts';
 
 const reference: PhotoSolution = {
   problem: '3x + 2 = 14. x의 값은?',
@@ -14,6 +14,33 @@ const reference: PhotoSolution = {
   explanation: '양변에서 2를 빼고 3으로 나눈다.',
   comparison: 'number',
 };
+test('teacher receives the specific safe provider failure and the page is not reread after denial', async (t) => {
+  let retries = 0;
+  const f = fixture(t, {
+    provider: {
+      modelId: 'test',
+      inputAllowed: true,
+      read: async () => {
+        throw new GradingError('PROVIDER_AUTHENTICATION_FAILED');
+      },
+      verifyPage: async () => {
+        retries++;
+        return [];
+      },
+    },
+  });
+  const id = await f.upload(f.register());
+  const url = new URL('/grading?submission=' + id, 'http://localhost');
+  assert.equal(retries, 0);
+  assert.match(
+    await gradingModule.render({ ...f.ctx(), url }),
+    /네이버가 이 배포의 API 키/,
+  );
+  assert.doesNotMatch(
+    await gradingModule.render({ ...f.ctx('TA_STUDENT_001'), url }),
+    /이 배포의 API 키/,
+  );
+});
 test('scoped practice provider runs only for opted-in practice uploads by the seeded demo actors', async (t) => {
   let calls = 0;
   const f = fixture(t, {

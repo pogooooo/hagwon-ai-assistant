@@ -26,6 +26,7 @@ import { createNaverGrader } from './provider.ts';
 import {
   assignmentFor,
   GradingService,
+  gradingProviderErrors,
   newId,
   readSubmission,
   setupGrading,
@@ -54,6 +55,8 @@ export function gradingService(
           ? createNaverGrader(
               {
                 ...env,
+                CLOVA_STUDIO_API_KEY:
+                  env.AXR_GRADING_PRACTICE_API_KEY || env.CLOVA_STUDIO_API_KEY,
                 AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
                 AXR_GRADING_INPUT_POLICY_REF:
                   env.AXR_GRADING_DEMO_PRACTICE_POLICY,
@@ -682,6 +685,8 @@ async function render(ctx: PageContext) {
       ) {
         const draft = await service.draft(ctx, s.id);
         detail = '<section class="panel grading-workspace">';
+        if (s.error_code && Object.hasOwn(gradingProviderErrors, s.error_code))
+          detail += `<p role="status">${h(gradingProviderErrors[s.error_code])}</p>`;
         const checked = draft.items.filter((item) => item.reviewed).length;
         const firstPending = Math.max(
           0,
