@@ -70,6 +70,7 @@ export function renderHome(ctx: PageContext) {
   const { actor } = ctx;
   const staff = actor.role === 'admin' || actor.role === 'teacher';
   const showChat = canAskConsultation(actor);
+  const guardian = actor.role === 'guardian';
   const visitor = actor.role === 'visitor';
   const now = new Date();
   const date = now.toLocaleDateString('ko-KR', {
@@ -126,14 +127,16 @@ export function renderHome(ctx: PageContext) {
       ? [
           ['/schedule', '수업 일정'],
           [
-            '/grading',
+            guardian ? '/grading?view=queue' : '/grading',
             staff
               ? '사진 채점 검수'
               : actor.role === 'guardian'
-                ? '사진 채점 결과'
+                ? '숙제 제출 현황'
                 : '사진 숙제 제출',
           ],
-          ['/learning', '학습 기록'],
+          guardian
+            ? ['/student-reports', '학습 리포트']
+            : ['/learning', '학습 기록'],
         ]
       : []),
     ['/documents', '학원 자료'],
@@ -177,7 +180,7 @@ export function renderHome(ctx: PageContext) {
     );
     const assignments = panel(
       '사진 채점 과제',
-      '/grading',
+      '/grading?view=register',
       homework.assignments.slice(0, 5).map((a) => ({
         title: a.title,
         href: '/grading?assignment=' + encodeURIComponent(a.assignment_id),
@@ -196,6 +199,29 @@ export function renderHome(ctx: PageContext) {
       })),
       '처리할 상담이 없습니다.',
     );
+    const lead = review.length
+      ? {
+          href: '/grading?queue=review',
+          title: '답안 ' + review.length + '건이 검수를 기다립니다',
+          label: '검수하기',
+        }
+      : pending.length
+        ? {
+            href: '/consultation?view=inbox',
+            title: '처리할 상담이 ' + pending.length + '건 있습니다',
+            label: '상담함 열기',
+          }
+        : dayEntries.length
+          ? {
+              href: '/schedule?day=' + today,
+              title: '오늘 일정이 ' + dayEntries.length + '건 있습니다',
+              label: '오늘 일정 보기',
+            }
+          : {
+              href: '/grading?view=register',
+              title: '대기 중인 업무가 없습니다',
+              label: '과제 등록',
+            };
     const metrics = [
       ['/grading?queue=review', '검수 대기', review.length, '/grading'],
       [
@@ -207,9 +233,9 @@ export function renderHome(ctx: PageContext) {
       ['/schedule?day=' + today, '오늘 일정', dayEntries.length, '/schedule'],
     ] as const;
     return `${heading}<div class="ondap-board"><div class="ondap-column">
-       <section class="ondap-hero"><div><h2>${review.length ? '사진 답안 ' + review.length + '건이 검수를 기다립니다' : homework.assignments.length ? '사진 숙제 제출 현황' : '첫 사진 채점 과제를 등록하세요'}</h2><a class="button-link" href="${review.length ? '/grading?queue=review' : homework.assignments.length ? '/grading' : '/grading?view=register'}">${review.length ? '검수 목록 보기' : homework.assignments.length ? '제출 현황 보기' : '사진 채점 과제 등록'} <span aria-hidden="true">›</span></a></div><img src="/assets/ondap-review.png" alt=""></section>
+       <section class="ondap-hero"><div><h2>${lead.title}</h2><a class="button-link" href="${lead.href}">${lead.label} <span aria-hidden="true">›</span></a></div><img src="/assets/ondap-review.png" alt=""></section>
        <div class="ondap-metrics">${metrics.map(([url, label, value, icon]) => `<a href="${url}">${serviceIcon(icon)}<span>${label}</span><strong>${value}</strong></a>`).join('')}</div>
-       ${queue}${assignments}${inbox}
+       ${pending.length && !review.length ? inbox + assignments : queue + assignments + inbox}
        </div><div class="ondap-column">${dayPanel}${links('이어서 할 일', [
          ['/briefing', '반 브리핑 보기', '/briefing'],
          ['/grading?view=reports', '채점 리포트 검토', '/learning'],
@@ -260,23 +286,22 @@ export function renderHome(ctx: PageContext) {
           '현재 제출할 사진 숙제가 없습니다.',
         )
       : '';
-  const learning = homework
-    ? panel(
-        '최근 사진 채점 결과',
-        '/learning',
-        homework.results.slice(0, 5).map((r) => ({
-          title: r.studentName + ' · ' + r.title,
-          meta: r.assessment_date + ' · 검수 완료',
-          href: r.href,
-        })),
-        '공개된 사진 채점 결과가 없습니다.',
-      )
-    : '';
-  const guardian = actor.role === 'guardian';
+  const learning =
+    homework && !guardian
+      ? panel(
+          '최근 사진 채점 결과',
+          '/learning',
+          homework.results.slice(0, 5).map((r) => ({
+            title: r.studentName + ' · ' + r.title,
+            meta: r.assessment_date + ' · 검수 완료',
+            href: r.href,
+          })),
+          '공개된 사진 채점 결과가 없습니다.',
+        )
+      : '';
   const messages = guardian ? visibleParentMessages(ctx) : [];
-  const result = homework?.results[0];
   const familyHero = guardian
-    ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><small>확인된 학습 기록</small><h2>${result ? h(result.title) : '학생 학습 리포트'}</h2>${result ? `<p>${h(result.studentName)} · 교사 검수 완료</p>` : ''}<a href="/grading?view=reports">사진 채점 리포트 보기 ›</a><a href="/student-reports">월간 리포트 보기 ›</a></div></section>${panel(
+    ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><h2>학습 리포트</h2><p>과제별 결과와 월간 학습 기록을 확인하세요.</p><a class="button-link assessment-entry" href="/student-reports">학습 리포트 보기 <span aria-hidden="true">›</span></a></div></section>${panel(
         '학원 알림',
         '/messages',
         messages.slice(0, 3).map((m) => ({
@@ -286,7 +311,7 @@ export function renderHome(ctx: PageContext) {
         '도착한 알림이 없습니다.',
       )}`
     : '';
-  return `${heading}${familyHero}${pendingMakeupNotices(ctx)}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
+  return `${heading}${pendingMakeupNotices(ctx)}${familyHero}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
     <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
     ${showChat ? `<div class="home-help">${search}</div>` : ''}
     <div class="home-secondary">${visitor ? '' : documentList()}${showChat ? recentConsultations() : ''}</div>

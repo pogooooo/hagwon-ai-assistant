@@ -4053,3 +4053,111 @@ a.workspace-link:focus-visible {
   min-height: 44px;
   white-space: nowrap;
 }
+
+/* Match common actions to their reading order and viewport. */
+.workspace-heading > a.button-link,
+a.assessment-entry.button-link {
+  color: #fff;
+  text-decoration: none;
+}
+.source-schedule summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+.source-schedule summary span {
+  color: var(--muted);
+  margin-inline-start: 6px;
+}
+.family-highlight .assessment-entry {
+  margin-block-start: 8px;
+}
+.makeup-notice-list,
+.grade-queue-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.calendar-day-count {
+  display: none;
+}
+.consultation-status-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.consultation-status-links a[aria-current='page'] {
+  background: var(--accent);
+  color: white;
+}
+.grade-queue-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(100px, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-decoration: none;
+}
+.grade-queue-entry:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.grade-queue-entry strong,
+.grade-queue-entry .grade-student {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.grade-queue-entry .pill {
+  justify-self: end;
+}
+.grade-upload form .grade-details {
+  margin-top: 8px;
+}
+.grade-upload .grade-picker input::file-selector-button {
+  font: inherit;
+  color: var(--accent);
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  margin-inline-end: 7px;
+  cursor: pointer;
+}
+@media (min-width: 950px) {
+  .consultation-layout[data-consultation-view='queue'] {
+    grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
+  }
+}
+@media (max-width: 780px) {
+  .calendar-day .calendar-event-title {
+    display: none;
+  }
+  .calendar-day-count {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1px 2px;
+    padding: 1px 3px;
+    border-radius: 6px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .calendar-day-count .event-dot {
+    margin: 0;
+    width: 4px;
+    height: 4px;
+  }
+  .grade-queue-entry {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .grade-queue-entry strong {
+    grid-column: 1 / -1;
+  }
+}
