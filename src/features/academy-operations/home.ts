@@ -162,7 +162,7 @@ export function renderHome(ctx: PageContext) {
       `<section class="panel next-actions"><h2>${title}</h2>${items.map(([path, label, icon]) => `<a href="${h(path)}">${serviceIcon(icon)}${label}<span aria-hidden="true">›</span></a>`).join('')}</section>`;
     const review = homework.review;
     const queue = panel(
-      '제출 확인 대기',
+      `제출 확인 대기 · ${review.length}건`,
       '/homework?view=review',
       review.slice(0, 4).map((r) => ({
         title: r.student_name + ' · ' + r.assignment_title,
@@ -175,7 +175,7 @@ export function renderHome(ctx: PageContext) {
       '확인 대기 중인 제출물이 없습니다.',
     );
     const inbox = panel(
-      '상담 요청',
+      `상담 요청 · ${pending.length}건`,
       '/consultation?view=inbox',
       pending.slice(0, 3).map((r) => ({
         title: r.title,
@@ -184,48 +184,25 @@ export function renderHome(ctx: PageContext) {
       })),
       '처리할 상담이 없습니다.',
     );
-    const lead = review.length
-      ? {
-          href: '/homework?view=review',
-          title: '답안 ' + review.length + '건이 검수를 기다립니다',
-          label: '검수하기',
-        }
-      : pending.length
-        ? {
-            href: '/consultation?view=inbox',
-            title: '처리할 상담이 ' + pending.length + '건 있습니다',
-            label: '상담함 열기',
-          }
-        : dayEntries.length
-          ? {
-              href: '/schedule?day=' + today,
-              title: '오늘 일정이 ' + dayEntries.length + '건 있습니다',
-              label: '오늘 일정 보기',
-            }
-          : {
-              href: '/homework?view=create',
-              title: '대기 중인 업무가 없습니다',
-              label: '숙제 등록',
-            };
-    const metrics = [
-      ['/homework?view=review', '확인 대기', review.length, '/homework'],
-      [
-        '/consultation?view=inbox',
-        '처리 중 상담',
-        pending.length,
-        '/consultation',
-      ],
-      ['/schedule?day=' + today, '오늘 일정', dayEntries.length, '/schedule'],
-    ] as const;
+    const work = (review.length ? queue : '') + (pending.length ? inbox : '');
+    const upcoming = dayEntries.length
+      ? schedulePanel(
+          ctx,
+          new Date(Date.parse(today + 'T00:00:00Z') + 86_400_000)
+            .toISOString()
+            .slice(0, 10),
+        )
+      : agenda;
     return `${heading}<div class="ondap-board"><div class="ondap-column">
-       <section class="ondap-hero"><div><h2>${lead.title}</h2><a class="button-link" href="${lead.href}">${lead.label} <span aria-hidden="true">›</span></a></div><img src="/assets/ondap-review.png" alt=""></section>
-       <div class="ondap-metrics">${metrics.map(([url, label, value, icon]) => `<a href="${url}">${serviceIcon(icon)}<span>${label}</span><strong>${value}</strong></a>`).join('')}</div>
-       ${pending.length && !review.length ? inbox + board.table : board.table + `<div class="ondap-review-queue">${queue}</div>` + inbox}
-       </div><div class="ondap-column">${dayPanel}${links('이어서 할 일', [
-         ['/briefing', '반 브리핑 보기', '/briefing'],
-         ['/learning', '학습 기록 검수', '/learning'],
-         ['/consultation?view=inbox', '상담함 확인', '/consultation'],
-       ])}
+       ${work || '<p class="home-clear">지금 확인할 제출과 상담이 없습니다.</p>'}
+       ${board.table}
+       </div><div class="ondap-column">${dayEntries.length ? dayPanel : ''}${links(
+         '학습 관리',
+         [
+           ['/briefing', '반 브리핑 보기', '/briefing'],
+           ['/learning', '학습 기록 검수', '/learning'],
+         ],
+       )}
        ${
          actor.role === 'admin'
            ? links('운영 관리', [
@@ -236,7 +213,7 @@ export function renderHome(ctx: PageContext) {
              ])
            : ''
        }
-       ${board.summary}${agenda}${documentList()}</div></div>`;
+       ${board.summary}${upcoming}${documentList()}</div></div>`;
   }
 
   const homeworkPanel =

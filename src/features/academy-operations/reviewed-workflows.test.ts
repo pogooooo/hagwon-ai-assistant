@@ -156,6 +156,26 @@ test('recommend → teacher selects → own-student votes → teacher approval �
   const s = setup(t);
   s.start();
   assert.equal(s.row().state, 'open');
+  const candidates = JSON.parse(s.row().payload).options;
+  const holiday = candidates.at(-1);
+  s.config.holidays[holiday.date] = '검증용 휴일';
+  s.db
+    .prepare('UPDATE op_team_schedule SET config=? WHERE academy_id=?')
+    .run(JSON.stringify(s.config), 'AC_TEST_A');
+  const pollPage = () =>
+    makeupPollsModule.render(s.ctx('TA_TEACHER', '/makeup-votes'));
+  const waiting = await pollPage();
+  assert.match(waiting, /응답 0\/2명/);
+  assert.match(waiting, /가능 0명/);
+  assert.ok(
+    waiting.includes(holiday.date + ' ' + holiday.start + '~' + holiday.end),
+  );
+  assert.match(waiting, /확정 불가 · 공휴일/);
+  assert.match(waiting, /<summary>취소 옵션<\/summary>/);
+  const family = await makeupPollsModule.render(
+    s.ctx('TA_GUARDIAN_E_MATH', '/makeup-votes'),
+  );
+  assert.doesNotMatch(family, /학생별 응답 보기|확정 불가 · 공휴일/);
   assert.match(
     pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')),
     /응답할 보강 투표/,
@@ -167,6 +187,9 @@ test('recommend → teacher selects → own-student votes → teacher approval �
   );
   assert.throws(() => s.submit('approve', { choice: '0' }), /미응답|불가|충돌/);
   s.submit('vote', { student: 'TA_STU_001', rank1: '0' }, 'TA_STUDENT_001');
+  const oneReply = await pollPage();
+  assert.match(oneReply, /응답 1\/2명/);
+  assert.match(oneReply, /가능 1명/);
   assert.equal(pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')), '');
   assert.match(
     pendingMakeupNotices(s.ctx('TA_GUARDIAN_M2')),

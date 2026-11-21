@@ -967,7 +967,11 @@ test('운영 홈과 상담 목록은 열람 범위와 처리 상태를 따른다
   );
   const adminHome = await s.send('/', admin);
   assert.match(adminHome.text, new RegExp(title));
-  assert.match(adminHome.text, /처리할 상담이 1건 있습니다/);
+  assert.equal(
+    (adminHome.text.match(/<h2>상담 요청 · 1건<\/h2>/g) ?? []).length,
+    1,
+  );
+  assert.doesNotMatch(adminHome.text, /오늘 일정 0|상담함 확인/);
   assert.match(
     (await s.send('/consultation?view=inbox', admin)).text,
     new RegExp(title),

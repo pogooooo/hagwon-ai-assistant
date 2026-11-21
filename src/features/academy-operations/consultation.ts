@@ -271,14 +271,27 @@ function threadDetail(ctx: PageContext, thread: Thread) {
     question,
     owner,
     lastKind: messages.at(-1)?.kind,
+    latestNote:
+      messages.findLast((message) => message.kind !== 'answer')?.text ??
+      thread.title,
+    receivedAt: messages[0]?.created_at ?? thread.updated_at,
     target: targets.join(', '),
-    summary: unresolved
-      ? [
-          answerLabels[unresolved.status],
-          ...(unresolved.missingFields ?? []),
-        ].join(' · ')
-      : '담당자 상담 요청',
   };
+}
+
+const inquiryDate = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+function inquiryTime(value: string) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? `<time datetime="${h(value)}">${h(inquiryDate.format(date))} 접수</time>`
+    : '';
 }
 
 function participantLabel(detail: ReturnType<typeof threadDetail>) {
@@ -1066,7 +1079,17 @@ function renderConsultation(ctx: PageContext) {
   const hiddenThread = thread
     ? `<input type="hidden" name="id" value="${h(thread.id)}">`
     : '';
-  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="#consultation-history">상담 목록</a>${own && thread ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
+  const staffState = (row: Thread, state: string) =>
+    (inbox && statuses.find((item) => item.id === state)?.label) ||
+    threadLabels[row.status];
+  const selected = thread && indexed.find(({ row }) => row.id === thread.id);
+  const listLink =
+    queue && thread
+      ? '/consultation?view=' +
+        (inbox ? 'inbox' : 'archive') +
+        (status === 'all' ? '' : '&amp;status=' + encodeURIComponent(status))
+      : '#consultation-history';
+  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="${listLink}">${queue && thread ? '목록으로' : '상담 목록'}</a>${own && thread ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
     <div class="split consultation-layout" data-has-thread="${!!thread}" data-consultation-view="${queue ? 'queue' : 'conversation'}">
       <aside class="consultation-history" id="consultation-history" tabindex="-1">
         <h2>상담 목록</h2>
@@ -1086,7 +1109,10 @@ function renderConsultation(ctx: PageContext) {
           threads.length
             ? `<ul class="item-list">${threads
                 .map(({ row, detail, state }) => {
-                  return `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}#conversation"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.status === 'open' ? row.title : detail.question)}</span><small>${h(inbox ? (statuses.find((item) => item.id === state)?.label ?? threadLabels[row.status]) : threadLabels[row.status])} · ${h(participantLabel(detail))}</small>${queue ? `<small>${h(detail.summary)}</small>` : ''}</a></li>`;
+                  const body = queue
+                    ? `<span class="consultation-row-heading"><strong>${h(participantLabel(detail))}</strong><span class="pill consultation-status" data-state="${h(inbox ? state : 'closed')}">${h(staffState(row, state))}</span></span><span class="consultation-preview">${h(inbox && state === 'waiting' ? detail.latestNote : detail.question)}</span><small>${inquiryTime(detail.receivedAt)}</small>`
+                    : `<span>${h(row.status === 'open' ? row.title : detail.question)}</span><small>${h(threadLabels[row.status])} · ${h(participantLabel(detail))}</small>`;
+                  return `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}#conversation"${row.id === id ? ' aria-current="page"' : ''}>${body}</a></li>`;
                 })
                 .join('')}</ul>`
             : `<p class="muted">${inbox ? '이 상태의 상담이 없습니다.' : archive ? '완료된 상담이 없습니다.' : '저장된 상담이 없습니다.'}</p>`
@@ -1095,7 +1121,9 @@ function renderConsultation(ctx: PageContext) {
       <section class="consultation-main" id="conversation" tabindex="-1">
         ${
           thread
-            ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
+            ? queue && selected
+              ? `<div class="thread-heading staff-thread-heading"><div><h2>${h(participantLabel(selected.detail))}</h2><p>${inquiryTime(selected.detail.receivedAt)}</p></div><span class="pill consultation-status" data-state="${h(inbox ? selected.state : 'closed')}">${h(staffState(thread, selected.state))}</span></div>`
+              : `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
             : inbox || archive
               ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : '<p class="muted">현재 목록이 비어 있습니다.</p>'}`
               : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="자주 묻는 질문">${suggestions.map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
