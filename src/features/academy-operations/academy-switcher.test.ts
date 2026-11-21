@@ -120,6 +120,11 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       for (const [question, expected, source] of [
         ['그럼 수강료는요?', /210,000원/, /영어 회화반 수강료/],
         [
+          '고등학생 수업 하나요?',
+          /고등학생 대상 정규 수업을 운영하지 않습니다\. 담당자에게 문의해 볼까요\?/,
+          /온답 어학원 정규 수업 안내/,
+        ],
+        [
           '영어 회화반 시간표 알려주세요.',
           /17:00~18:20/,
           /영어 회화반 정규 시간표/,
@@ -148,6 +153,7 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
         assert.match(html, /data-answer-status="answered"/);
         assert.match(html, expected);
         assert.match(html, source);
+        assert.match(html, /value="handoff">담당자 상담 요청/);
         assert.doesNotMatch(html, /180,000원|중2 내신반/);
       }
       const examples = await (

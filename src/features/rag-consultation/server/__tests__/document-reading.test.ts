@@ -457,3 +457,47 @@ test('an explicit approved academy address survives reader outages without accep
     'abstained',
   );
 });
+
+test('a verified visitor parking policy survives document reader failure', async () => {
+  const env = await setup(() => ({}));
+  await env.register(
+    'directions',
+    '## 오시는 길\n학원은 배움길 12에 있습니다. 방문자 주차장을 운영하지 않습니다.',
+  );
+  const result = await env.ask('차 가져가도 돼요?');
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /방문자 주차장을 운영하지 않습니다/);
+  assert.deepEqual(
+    result.answer.citations.map((citation) => citation.documentId),
+    ['directions'],
+  );
+  assert.equal(env.inputs.length, 0);
+});
+
+test('confirmed course exclusions answer directly and conflicting courses defer', async () => {
+  const env = await setup(() => ({}));
+  await env.register(
+    'scope',
+    '## 현재 수업\n중학생 대상 수업을 운영하지 않습니다.',
+  );
+  const negative = await env.ask('중학생 수업 하나요?');
+  assert.equal(negative.answer.status, 'answered', negative.answer.answer);
+  assert.match(
+    negative.answer.answer,
+    /^현재 중학생 대상 수업을 운영하지 않습니다\. 담당자에게 문의해 볼까요\?/,
+  );
+  assert.deepEqual(
+    negative.answer.citations.map((c) => c.documentId),
+    ['scope'],
+  );
+  assert.equal(env.inputs.length, 0);
+
+  await env.register(
+    'middle',
+    '| 과정 | 대상 |\n| --- | --- |\n| 중등 문법 | 중학생 |',
+  );
+  const conflict = await env.ask('중학생 수업 하나요?');
+  assert.equal(conflict.answer.status, 'abstained', conflict.answer.answer);
+  assert.doesNotMatch(conflict.answer.answer, /운영하지 않습니다/);
+  assert.equal(env.inputs.length, 0);
+});

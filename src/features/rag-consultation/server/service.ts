@@ -1717,7 +1717,14 @@ export function createRagConsultationService(
             const bound =
               (plan.requests.length === 1 &&
                 draft.status === 'answered' &&
-                trace.intent === 'explicit_academy_address') ||
+                draft.citations.length > 0 &&
+                [
+                  'explicit_academy_address',
+                  'parking_fields',
+                  'public_course_unavailable',
+                  'public_office_opening',
+                  'public_office_method',
+                ].includes(trace.intent)) ||
               draft.usedFacts.length > 0 ||
               draft.citations.some(
                 (c) =>
