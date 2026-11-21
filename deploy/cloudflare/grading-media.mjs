@@ -87,7 +87,7 @@ function orientPixels(PhotonImage, image, orientation) {
   }
 }
 export const workerGradingMedia = {
-  maxPages: 2,
+  maxPages: 4,
   maxInputBytes: 3 * 1024 * 1024,
   maxImagePixels: 1_500_000,
   decodePhoto(bytes) {

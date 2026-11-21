@@ -116,6 +116,9 @@ test('Worker grading codecs render and crop photo and PDF pixels and enforce upl
     assert.ok(pixels.dark > (page.page_no === 1 ? 30 : 5000));
   }
   pdf.addPage([128, 96]);
+  pdf.addPage([128, 96]);
+  assert.equal((await render()).length, 4);
+  pdf.addPage([128, 96]);
   await assert.rejects(render, { code: 'PAGE_LIMIT' });
   await assert.rejects(
     decodeUploads([

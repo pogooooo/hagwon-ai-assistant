@@ -8,6 +8,7 @@ import {
   one,
   OperationError,
   rows,
+  transaction,
   type OperationModule,
   type PageContext,
 } from '../academy-operations/shared.ts';
@@ -26,7 +27,10 @@ import { aggregate, emptyResult, propose } from './scoring.ts';
 import { createNaverGrader } from './provider.ts';
 import {
   submissionAssignment,
+  listAssignments,
   GradingService,
+  demoPhotoPolicy,
+  personalPhotoPolicy,
   gradingProviderErrors,
   newId,
   readSubmission,
@@ -34,6 +38,7 @@ import {
 } from './service.ts';
 import {
   approveReport,
+  ensureResultReport,
   generateReport,
   readReport,
   readSnapshot,
@@ -49,22 +54,26 @@ export function gradingService(
 ) {
   let service = services.get(db);
   if (!service) {
+    const policy = env.AXR_GRADING_DEMO_PRACTICE_POLICY;
+    const practicePolicy =
+      policy === demoPhotoPolicy || policy === personalPhotoPolicy
+        ? policy
+        : undefined;
     service = new GradingService(db, {
       provider: createNaverGrader(env, db),
-      practiceProvider:
-        env.AXR_GRADING_DEMO_PRACTICE_POLICY === 'self-practice-deidentified-v1'
-          ? createNaverGrader(
-              {
-                ...env,
-                CLOVA_STUDIO_API_KEY:
-                  env.AXR_GRADING_PRACTICE_API_KEY || env.CLOVA_STUDIO_API_KEY,
-                AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
-                AXR_GRADING_INPUT_POLICY_REF:
-                  env.AXR_GRADING_DEMO_PRACTICE_POLICY,
-              },
-              db,
-            )
-          : undefined,
+      practicePolicy,
+      practiceProvider: practicePolicy
+        ? createNaverGrader(
+            {
+              ...env,
+              CLOVA_STUDIO_API_KEY:
+                env.AXR_GRADING_PRACTICE_API_KEY || env.CLOVA_STUDIO_API_KEY,
+              AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
+              AXR_GRADING_INPUT_POLICY_REF: practicePolicy,
+            },
+            db,
+          )
+        : undefined,
       rawTtlMs: Number(env.AXR_GRADING_RAW_TTL_MS ?? 3600000),
       inputPolicyRef: env.AXR_GRADING_INPUT_POLICY_REF,
       restoredBackup: env.AXR_GRADING_RESTORED_BACKUP === 'true',
@@ -82,8 +91,9 @@ export function configureGrading(
 }
 const errorNames: Record<string, string> = {
   VALIDATION_FAILED: '입력값을 확인해 주세요.',
-  PRACTICE_SCOPE:
-    '본인 연습 사진 테스트는 가상학생A의 AI 풀이 과제에서 이용할 수 있습니다.',
+  PRACTICE_SCOPE: '이 계정과 과제에서는 체험용 사진 전송을 사용할 수 없습니다.',
+  PHOTO_CONSENT_REQUIRED:
+    '이름·학교·얼굴을 가린 답안인지 확인하고 네이버 CLOVA 사진 전송에 동의해 주세요.',
   INVALID_SCORE: '점수와 배점을 확인해 주세요.',
   INVALID_RUBRIC: '요소별 배점·허용 점수와 문항 만점을 확인해 주세요.',
   EMPTY_KEY: '채점할 정답을 등록해 주세요.',
@@ -384,6 +394,12 @@ async function submit(ctx: PageContext, form: FormData) {
       return '/grading?submission=' + encodeURIComponent(s.id);
     }
     if (action === 'upload') {
+      const assignmentId = field(form, 'assignment');
+      const selected = listAssignments(ctx).find(
+        (a) => a.assignment_id === assignmentId,
+      );
+      if (!selected) throw new GradingError('RESOURCE_NOT_FOUND', 404);
+      const autoPages = !form.has('pages');
       const files: { bytes: Uint8Array; mime: string }[] = [];
       for (const file of form.getAll('photos'))
         if (typeof file !== 'string' && file.size)
@@ -394,18 +410,15 @@ async function submit(ctx: PageContext, form: FormData) {
       const submission = service.create(
         ctx,
         {
-          assignment_id: field(form, 'assignment'),
+          assignment_id: assignmentId,
           assignment_version: 1,
           student_ref: field(form, 'student'),
           ...(field(form, 'practice') === 'yes'
             ? { practice_consent: true }
             : {}),
-          expected_page_count: number(
-            form,
-            'pages',
-            1,
-            gradingMediaLimits().pages,
-          ),
+          expected_page_count: autoPages
+            ? Math.max(1, ...selected.items.map((i) => i.expected_page_no))
+            : number(form, 'pages', 1, gradingMediaLimits().pages),
           ...(field(form, 'target')
             ? {
                 submission_purpose: 'correction_evidence' as const,
@@ -422,6 +435,7 @@ async function submit(ctx: PageContext, form: FormData) {
           submission.submission_id,
           files,
           ctx.maxDocumentBytes,
+          autoPages,
         );
         await service.process(ctx, submission.submission_id);
       } finally {
@@ -614,10 +628,15 @@ async function submit(ctx: PageContext, form: FormData) {
     gradingError(error);
   }
 }
-function gradingAvailability(service: GradingService) {
-  return service.provider.inputAllowed
-    ? ''
-    : '<p>일반 학생 사진의 외부 AI 채점은 현재 꺼져 있습니다.</p>';
+function gradingAvailability(
+  service: GradingService,
+  practiceAvailable: boolean,
+) {
+  if (service.provider.inputAllowed)
+    return '<p>제출한 답안은 네이버 CLOVA로 채점하고 선생님이 결과를 확인합니다.</p>';
+  if (practiceAvailable)
+    return '<p>네이버 CLOVA 사진 채점 사용 가능 · 체험 학원에는 이름·학교·얼굴을 가린 연습 답안을 제출해 주세요.</p>';
+  return '<p>이 과제는 선생님이 직접 확인합니다. 이 계정에서는 사진을 네이버로 전송할 수 없습니다.</p>';
 }
 function photoRegisterForm(ctx: PageContext) {
   const classes = accessibleClasses(ctx.db, ctx.actor);
@@ -629,7 +648,7 @@ function photoRegisterForm(ctx: PageContext) {
     classes.map((c) => c.id),
     '',
     Object.fromEntries(classes.map((c) => [c.id, c.name])),
-  )}${choice('subject', '과목', subjects, 'MATH', subjectNames)}<p>학생이 푼 사진에서 문항 번호를 읽습니다.${worksheet ? '' : ' 책 쪽수가 사진에 보이게 제출해 주세요.'}</p>${input('skill', '학습 유형 (선택)', '', 'text', 'maxlength="120"')}${input('rights_basis', '자료 이용 근거', '', 'text', 'required maxlength="500"')}<label><input type="checkbox" name="approved" value="yes" required>자료 이용 근거와 배정 범위를 확인했습니다.</label><button>과제 등록</button></form>`;
+  )}${choice('subject', '과목', subjects, 'MATH', subjectNames)}<p>정답과 문항 번호는 입력할 필요가 없습니다. 학생이 푼 사진에서 문항과 답을 읽습니다.${worksheet ? '' : ' 책 쪽수가 사진에 보이게 제출해 주세요.'}</p>${input('skill', '학습 유형 (선택)', '', 'text', 'maxlength="120"')}<label>자료 이용 근거<select name="rights_basis" required><option value="">선택해 주세요</option><option>직접 만든 자료</option><option>사진 채점 이용을 허락받은 자료</option><option>해당 이용이 허용된 공개 자료</option></select></label><label><input type="checkbox" name="approved" value="yes" required>자료 이용 근거와 배정 범위를 확인했습니다.</label><button>과제 등록</button></form>`;
 }
 function registerForm(ctx: PageContext) {
   const count = Math.max(
@@ -695,6 +714,27 @@ async function render(ctx: PageContext) {
         s.published_revision
       ) {
         const result = service.result(ctx, s.result_id);
+        const linked = staff
+          ? transaction(ctx.db, () =>
+              ensureResultReport(
+                ctx.db,
+                s.tenant,
+                result.result_set_id,
+                service.now(),
+              ),
+            )
+          : one<{ report: string }>(
+              ctx.db,
+              "SELECT p.report FROM grading_v3_result_reports p JOIN grading_v3_reports r ON r.id=p.report AND r.tenant=p.tenant WHERE p.tenant=? AND p.result=? AND p.revision=? AND r.status='approved'",
+              s.tenant,
+              result.result_set_id,
+              result.revision,
+            )?.report;
+        if (linked)
+          detail +=
+            '<a class="grade-report-row" href="/grading?report=' +
+            encodeURIComponent(linked) +
+            '"><strong>이 과제의 분석 리포트</strong><span>열기 ›</span></a>';
         detail += `<p>확정 ${result.revision}차 · 수행일 ${h(result.assessment_date)} · 원문은 삭제되었습니다.</p><div class="table-wrap"><table><thead><tr><th>문항</th><th>과목·유형</th><th>결과</th><th>점수</th></tr></thead><tbody>${result.items.map((i) => `<tr><td>${h(a.items.find((d) => d.item_ref === i.item_ref)?.item_no)}</td><td>${subjectNames[i.subject_id]} · ${h(a.items.find((d) => d.item_ref === i.item_ref)?.skill_label)}</td><td>${outcomeNames[i.outcome]}</td><td>${h(i.score ?? '집계 제외')} / ${h(i.max_score)}</td></tr>`).join('')}</tbody></table></div>`;
         if (staff)
           detail += `<details><summary>수행일 정정</summary>${startForm('date')}${hidden('result', s.result_id)}${hidden('revision', result.revision)}${input('date', '확인한 수행일', result.assessment_date, 'date', 'required')}<button>새 정정 이력으로 저장</button></form></details><p>점수 정정이 필요하면 <a href="/grading?view=upload&amp;submission=${encodeURIComponent(s.id)}">같은 답안의 정정 사진 제출</a>을 이용해 주세요. 다시 푼 숙제는 새 풀이로 제출합니다.</p>`;
@@ -816,7 +856,7 @@ async function render(ctx: PageContext) {
     if (!tabs.some(([key]) => key === view))
       throw new GradingError('RESOURCE_NOT_FOUND', 404);
     const intro =
-      '<script src="/grading-ui.js?v=1" defer></script><div class="page-heading"><h1>사진 숙제 채점</h1></div><nav class="grade-filters" aria-label="사진 채점 메뉴">' +
+      '<script src="/grading-ui.js?v=2" defer></script><div class="page-heading"><h1>사진 숙제 채점</h1></div><nav class="grade-filters" aria-label="사진 채점 메뉴">' +
       tabs
         .map(
           ([key, label]) =>
@@ -829,7 +869,7 @@ async function render(ctx: PageContext) {
       return (
         intro +
         '<section class="panel">' +
-        gradingAvailability(service) +
+        gradingAvailability(service, service.allowsPersonalPractice(ctx)) +
         registerForm(ctx) +
         '</section>'
       );
@@ -862,16 +902,20 @@ async function render(ctx: PageContext) {
             )}<button>과제 선택</button></form>`
           : '';
       const mediaLimits = gradingMediaLimits(ctx.maxDocumentBytes);
+      const canPractice =
+        !!selected &&
+        eligible.some((s) =>
+          service.canSubmitPractice(ctx, s.id, selected, !!target),
+        );
       const practiceChoice =
-        !target &&
-        service.allowsPersonalPractice(ctx) &&
-        selected?.items.every((i) => i.grading_mode === 'photo_solution') &&
-        eligible.some((s) => s.id === 'TA_STU_001')
-          ? '<label><input type="checkbox" name="practice" value="yes">본인 연습 사진으로 AI 채점 테스트 (가상학생A). 이름·학교·얼굴 등 개인정보를 가렸고, 이 사진을 네이버 CLOVA에 보내 채점하는 데 동의합니다.</label>'
+        canPractice && !service.provider.inputAllowed
+          ? '<label class="grade-check"><input type="checkbox" name="practice" value="yes"' +
+            (service.practicePolicy === demoPhotoPolicy ? ' required' : '') +
+            '>이름·학교·얼굴이 없는 연습 답안이며, 이 제출의 사진을 네이버 CLOVA로 보내 채점하는 데 동의합니다.</label>'
           : '';
       return (
         intro +
-        `<section class="panel grade-upload"><h2>숙제 사진 제출</h2>${gradingAvailability(service)}${picker}${
+        `<section class="panel grade-upload"><h2>숙제 사진 제출</h2>${gradingAvailability(service, canPractice)}${picker}${
           selected && eligible.length
             ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${hidden('assignment', selected.assignment_id)}<p><strong>${h(selected.title)}</strong> · ${selected.scope ? (selected.scope.kind === 'workbook' ? '책 쪽수와 문항 번호가 보이게 촬영 · 긴 범위는 나누어 제출 가능' : '나눠 준 문제지의 문항 번호가 보이게 촬영') : selected.items.length + '문항'}</p>${
                 eligible.length === 1
@@ -883,9 +927,9 @@ async function render(ctx: PageContext) {
                       target?.student ?? '',
                       Object.fromEntries(eligible.map((s) => [s.id, s.name])),
                     )
-              }<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label class="grade-picker" data-jump-label="사진 첨부"><strong>사진 또는 PDF 첨부</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label>${input('pages', '총 페이지 수', '1', 'number', `min="1" max="${mediaLimits.pages}" required`)}<div class="grade-previews" data-previews aria-live="polite"></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
+              }<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label class="grade-picker" data-jump-label="사진 첨부"><strong>사진 또는 PDF 추가</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><input type="file" name="photos" data-max-files="${mediaLimits.pages}" data-max-bytes="${mediaLimits.bytes}" data-max-pixels="${mediaLimits.pixels}" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><p data-file-status aria-live="polite"></p><div class="grade-previews" data-previews></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
             : '<p>제출할 수 있는 사진 채점 과제가 없습니다.</p>'
-        }</section>`
+        }${ctx.actor.academyId === 'AC_TEST_A' ? '<details class="grade-samples"><summary>연습용 답안 내려받기</summary><p>수학 문제지 예시입니다. 두 사진을 차례로 추가하거나 두 쪽 PDF 한 개를 제출해 보세요. 검수 기준은 1번 정답 12, 2번 학생 답 6 · 정답 9입니다.</p><div><a download href="/assets/practice-math-1.png">1쪽 사진</a><a download href="/assets/practice-math-2.png">2쪽 사진</a><a download href="/assets/practice-math.pdf">두 쪽 PDF</a></div></details>' : ''}</section>`
       );
     }
     if (view === 'reports') {
@@ -915,7 +959,7 @@ async function render(ctx: PageContext) {
         (reports
           .map(
             (r) =>
-              `<p><a href="/grading?report=${encodeURIComponent(r.report_id)}">${h(students.find((s) => s.id === r.student)?.name)} 학습 리포트</a> · ${r.status === 'approved' ? '공개' : '초안'} · ${h(r.generated_at.slice(0, 10))}</p>`,
+              `<a class="grade-report-row" href="/grading?report=${encodeURIComponent(r.report_id)}"><strong>${h(students.find((s) => s.id === r.student)?.name)} · ${h(r.assignment_title || '학습 리포트')}</strong><span>${r.status === 'approved' ? '공개' : '검토 대기'} · ${h(r.generated_at.slice(0, 10))} ›</span></a>`,
           )
           .join('') || '<p>조회 가능한 리포트가 없습니다.</p>') +
         '</section>';
@@ -929,7 +973,7 @@ async function render(ctx: PageContext) {
               students.map((s) => s.id),
               '',
               Object.fromEntries(students.map((s) => [s.id, s.name])),
-            )}<div class="form-grid">${input('from', '기간 시작', kstDate(service.now()).slice(0, 8) + '01', 'date', 'required')}${input('to', '기간 끝 — 해당 날짜 미포함', kstDate(service.now() + 86400000), 'date', 'required')}${input('compare_from', '비교 기간 시작 — 선택', '', 'date')}${input('compare_to', '비교 기간 끝 — 해당 날짜 미포함', '', 'date')}</div>${subjects.map((s) => `<label><input type="checkbox" name="subject" value="${s}" checked>${subjectNames[s]}</label>`).join('')}${choice('attempt', '반복 풀이 집계', ['first_ever', 'latest_in_window'], 'first_ever', { first_ever: '기록된 첫 풀이', latest_in_window: '기간 내 최근 풀이' })}<button>확정 기록으로 초안 생성</button></form></section>`
+            )}<div class="form-grid">${input('from', '기간 시작', kstDate(service.now()).slice(0, 8) + '01', 'date', 'required')}${input('to', '기간 끝 — 해당 날짜 미포함', kstDate(service.now() + 86400000), 'date', 'required')}${input('compare_from', '비교 기간 시작 — 선택', '', 'date')}${input('compare_to', '비교 기간 끝 — 해당 날짜 미포함', '', 'date')}</div><fieldset class="grade-subjects"><legend>분석 과목</legend>${subjects.map((s) => `<label><input type="checkbox" name="subject" value="${s}" checked>${subjectNames[s]}</label>`).join('')}</fieldset>${choice('attempt', '반복 풀이 집계', ['first_ever', 'latest_in_window'], 'first_ever', { first_ever: '기록된 첫 풀이', latest_in_window: '기간 내 최근 풀이' })}<button>확정 기록으로 초안 생성</button></form></section>`
           : '')
       );
     }
