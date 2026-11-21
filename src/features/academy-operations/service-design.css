@@ -3444,6 +3444,20 @@ td {
 .section-jump[hidden] {
   display: none;
 }
+@media (max-width: 780px) {
+  .topbar .section-jump {
+    display: none;
+  }
+}
+.workspace :where(a[href]) {
+  color: var(--accent, #526035);
+  text-decoration-color: #91a078;
+  text-underline-offset: 0.2em;
+}
+.workspace :where(a[href]):focus-visible {
+  outline: 2px solid #667b42;
+  outline-offset: 3px;
+}
 .workspace :is(h2, [id], [data-jump-label]) {
   scroll-margin-top: 76px;
 }
