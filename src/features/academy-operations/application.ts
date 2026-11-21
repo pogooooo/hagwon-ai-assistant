@@ -321,7 +321,7 @@ export function createOperationsServer({
       ['보호자', 'TA_GUARDIAN_E_MATH'],
       ['방문자', 'TA_VISITOR'],
     ];
-    return `<div class="sign-in-layout"><section class="sign-in-story" aria-label="온답"><img class="login-logo" src="/assets/ondap-logo.png" alt="온답"><h2>학원 업무를 한눈에</h2><p>수업 일정, 숙제 확인, 학습 상담</p><img class="login-owl" src="/assets/ondap-review.png" alt=""></section><div class="sign-in-content"><section class="panel sign-in-form">
+    return `<div class="sign-in-layout"><section class="sign-in-story" aria-label="온답"><img class="login-logo" src="/assets/ondap-logo.png" alt="온답"><h2>학원 업무를 한눈에</h2><p>수업 일정, 숙제 확인, 학습 상담</p><img class="login-owl" src="/assets/ondap-review.png" alt=""></section><div class="sign-in-content"><section class="sign-in-form">
     <div class="sign-in-heading"><h1>학원 로그인</h1><p>학원에서 발급받은 계정으로 로그인하세요.</p></div>
     ${message ? `<p class="notice" role="alert">${h(message)}</p>` : ''}
     <form method="post" action="/login">

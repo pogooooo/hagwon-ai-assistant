@@ -336,3 +336,12 @@ if (sectionJump) {
     target.scrollIntoView({ block: 'start' });
   });
 }
+
+const transcript = document.querySelector('.conversation-messages');
+if (
+  transcript &&
+  !location.hash &&
+  transcript.scrollHeight > transcript.clientHeight
+) {
+  transcript.scrollTop = transcript.scrollHeight;
+}
