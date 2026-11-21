@@ -12,6 +12,7 @@ import {
   sessionProfile,
   setupAcademySelection,
 } from './academy-switcher.ts';
+import { listedDemoLogins, setupDemoLogins } from './demo-logins.ts';
 import { seedAcademyChoices } from './academy-switcher-demo.ts';
 import type { OperationsDatabase } from './database.ts';
 import {
@@ -138,6 +139,7 @@ export interface OperationsServerOptions {
   demoPassword: string;
   showDefaultPassword?: boolean;
   showDemoAccounts?: boolean;
+  trialPasswordHashes?: string;
   assetsRoot?: URL | null;
   fixturesRoot?: URL;
   documentsRoot?: string;
@@ -153,6 +155,7 @@ export function createOperationsServer({
   demoPassword,
   showDefaultPassword = false,
   showDemoAccounts = showDefaultPassword,
+  trialPasswordHashes,
   assetsRoot = new URL('./', import.meta.url),
   fixturesRoot,
   documentsRoot,
@@ -232,7 +235,10 @@ export function createOperationsServer({
   // Historical publications and monthly reports still reference workbook tables.
   homeworkModule.setup(db, documentsRoot);
   for (const operation of modules) operation.setup(db, documentsRoot);
-  if (showDemoAccounts) seedAcademyChoices(db);
+  if (showDemoAccounts) {
+    seedAcademyChoices(db);
+    setupDemoLogins(db, trialPasswordHashes);
+  }
   function hashSession(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
@@ -369,13 +375,7 @@ export function createOperationsServer({
   }
 
   function loginPage(message = '') {
-    const demoAccounts = [
-      ['관리자', 'TA_DIRECTOR'],
-      ['강사', 'TA_TEACHER'],
-      ['학생', 'TA_STUDENT_001'],
-      ['보호자', 'TA_GUARDIAN_E_MATH'],
-      ['방문자', 'TA_VISITOR'],
-    ];
+    const demoAccounts = showDemoAccounts ? listedDemoLogins(db) : [];
     return `<div class="sign-in-layout"><section class="sign-in-story" aria-label="온답"><img class="login-logo" src="/assets/ondap-logo.png" alt="온답"><h2>학원 업무를 한눈에</h2><p>수업 일정, 숙제 확인, 학습 상담</p><img class="login-owl" src="/assets/ondap-review.png" alt=""></section><div class="sign-in-content"><section class="sign-in-form">
     <div class="sign-in-heading"><h1>학원 로그인</h1><p>학원에서 발급받은 계정으로 로그인하세요.</p></div>
     ${message ? `<p class="notice" role="alert">${h(message)}</p>` : ''}
