@@ -76,13 +76,13 @@ export class AcademyDemo extends DurableObject {
     this.parentMessageDb = database(ctx.storage);
     if (!env.AXR_HOSTED_DEMO_PASSWORD) throw new Error('Missing demo password');
     configureOperationsGeneration(
-      createOperationsGeneration(env, fetch, database(ctx.storage)),
+      createOperationsGeneration(env, fetch, this.parentMessageDb),
     );
     const server = createOperationsServer({
       services: createExternalServices(env, fetch, database(ctx.storage)),
       scanVision: createOperationsScanVision(env, fetch, database(ctx.storage)),
       scanPdfAvailable: false,
-      db: database(ctx.storage),
+      db: this.parentMessageDb,
       publicOrigin: new URL(env.AXR_OPERATIONS_PUBLIC_ORIGIN),
       demoPassword: env.AXR_HOSTED_DEMO_PASSWORD,
       showDemoAccounts: true,

@@ -27,18 +27,18 @@ import {
   documentsModule,
   maxDocumentBytes as defaultMaxDocumentBytes,
 } from './documents.ts';
+import { homeworkModule } from './homework.ts';
+import { renderWorkbookSource } from './workbook-publication.ts';
 import {
-  analyzeHomeworkPhoto,
-  reviewHomeworkReading,
-} from './homework-classifier.ts';
-import { homeworkModule, homeworkPhoto } from './homework.ts';
+  gradingLearning,
+  gradingBriefing,
+} from '../homework-grading/records-page.ts';
 import {
   gradingModule,
   gradingPhoto,
   gradingService,
 } from '../homework-grading/module.ts';
-import { learningModule } from './learning.ts';
-import { briefingModule } from './briefing.ts';
+import { setupLearning, renderLearningPublication } from './learning.ts';
 import { parentMessagesModule } from './parent-messages.ts';
 import { unreadParentCount } from './parent-messages-model.ts';
 import { calendarModule } from './calendar.ts';
@@ -61,10 +61,33 @@ import {
 
 const modules: OperationModule[] = [
   directoryModule,
-  homeworkModule,
   gradingModule,
-  learningModule,
-  briefingModule,
+  {
+    path: '/learning',
+    label: '학습 기록',
+    roles: gradingModule.roles,
+    setup: setupLearning,
+    render: (ctx) =>
+      ctx.url.searchParams.has('publication')
+        ? renderLearningPublication(
+            ctx,
+            ctx.url.searchParams.get('publication')!,
+          )
+        : gradingLearning(ctx),
+    submit() {
+      throw new OperationError('사진 채점의 확정 기록은 조회 전용입니다.', 405);
+    },
+  },
+  {
+    path: '/briefing',
+    label: '브리핑',
+    roles: ['admin', 'teacher'],
+    setup() {},
+    render: gradingBriefing,
+    submit() {
+      throw new OperationError('브리핑은 조회 전용입니다.', 405);
+    },
+  },
   calendarModule,
   makeupPollsModule,
   studentReportsModule,
@@ -87,7 +110,6 @@ const menuOrder = [
   '/documents',
   '/learning',
   '/briefing',
-  '/homework',
   '/grading',
   '/directory',
   '/settings',
@@ -187,6 +209,8 @@ export function createOperationsServer({
     }
   }
   initializeIdentity(db, demoPassword, fixturesRoot);
+  // Historical publications and monthly reports still reference workbook tables.
+  homeworkModule.setup(db, documentsRoot);
   for (const operation of modules) operation.setup(db, documentsRoot);
   function hashSession(token: string) {
     return createHash('sha256').update(token).digest('hex');
@@ -495,10 +519,41 @@ export function createOperationsServer({
         sendPage(response, 200, renderHome({ db, actor, url }), actor, '/');
         return;
       }
-      if (url.pathname === '/homework/photo' && request.method === 'GET') {
-        const photo = homeworkPhoto({ db, actor, url });
-        response.writeHead(200, { 'Content-Type': photo.mime });
-        response.end(Buffer.from(photo.bytes));
+      if (url.pathname === '/homework' || url.pathname === '/homework/photo') {
+        if (!gradingModule.roles.includes(actor.role))
+          throw new OperationError('이 기능에 접근할 수 없습니다.', 403);
+        if (request.method !== 'GET')
+          throw new OperationError('사진 채점에서 숙제를 제출해 주세요.', 405);
+        const view = url.searchParams.get('view');
+        if (url.pathname === '/homework' && view === 'source') {
+          sendPage(
+            response,
+            200,
+            renderWorkbookSource(
+              { db, actor, url },
+              url.searchParams.get('publication') ?? '',
+            ),
+            actor,
+            '/learning',
+          );
+        } else if (url.pathname === '/homework/photo') {
+          throw new OperationError(
+            '기존 제출 사진은 이 화면에서 제공하지 않습니다.',
+            410,
+          );
+        } else {
+          const staff = actor.role === 'admin' || actor.role === 'teacher';
+          redirect(
+            response,
+            view === 'analysis'
+              ? '/learning'
+              : staff && view === 'create'
+                ? '/grading?view=register'
+                : staff && view === 'review'
+                  ? '/grading?queue=review'
+                  : '/grading',
+          );
+        }
         return;
       }
       if (url.pathname === '/grading/photo' && request.method === 'GET') {
@@ -571,23 +626,6 @@ export function createOperationsServer({
         assertCurrentAccess();
         response.writeHead(200, { 'Content-Type': 'audio/mpeg' });
         response.end(bytes);
-        return;
-      }
-      if (
-        form &&
-        operation === homeworkModule &&
-        (url.searchParams.get('analyze') === '1' ||
-          url.searchParams.get('review') === '1')
-      ) {
-        const result =
-          url.searchParams.get('review') === '1'
-            ? await reviewHomeworkReading(ctx, form)
-            : await analyzeHomeworkPhoto(ctx, form);
-        assertCurrentAccess();
-        response.writeHead(200, {
-          'Content-Type': 'application/json; charset=utf-8',
-        });
-        response.end(JSON.stringify(result));
         return;
       }
       if (form) {
