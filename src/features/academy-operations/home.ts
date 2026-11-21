@@ -176,7 +176,7 @@ export function renderHome(ctx: PageContext) {
     );
     const assignments = panel(
       '사진 채점 과제',
-      '/grading?view=register',
+      '/grading',
       homework.assignments.slice(0, 5).map((a) => ({
         title: a.title,
         href: '/grading?assignment=' + encodeURIComponent(a.assignment_id),

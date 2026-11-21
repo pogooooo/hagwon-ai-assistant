@@ -265,8 +265,14 @@ async function submit(ctx: PageContext, form: FormData) {
   try {
     await service.sweep();
     if (action === 'register') {
-      service.register(ctx, registration(form), field(form, 'request_key'));
-      return '/grading';
+      const assignment = service.register(
+        ctx,
+        registration(form),
+        field(form, 'request_key'),
+      );
+      return (
+        '/grading?assignment=' + encodeURIComponent(assignment.assignment_id)
+      );
     }
     if (action === 'upload') {
       const files: { bytes: Uint8Array; mime: string }[] = [];
@@ -773,12 +779,16 @@ async function render(ctx: PageContext) {
     const suffix = assignmentId
       ? '&amp;assignment=' + encodeURIComponent(assignmentId)
       : '';
+    const assignmentFilter =
+      staff && assignments.length
+        ? `<form method="get" action="/grading" class="inline-form">${hidden('queue', queue)}${choice('assignment', '과제별 제출 현황', ['', ...assignments.map((a) => a.assignment_id)], assignmentId ?? '', { '': '전체 과제', ...Object.fromEntries(assignments.map((a) => [a.assignment_id, a.title])) })}<button>조회</button></form>`
+        : '';
     const filters = staff
       ? `<nav class="grade-filters" aria-label="제출 상태">${(['all', 'review', 'purge'] as const).map((k) => `<a href="/grading?queue=${k}${suffix}#grade-queue"${queue === k ? ' aria-current="page"' : ''}>${{ all: '전체', review: '확인 필요', purge: '삭제 확인' }[k]} ${queues[k].filter((s) => !assignmentId || s.assignment === assignmentId).length}</a>`).join('')}</nav>`
       : '';
     return (
       intro +
-      `<section class="panel" id="grade-queue"><h2>${view === 'results' ? '공개된 채점 결과' : staff ? '제출·검수 현황' : '제출 현황'}</h2>${requestedAssignment ? `<h3>${h(requestedAssignment.title)}</h3>` : ''}${filters}<div class="table-wrap"><table><thead><tr><th>학생</th><th>과제</th><th>상태</th><th>원문</th></tr></thead><tbody>${selectedEntries.map((s) => `<tr><td>${h(s.studentName)}</td><td><a href="${h(s.href)}">${h(s.title)}</a></td><td>${h(names[s.processing])}</td><td>${h(names[s.raw_state])}</td></tr>`).join('') || `<tr><td colspan="4">${view === 'results' ? '공개된 채점 결과가 없습니다.' : queue === 'all' ? '제출된 숙제가 없습니다.' : '이 상태의 제출이 없습니다.'}</td></tr>`}</tbody></table></div></section>`
+      `<section class="panel" id="grade-queue"><h2>${view === 'results' ? '공개된 채점 결과' : staff ? '제출·검수 현황' : '제출 현황'}</h2>${requestedAssignment ? `<h3>${h(requestedAssignment.title)}</h3>` : ''}${assignmentFilter}${filters}<div class="table-wrap"><table><thead><tr><th>학생</th><th>과제</th><th>상태</th><th>원문</th></tr></thead><tbody>${selectedEntries.map((s) => `<tr><td>${h(s.studentName)}</td><td><a href="${h(s.href)}">${h(s.title)}</a></td><td>${h(names[s.processing])}</td><td>${h(names[s.raw_state])}</td></tr>`).join('') || `<tr><td colspan="4">${view === 'results' ? '공개된 채점 결과가 없습니다.' : queue === 'all' ? '제출된 숙제가 없습니다.' : '이 상태의 제출이 없습니다.'}</td></tr>`}</tbody></table></div></section>`
     );
   } catch (error) {
     gradingError(error);
