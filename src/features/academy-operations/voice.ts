@@ -251,7 +251,7 @@ export const voiceModule: OperationModule = {
     ${records
       .map((r) => {
         const answer = readableAnswer(ctx, r);
-        return `<section class="panel voice-card"><h2>질문</h2><p class="voice-question preserve">${h(r.original)}</p>${r.state === 'pending' ? `<form method="post">${hidden}<input type="hidden" name="turnId" value="${h(r.id)}"><h2>반·날짜·시간이 맞나요?</h2><p class="preserve">${h(r.question)}</p><div class="actions"><button name="action" value="confirm">맞습니다 · 답변 받기</button><button class="secondary" name="action" value="retry">다시 입력</button></div></form>` : answer ? `<h3>학원 안내</h3><p class="preserve">${h(answer.answer)}</p>${answer.citations.length ? `<details class="source-details"><summary>확인한 자료 ${answer.citations.length}개</summary><ul class="citations">${answer.citations.map((c) => `<li>${h(c.title)} · ${h(c.location)}</li>`).join('')}</ul></details>` : ''}${ctx.services?.voiceAvailable ? `<button type="button" data-speak="${h(r.id)}">답변 듣기</button>` : ''}` : r.state === 'answered' ? '<p>근거 변경으로 이전 답변을 표시하지 않습니다.</p>' : r.state === 'failed' ? '<p>인식 실패 · 다시 입력해 주세요.</p>' : ''}</section>`;
+        return `<section class="panel voice-card"><h2>질문</h2><p class="voice-question preserve">${h(r.original)}</p>${r.state === 'pending' ? `<form method="post">${hidden}<input type="hidden" name="turnId" value="${h(r.id)}"><h3>인식한 질문이 맞나요?</h3><p class="preserve">${h(r.question)}</p><div class="actions"><button name="action" value="confirm">맞습니다 · 답변 받기</button><button class="secondary" name="action" value="retry">다시 입력</button></div></form>` : answer ? `<h3>학원 안내</h3><p class="preserve">${h(answer.answer)}</p>${answer.citations.length ? `<details class="source-details"><summary>확인한 자료 ${answer.citations.length}개</summary><ul class="citations">${answer.citations.map((c) => `<li>${h(c.title)} · ${h(c.location)}</li>`).join('')}</ul></details>` : ''}${ctx.services?.voiceAvailable ? `<button type="button" data-speak="${h(r.id)}">답변 듣기</button>` : ''}` : r.state === 'answered' ? '<p>근거 변경으로 이전 답변을 표시하지 않습니다.</p>' : r.state === 'failed' ? `<p role="alert">${h(r.question || '인식 실패 · 다시 입력해 주세요.')}</p>` : ''}</section>`;
       })
       .join('')}
     ${
@@ -313,12 +313,13 @@ export const voiceModule: OperationModule = {
         confidence: number | null = null;
       try {
         const audio = form.get('audio');
-        if (audio instanceof File && audio.size)
+        if (audio && typeof audio !== 'string' && audio.size)
           ({ text, confidence } = await ctx.services!.transcribe(
             audio,
             recognitionKeywords(ctx),
           ));
-        if (!text) throw new OperationError('질문을 입력해 주세요.');
+        if (!text)
+          throw new OperationError('질문을 입력하거나 다시 녹음해 주세요.');
         guardian(ctx);
         if (session(ctx, parent.id).closed)
           throw new OperationError('종료된 상담입니다.', 409);
@@ -330,9 +331,15 @@ export const voiceModule: OperationModule = {
         if (confidence !== null && confidence < 0.5)
           throw new OperationError('인식 결과를 확인할 수 없습니다.');
       } catch (error) {
+        const message =
+          error instanceof OperationError
+            ? error.message
+            : '음성 인식 중 문제가 발생했습니다.';
         ctx.db
-          .prepare("UPDATE op_voice_turns SET state='failed' WHERE id=?")
-          .run(turnId);
+          .prepare(
+            "UPDATE op_voice_turns SET state='failed',question=? WHERE id=?",
+          )
+          .run(message, turnId);
         if (!(error instanceof OperationError))
           throw new OperationError(
             '인식 서비스 오류입니다. 글로 입력해 주세요.',
