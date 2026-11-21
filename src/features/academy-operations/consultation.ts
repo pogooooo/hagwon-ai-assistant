@@ -23,6 +23,8 @@ import {
   setupTeamSchedule,
   regularScheduleDocuments,
 } from './team-schedule.ts';
+import { buildExam } from './exam-builder.ts';
+import { looksLikeExamRequest } from './exam-questions.ts';
 import { scheduleAuthority } from './schedule-authority.ts';
 import type { OperationsDatabase } from './database.ts';
 
@@ -599,6 +601,24 @@ async function submitConsultation(ctx: PageContext, form: FormData) {
   const action = field(form, 'action');
   const id = field(form, 'id', 40);
   if (action === 'ask') {
+    const question = field(form, 'question', 500);
+    if (isStaff(ctx.actor) && looksLikeExamRequest(question)) {
+      if (id) loadThread(ctx, id);
+      try {
+        return await buildExam(
+          ctx,
+          question,
+          field(form, 'examRequestKey', 80) || randomUUID(),
+          false,
+        );
+      } catch (error) {
+        if (error instanceof OperationError && error.status === 422)
+          return (
+            '/exam-builder?request=' + encodeURIComponent(question) + '&check=1'
+          );
+        throw error;
+      }
+    }
     const conversationId = await ask(
       ctx,
       form,
@@ -817,7 +837,7 @@ function renderConsultation(ctx: PageContext) {
           own && thread?.status !== 'closed' && (thread || !queue)
             ? `<form data-jump-label="질문 쓰기" class="chat-composer" method="post" action="${h(link)}">
           ${hiddenThread}<input type="hidden" name="conversationId" value="${thread?.id ?? randomUUID()}">
-          <label class="compose-question"><span>질문</span><textarea name="question" rows="2" maxlength="500" required placeholder="학원에 궁금한 점을 입력하세요">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
+          ${actorIsStaff ? `<input type="hidden" name="examRequestKey" value="${randomUUID()}">` : ''}<label class="compose-question"><span>질문</span><textarea name="question" rows="2" maxlength="500" required placeholder="학원에 궁금한 점을 입력하세요">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
           <div class="compose-actions">${students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
           <button name="action" value="ask">질문 보내기 <span aria-hidden="true">↑</span></button></div>
           <p class="chat-progress" role="status" aria-live="polite"></p>

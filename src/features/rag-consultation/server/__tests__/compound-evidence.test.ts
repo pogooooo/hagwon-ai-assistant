@@ -722,3 +722,32 @@ test('공개 강좌의 예약 한도는 확인하고 다른 달의 잔여 시간
     '요청 시간대의 예약 가능 자리',
   ]);
 });
+
+test('일반 수업 목록은 공개된 정규 과정표에서 학년과 반을 함께 인용한다', async () => {
+  const { register, ask } = setup({ ...catalog, classes: [] });
+  await register(
+    'COURSES',
+    'academy_info',
+    '수업 안내',
+    '## 교육 대상 및 개설 과목\n\n| 구분 | 대상 | 개설 반 |\n|---|---|---|\n| 수학 | 중2 | 중등 기초반 |\n| 미술 | 고1 | 고등 창작반 |',
+  );
+  const { answer } = await ask('어떤 수업이 있나요?');
+  assert.equal(answer.status, 'answered', answer.answer);
+  assert.match(answer.answer, /중등 기초반/);
+  assert.match(answer.answer, /고등 창작반/);
+  assert.ok(answer.citations.length);
+  assert.ok(answer.citations.every((c) => c.documentId === 'COURSES'));
+});
+
+test('인사와 도움말은 질문을 유도하고 실제 정보 요청은 자료를 확인한다', async () => {
+  const { ask } = setup(catalog);
+  for (const q of ['안녕하세요!', '도움말', '뭘 물어보면 돼요?']) {
+    const { answer } = await ask(q);
+    assert.equal(answer.status, 'clarify');
+    assert.deepEqual(answer.citations, []);
+    assert.equal(answer.handoff, undefined);
+  }
+  const { answer } = await ask('안녕하세요, 기숙사 요금이 얼마예요?');
+  assert.notEqual(answer.status, 'answered');
+  assert.doesNotMatch(answer.answer, /궁금한 내용을 적어/);
+});
