@@ -1,3 +1,4 @@
+import { demoHomeworkMaterials } from './demo-homework-materials.ts';
 import { assignWorkbook } from './workbook-catalog.ts';
 import { getActor } from './directory.ts';
 import type { OperationsDatabase } from './database.ts';
@@ -157,50 +158,57 @@ export function seedDemoConsultationGuides(db: OperationsDatabase) {
   });
 }
 
-export function seedDemoLanguageHomework(db: OperationsDatabase) {
-  const actor = getActor(db, 'ONDAP_LANGUAGE_TA_TEACHER');
-  if (
-    !actor ||
-    actor.role !== 'teacher' ||
-    actor.academyId !== academyId ||
-    !one(
-      db,
-      'SELECT 1 FROM academies WHERE id=? AND name=?',
-      academyId,
-      '[가상] 온답 어학원',
-    ) ||
-    !one(
-      db,
-      'SELECT 1 FROM teacher_classes WHERE class_id=? AND teacher_id=?',
-      'ONDAP_DEMO_ENGLISH',
-      actor.id,
+export function seedDemoHomework(db: OperationsDatabase) {
+  for (const material of demoHomeworkMaterials) {
+    const actor = getActor(db, material.teacherId);
+    if (
+      !actor ||
+      actor.role !== 'teacher' ||
+      actor.academyId !== material.academyId ||
+      !one(
+        db,
+        'SELECT 1 FROM academies WHERE id=? AND name=?',
+        material.academyId,
+        material.academyName,
+      ) ||
+      !one(
+        db,
+        'SELECT 1 FROM teacher_classes WHERE class_id=? AND teacher_id=?',
+        material.classId,
+        actor.id,
+      )
     )
-  )
-    return;
-  const ctx = { db, actor, url: new URL('http://localhost/') };
-  const assignmentId = 'bd58e497-c80f-4cc9-8fc2-06ac513d33e5';
-  if (one(db, 'SELECT 1 FROM homework_assignments WHERE id=?', assignmentId))
-    return;
-  const form = new FormData();
-  for (const [key, value] of Object.entries({
-    assignmentId,
-    subject: 'E',
-    book: '온답 영어 회화',
-    edition: '중등',
-    title: '일과와 약속 시간 복습',
-    date: new Date(Date.now() + 7 * 86400000 + 32400000)
-      .toISOString()
-      .slice(0, 10),
-    targetKind: 'class',
-    classId: 'ONDAP_DEMO_ENGLISH',
-    items: JSON.stringify(
-      [1, 2, 3, 4, 5].map((number) => ({
-        page: 9,
-        number: String(number),
-        tagIds: [],
-      })),
-    ),
-  }))
-    form.set(key, value);
-  assignWorkbook(ctx, form);
+      continue;
+    const ctx = { db, actor, url: new URL('http://localhost/') };
+    if (
+      one(
+        db,
+        'SELECT 1 FROM homework_assignments WHERE id=?',
+        material.workbookId,
+      )
+    )
+      continue;
+    const form = new FormData();
+    for (const [key, value] of Object.entries({
+      assignmentId: material.workbookId,
+      subject: material.subject === 'MATH' ? 'M' : 'E',
+      book: material.book,
+      edition: material.subject === 'MATH' ? '초등' : '중등',
+      title: material.title,
+      date: new Date(Date.now() + 7 * 86400000 + 32400000)
+        .toISOString()
+        .slice(0, 10),
+      targetKind: 'class',
+      classId: material.classId,
+      items: JSON.stringify(
+        [1, 2, 3, 4, 5].map((number) => ({
+          page: material.page,
+          number: String(number),
+          tagIds: [],
+        })),
+      ),
+    }))
+      form.set(key, value);
+    assignWorkbook(ctx, form);
+  }
 }

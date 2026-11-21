@@ -17,7 +17,6 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
     db,
     demoPassword: password,
     showDemoAccounts: true,
-    assetsRoot: null,
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -61,6 +60,12 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
         profile,
         _academyAccount: from,
       });
+    if (role === 'student' || role === 'guardian') {
+      const page = await (await send('/homework', cookie)).text();
+      assert.match(page, /숙제 자료/);
+      assert.match(page, /\/assets\/demo-homework-fractions\.pdf" download/);
+      assert.doesNotMatch(page, /\/assets\/demo-homework-english\.pdf/);
+    }
     assert.equal((await choose(id, 'TA_VISITOR')).status, 403);
     assert.equal((await choose(id, alt)).status, 303);
     const home = await (await send('/', cookie)).text();
@@ -83,6 +88,23 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       (await send('/settings', cookie, { character: 'water' })).status,
       409,
     );
+    if (role === 'student' || role === 'guardian') {
+      const page = await (await send('/homework', cookie)).text();
+      assert.match(page, /숙제 자료/);
+      assert.match(page, /\/assets\/demo-homework-english\.pdf" download/);
+      assert.doesNotMatch(page, /\/assets\/demo-homework-fractions\.pdf/);
+      if (role === 'student') {
+        const file = await send('/assets/demo-homework-english.pdf', cookie);
+        assert.equal(file.status, 200);
+        assert.equal(file.headers.get('content-type'), 'application/pdf');
+        assert.equal(
+          Buffer.from(await file.arrayBuffer())
+            .subarray(0, 5)
+            .toString(),
+          '%PDF-',
+        );
+      }
+    }
     if (role === 'student') {
       const assignments = await (await send('/homework', cookie)).text();
       assert.match(assignments, /일과와 약속 시간 복습/);

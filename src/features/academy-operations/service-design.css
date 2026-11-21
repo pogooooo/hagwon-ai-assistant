@@ -4011,3 +4011,22 @@ a.assessment-entry.button-link {
     flex: 1 0 auto;
   }
 }
+
+.homework-material {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.homework-material h2,
+.homework-material p,
+.homework-material .actions {
+  margin: 0;
+}
+.homework-material p span {
+  display: inline-block;
+  margin-inline-start: 8px;
+  color: var(--muted);
+  font-size: 0.85em;
+}
