@@ -457,3 +457,19 @@ test('an explicit approved academy address survives reader outages without accep
     'abstained',
   );
 });
+
+test('a verified visitor parking policy survives document reader failure', async () => {
+  const env = await setup(() => ({}));
+  await env.register(
+    'directions',
+    '## 오시는 길\n학원은 배움길 12에 있습니다. 방문자 주차장을 운영하지 않습니다.',
+  );
+  const result = await env.ask('차 가져가도 돼요?');
+  assert.equal(result.answer.status, 'answered', result.answer.answer);
+  assert.match(result.answer.answer, /방문자 주차장을 운영하지 않습니다/);
+  assert.deepEqual(
+    result.answer.citations.map((citation) => citation.documentId),
+    ['directions'],
+  );
+  assert.equal(env.inputs.length, 0);
+});
