@@ -127,7 +127,12 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       assert.match(examples, /출결 기록 없음/);
       assert.doesNotMatch(examples, /초등 수학 · 분수 계산/);
       const documents = await (await send('/documents', cookie)).text();
-      assert.doesNotMatch(documents, /<th>공개 범위<\/th>/);
+      assert.doesNotMatch(documents, /<th>공개 범위<\/th>|철회 이력 포함/);
+      const reportHub = await (
+        await send('/student-reports?view=assignments', cookie)
+      ).text();
+      assert.match(reportHub, /학습 리포트/);
+      assert.match(reportHub, /과제별 결과/);
       assert.doesNotMatch(
         documents,
         /<header[\s\S]*?profile-link[\s\S]*?<\/header>/,

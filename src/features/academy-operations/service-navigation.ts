@@ -19,6 +19,10 @@ const symbols: Record<string, [string, string]> = {
     '<path d="M5 3h14v18H5Z"/><path d="m8 12 3 3 5-6M8 6h5"/>',
   ],
   '/learning': ['learning', '<path d="M4 3v18h17M8 17v-5m5 5V7m5 10V3"/>'],
+  '/student-reports': [
+    'learning',
+    '<path d="M4 3v18h17M8 17v-5m5 5V7m5 10V3"/>',
+  ],
   '/briefing': [
     'learning',
     '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',

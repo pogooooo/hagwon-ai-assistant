@@ -806,7 +806,7 @@ export function homeworkOverview(ctx: PageContext) {
       ),
     results: staff
       ? []
-      : submissions.filter(({ confirmed_at }) => confirmed_at).slice(0, 4),
+      : submissions.filter(({ confirmed_at }) => confirmed_at),
   };
 }
 

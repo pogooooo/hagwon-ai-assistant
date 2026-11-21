@@ -410,11 +410,39 @@ function submit(ctx: PageContext, form: FormData) {
     return '/student-reports?id=' + r.id;
   });
 }
-function render(ctx: PageContext) {
+interface AssignmentResult {
+  href: string;
+  title: string;
+  studentName: string;
+  date: string;
+}
+
+export function renderStudentReports(
+  ctx: PageContext,
+  readAssignments: () => AssignmentResult[] = () => [],
+) {
+  const family = ctx.actor.role === 'guardian';
+  const assignments =
+    family && ctx.url.searchParams.get('view') === 'assignments';
+  const tabs = family
+    ? `<div class="workspace-heading"><h1>학습 리포트</h1></div><nav class="page-tabs view-tabs" aria-label="리포트 종류"><a href="/student-reports?view=assignments"${assignments ? ' aria-current="page"' : ''}>과제별 결과</a><a href="/student-reports"${!assignments ? ' aria-current="page"' : ''}>월간 리포트</a></nav>`
+    : '';
+  if (assignments) {
+    const entries = readAssignments();
+    return (
+      tabs +
+      `<section class="panel"><h2>과제별 결과</h2>${
+        entries.length
+          ? `<ul class="grade-queue-list">${entries.map((result) => `<li><a class="grade-queue-entry" href="${h(result.href)}"><strong>${h(result.title)}</strong><span class="grade-student">${h(result.studentName)}</span><time class="pill">${h(result.date)}</time></a></li>`).join('')}</ul>`
+          : '<p class="muted">선생님이 확인한 과제 결과가 등록되면 여기에 표시됩니다.</p>'
+      }</section>`
+    );
+  }
   const students = accessibleStudents(ctx.db, ctx.actor),
     classes = accessibleClasses(ctx.db, ctx.actor);
-  let html =
-    '<h1>학생 분석·월간 리포트</h1><p>교사 확정 채점과 기록된 출결만 사용합니다. 초안·상담 자료는 교사만 보고, 승인한 월간 리포트만 해당 보호자에게 공개됩니다.</p>';
+  let html = family
+    ? tabs + '<h2>월간 리포트</h2>'
+    : '<div class="workspace-heading"><h1>월간 리포트</h1></div><p>확정된 학습과 출결 기록으로 학생별 리포트를 작성합니다.</p>';
   const options = (list: { id: string; name: string }[]) =>
     list
       .map((s) => `<option value="${h(s.id)}">${h(s.name)}</option>`)
@@ -465,6 +493,6 @@ export const studentReportsModule: OperationModule = {
   label: '학생 분석·리포트',
   roles: ['admin', 'teacher', 'guardian'],
   setup: setupStudentReports,
-  render,
+  render: renderStudentReports,
   submit,
 };
