@@ -3194,6 +3194,45 @@ td {
 .section-jump[hidden] {
   display: none;
 }
+.workspace form.inline-form,
+.workspace
+  form[method='get']:has(> label:only-of-type > select):has(> button):not(
+    :has(fieldset, textarea, div)
+  ) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+.workspace
+  :is(.inline-form, .task-filters, .document-filters, form[method='get'])
+  :is(select, button) {
+  box-sizing: border-box;
+  height: 44px;
+}
+.workspace form label:has(> input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+.workspace form label > input[type='checkbox'] {
+  flex: none;
+  margin: 0;
+}
+@media (max-width: 780px) {
+  .topbar .section-jump {
+    display: none;
+  }
+}
+.workspace :where(a[href]) {
+  color: var(--accent, #526035);
+  text-decoration-color: #91a078;
+  text-underline-offset: 0.2em;
+}
+.workspace :where(a[href]):focus-visible {
+  outline: 2px solid #667b42;
+  outline-offset: 3px;
+}
 .workspace :is(h2, [id], [data-jump-label]) {
   scroll-margin-top: 76px;
 }
