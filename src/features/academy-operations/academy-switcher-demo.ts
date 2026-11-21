@@ -1,5 +1,7 @@
+import { gradingService } from '../homework-grading/module.ts';
+import { getActor } from './directory.ts';
 import type { OperationsDatabase } from './database.ts';
-import { rows, transaction } from './shared.ts';
+import { one, rows, transaction } from './shared.ts';
 
 const academyId = 'AC_ONDAP_LANGUAGE_DEMO';
 
@@ -153,4 +155,38 @@ export function seedDemoConsultationGuides(db: OperationsDatabase) {
       );
     }
   });
+}
+
+export function seedDemoLanguageHomework(db: OperationsDatabase) {
+  const actor = getActor(db, 'ONDAP_LANGUAGE_TA_TEACHER');
+  if (
+    !actor ||
+    actor.role !== 'teacher' ||
+    actor.academyId !== academyId ||
+    !one(
+      db,
+      'SELECT 1 FROM academies WHERE id=? AND name=?',
+      academyId,
+      '[가상] 온답 어학원',
+    ) ||
+    !one(
+      db,
+      'SELECT 1 FROM teacher_classes WHERE class_id=? AND teacher_id=?',
+      'ONDAP_DEMO_ENGLISH',
+      actor.id,
+    )
+  )
+    return;
+  const ctx = { db, actor, url: new URL('http://localhost/') };
+  gradingService(db).register(
+    ctx,
+    {
+      title: '일과와 약속 시간 복습',
+      class_id: 'ONDAP_DEMO_ENGLISH',
+      rights_ref: 'rights_ondap_language_original',
+      scope: { kind: 'worksheet', subject: 'ENG', skill: '시간 전치사' },
+      items: [],
+    },
+    'ondap-demo-language-homework-v1',
+  );
 }

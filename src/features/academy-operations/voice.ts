@@ -1,3 +1,4 @@
+import { serviceIcon } from './service-navigation.ts';
 import { randomUUID } from 'node:crypto';
 import type { RagAnswer } from '../rag-consultation/contract.ts';
 import { ask, loadThread, currentCitationRevisions } from './consultation.ts';
@@ -246,25 +247,25 @@ export const voiceModule: OperationModule = {
           : '근거 변경으로 이전 답변을 요약에서 제외했습니다.';
       })
       .join('\n\n');
-    return `<script src="/voice-ui.js" defer></script><div class="page-heading"><h1>음성 상담</h1><p>질문을 확인한 뒤 상담합니다. 음성 파일은 서버에 저장하지 않습니다.</p></div><p data-voice-status role="status">${ctx.services?.speechAvailable ? 'CLOVA Speech 연결' : '음성 연결 전 · 글로 같은 흐름을 이용할 수 있습니다.'}</p>${parent?.closed ? `<section class="panel"><h2>상담 종료</h2><a href="/consultation?id=${h(parent.thread_id)}">상담 이력·담당자 확인</a><h3>상담 요약</h3><p class="preserve">${h(summary || '인식 결과를 담당자가 확인합니다.')}</p><h3>안내 문자 초안</h3><textarea readonly rows="6">${h(summary || '학원 담당자가 문의 내용을 확인한 뒤 안내하겠습니다.')}</textarea><p class="muted">초안이며 문자를 발송하지 않습니다.</p><a class="button-link" href="/voice">새 음성 상담</a></section>` : ''}
+    return `<script src="/voice-ui.js" defer></script><div class="workspace-heading voice-heading"><div><h1>음성 상담</h1><p>말하거나 질문을 적어 학원 안내를 확인하세요.</p></div><a class="button-link subtle-link" href="/consultation">채팅 상담 열기</a></div><div class="voice-workspace"><section class="voice-status-band"><span class="voice-mic" aria-hidden="true">${serviceIcon('/voice')}</span><div><strong>${ctx.services?.speechAvailable ? '마이크로 질문하기' : '지금은 글로 질문할 수 있어요'}</strong><p data-voice-status role="status">${ctx.services?.speechAvailable ? '한 번에 최대 60초 동안 말할 수 있습니다.' : '음성 인식 연결 전입니다.'}</p></div></section>${parent?.closed ? `<section class="panel voice-card"><h2>상담 종료</h2><a class="workspace-link" href="/consultation?id=${h(parent.thread_id)}">상담 내용 보기</a><h3>상담 요약</h3><p class="preserve">${h(summary || '인식 결과를 담당자가 확인합니다.')}</p><h3>안내 문자 초안</h3><textarea readonly rows="6">${h(summary || '학원 담당자가 문의 내용을 확인한 뒤 안내하겠습니다.')}</textarea><p class="muted">초안이며 문자를 발송하지 않습니다.</p><a class="button-link" href="/voice">새 음성 상담</a></section>` : ''}
     ${records
       .map((r) => {
         const answer = readableAnswer(ctx, r);
-        return `<section class="panel"><p>인식 원문: ${h(r.original)}</p>${r.state === 'pending' ? `<form method="post">${hidden}<input type="hidden" name="turnId" value="${h(r.id)}"><h2>반·날짜·시간이 맞나요?</h2><p class="preserve">${h(r.question)}</p><div class="actions"><button name="action" value="confirm">맞습니다 · 답변 받기</button><button class="secondary" name="action" value="retry">다시 입력</button></div></form>` : answer ? `<p class="preserve">${h(answer.answer)}</p><ul class="citations">${answer.citations.map((c) => `<li>${h(c.title)} · ${h(c.location)}</li>`).join('')}</ul>${ctx.services?.voiceAvailable ? `<button type="button" data-speak="${h(r.id)}">답변 듣기</button>` : '<p class="muted">음성 합성 연결 전입니다. 글 답변을 확인해 주세요.</p>'}` : r.state === 'answered' ? '<p>근거 변경으로 이전 답변을 표시하지 않습니다.</p>' : r.state === 'failed' ? '<p>인식 실패 · 다시 입력해 주세요.</p>' : ''}</section>`;
+        return `<section class="panel voice-card"><h2>질문</h2><p class="voice-question preserve">${h(r.original)}</p>${r.state === 'pending' ? `<form method="post">${hidden}<input type="hidden" name="turnId" value="${h(r.id)}"><h2>반·날짜·시간이 맞나요?</h2><p class="preserve">${h(r.question)}</p><div class="actions"><button name="action" value="confirm">맞습니다 · 답변 받기</button><button class="secondary" name="action" value="retry">다시 입력</button></div></form>` : answer ? `<h3>학원 안내</h3><p class="preserve">${h(answer.answer)}</p>${answer.citations.length ? `<details class="source-details"><summary>확인한 자료 ${answer.citations.length}개</summary><ul class="citations">${answer.citations.map((c) => `<li>${h(c.title)} · ${h(c.location)}</li>`).join('')}</ul></details>` : ''}${ctx.services?.voiceAvailable ? `<button type="button" data-speak="${h(r.id)}">답변 듣기</button>` : ''}` : r.state === 'answered' ? '<p>근거 변경으로 이전 답변을 표시하지 않습니다.</p>' : r.state === 'failed' ? '<p>인식 실패 · 다시 입력해 주세요.</p>' : ''}</section>`;
       })
       .join('')}
     ${
       !parent?.closed && !pending
-        ? `<section class="panel"><form method="post" enctype="multipart/form-data" data-voice-form>${hidden}<input type="hidden" name="action" value="input"><label>대상 학생<select name="studentId"><option value="">선택 사항</option>${accessibleStudents(
+        ? `<section class="panel voice-card"><h2>${parent ? '이어서 질문하기' : '학원에 질문하기'}</h2><form method="post" class="voice-composer" enctype="multipart/form-data" data-voice-form>${hidden}<input type="hidden" name="action" value="input"><label>대상 학생<select name="studentId"><option value="">선택 사항</option>${accessibleStudents(
             ctx.db,
             ctx.actor,
           )
             .map((s) => `<option value="${h(s.id)}">${h(s.name)}</option>`)
             .join(
               '',
-            )}</select></label><label>질문<textarea name="text" maxlength="500" rows="3"></textarea></label><input type="file" name="audio" accept="audio/wav" hidden data-voice-file><div class="actions">${ctx.services?.speechAvailable ? '<button type="button" data-record>말로 질문</button><button type="button" data-stop hidden>녹음 끝내기</button>' : ''}<button type="submit">글로 질문</button></div></form></section>`
+            )}</select></label><label>질문<textarea name="text" maxlength="500" rows="3" placeholder="예. 상담 예약은 어떻게 하나요?"></textarea></label><input type="file" name="audio" accept="audio/wav" hidden data-voice-file><div class="actions voice-buttons">${ctx.services?.speechAvailable ? '<button type="button" data-record>말로 질문</button><button type="button" data-stop hidden>녹음 끝내기</button>' : ''}<button type="submit">글로 질문</button></div></form></section>`
         : ''
-    }${parent && !parent.closed ? `<form method="post">${hidden}<button class="secondary" name="action" value="end">상담 종료·요약 보기</button></form>` : ''}`;
+    }${parent && !parent.closed ? `<form method="post">${hidden}<button class="secondary" name="action" value="end">상담 종료·요약 보기</button></form>` : ''}</div>`;
   },
   async submit(ctx, form) {
     guardian(ctx);

@@ -4039,14 +4039,10 @@ a.workspace-link:focus-visible {
 .document-list a.workspace-link:hover {
   border-bottom-color: currentColor;
 }
-.report-example-list,
 .report-links {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-.report-example-section + .report-example-section {
-  margin-top: 20px;
 }
 
 #notices-bookings .actions a.workspace-link {
@@ -4055,7 +4051,7 @@ a.workspace-link:focus-visible {
 }
 
 /* Match common actions to their reading order and viewport. */
-.workspace-heading > a.button-link,
+.workspace-heading > a.button-link:not(.subtle-link),
 a.assessment-entry.button-link {
   color: #fff;
   text-decoration: none;
@@ -4159,5 +4155,168 @@ a.assessment-entry.button-link {
   }
   .grade-queue-entry strong {
     grid-column: 1 / -1;
+  }
+}
+
+.report-library {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 216px), 1fr));
+  margin: 0 0 18px;
+}
+.report-library a.grade-report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 15px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.report-library a[aria-current='page'],
+.report-library a:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.report-library small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+}
+.report-document {
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  max-width: 920px;
+  overflow: hidden;
+  margin-block-end: 20px;
+}
+.report-document-header {
+  background: linear-gradient(120deg, var(--accent-soft), #f7f8f1);
+  padding: clamp(16px, 3vw, 32px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.report-document-header :is(h2, p) {
+  margin: 0;
+}
+.report-document-header p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+.report-document-body {
+  padding: clamp(16px, 3vw, 32px);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.report-document-body h3 {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+  margin: 24px 0 8px;
+}
+.report-document-body h3:first-child,
+.report-document-body p:first-child {
+  margin-top: 0;
+}
+.report-document-body p {
+  margin: 0 0 8px;
+}
+.report-table {
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.report-table table {
+  width: 100%;
+  margin: 0;
+}
+.report-table th {
+  background: var(--accent-soft);
+  text-align: left;
+}
+.report-table :is(th, td) {
+  padding: 8px 12px;
+}
+.voice-workspace,
+.poll-workspace {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+.voice-workspace {
+  max-width: 820px;
+}
+.voice-status-band {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: var(--accent-soft);
+  border-radius: 16px;
+}
+.voice-status-band p,
+.voice-heading p {
+  margin: 0;
+  color: var(--muted);
+}
+.voice-mic {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 20px;
+}
+.voice-mic svg {
+  width: 20px;
+  height: 20px;
+}
+.voice-card,
+.poll-workspace .panel {
+  margin: 0;
+}
+.voice-question {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+.voice-composer {
+  display: grid;
+  gap: 12px;
+}
+.voice-workspace .voice-buttons {
+  margin: 0;
+}
+.voice-workspace [hidden] {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .report-library[aria-label='월간 리포트 목록'] {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    padding-bottom: 8px;
+  }
+  .report-library[aria-label='월간 리포트 목록'] > a {
+    flex: 0 0 min(80%, 220px);
+    scroll-snap-align: start;
+  }
+  .voice-heading {
+    flex-wrap: wrap;
+  }
+  .voice-buttons :is(button, a) {
+    flex: 1 0 auto;
   }
 }
