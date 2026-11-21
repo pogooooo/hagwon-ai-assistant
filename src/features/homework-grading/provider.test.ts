@@ -128,6 +128,26 @@ test('missing deployment input approval performs no outbound calls', async () =>
   );
   assert.equal(calls, 0);
 });
+test('Workers-compatible photo requests reject redirects without resending photos or credentials', async () => {
+  let calls = 0;
+  const grader = createNaverGrader(env, undefined, async (url, init) => {
+    calls++;
+    assert.equal(
+      new URL(String(url)).origin,
+      'https://clovastudio.stream.ntruss.com',
+    );
+    assert.equal(init?.redirect, 'manual');
+    return new Response(null, {
+      status: 307,
+      headers: { Location: 'https://other.invalid/' },
+    });
+  });
+  await assert.rejects(
+    grader.read([{ ...photo(), page_no: 1 }], definition()),
+    /PROVIDER_REQUEST_REJECTED/,
+  );
+  assert.equal(calls, 1);
+});
 
 test('vision aliases are reversible and one bad page does not erase another page', async () => {
   const a = definition();
@@ -147,9 +167,9 @@ test('vision aliases are reversible and one bad page does not erase another page
     return Response.json({
       result: {
         message: {
-          content: JSON.stringify({
-            items: [{ ...reading(a.items[1]), item_ref: 'i001' }],
-          }),
+          content: JSON.stringify([
+            { ...reading(a.items[1]), item_ref: 'i001' },
+          ]),
         },
       },
     });

@@ -92,7 +92,8 @@ export function createNaverGrader(
         'https://clovastudio.stream.ntruss.com/v3/chat-completions/' + model,
         {
           method: 'POST',
-          redirect: 'error',
+          // Workers accepts manual/follow only. Keep credentials and images on the CLOVA origin.
+          redirect: 'manual',
           signal: AbortSignal.timeout(60000),
           headers: {
             Authorization: 'Bearer ' + key,
@@ -116,6 +117,8 @@ export function createNaverGrader(
     } catch {
       throw new GradingError('PROVIDER_TEMPORARY_FAILURE', 503);
     }
+    if (response.status >= 300 && response.status < 400)
+      throw new GradingError('PROVIDER_REQUEST_REJECTED', 503);
     if (response.status === 401 || response.status === 403) {
       authenticationFailed = true;
       throw new GradingError('PROVIDER_AUTHENTICATION_FAILED', 503);
@@ -178,7 +181,10 @@ export function createNaverGrader(
         if (!manifest.length) continue;
         try {
           const envelope = parse(
-            z.object({ items: z.array(z.unknown()).max(500) }).strict(),
+            z.preprocess(
+              (v) => (Array.isArray(v) ? { items: v } : v),
+              z.object({ items: z.array(z.unknown()).max(500) }).strict(),
+            ),
             await chat(
               'HCX-005',
               mode === 'literal_verification'
