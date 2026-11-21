@@ -826,12 +826,12 @@ async function render(ctx: PageContext) {
             ['upload', '숙제 제출'],
             ['queue', '제출 현황'],
             ['results', '채점 결과'],
-            ['reports', '학습 리포트'],
+            ['reports', '채점 리포트'],
           ]
         : [
-            ['queue', '제출 현황'],
             ['results', '채점 결과'],
             ['reports', '학습 리포트'],
+            ['queue', '제출 현황'],
             ['upload', '자녀 숙제 제출'],
           ];
     const view =
