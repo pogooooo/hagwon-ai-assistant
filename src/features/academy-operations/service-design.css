@@ -3999,3 +3999,52 @@ body[data-page='login'] {
     font-size: 13px;
   }
 }
+
+.schedule-heading {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+a.workspace-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface, white);
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+a.workspace-link:hover {
+  border-color: currentColor;
+  background: var(--soft);
+}
+a.workspace-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#makeup li > .workspace-link {
+  margin-inline-start: 8px;
+}
+.document-list a.workspace-link {
+  border-color: transparent;
+  background: transparent;
+  padding-inline: 0 8px;
+}
+.document-list a.workspace-link:hover {
+  border-bottom-color: currentColor;
+}
+.report-example-list,
+.report-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.report-example-section + .report-example-section {
+  margin-top: 20px;
+}

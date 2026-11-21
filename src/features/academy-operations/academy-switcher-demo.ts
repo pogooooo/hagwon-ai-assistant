@@ -92,3 +92,37 @@ export function seedAcademyChoices(db: OperationsDatabase) {
     }
   });
 }
+
+/** Add the public program guide to existing demos as well as fresh installs. */
+export function seedDemoCourseGuide(db: OperationsDatabase) {
+  const course = db
+    .prepare(
+      `SELECT c.name FROM classes c JOIN academies a ON a.id=c.academy_id
+    WHERE c.id='ONDAP_DEMO_ENGLISH' AND a.id=? AND a.name='[가상] 온답 어학원'
+      AND c.name='영어 회화반' AND c.grade='중등'`,
+    )
+    .get(academyId);
+  if (!course) return;
+  const guide = {
+    academyId,
+    documentId: 'ONDAP_LANGUAGE_COURSES',
+    revision: 1,
+    documentType: 'academy_info',
+    visibility: 'academy_public',
+    title: '온답 어학원 정규 수업 안내',
+    text: '## 교육 대상 및 개설 과목\n\n| 과목 | 개설 반 | 수강 대상 |\n| --- | --- | --- |\n| 영어 | 영어 회화반 | 중학생 |',
+    validFrom: '2026-01-01T00:00:00+09:00',
+    approvedAt: '2026-01-01T00:00:00+09:00',
+  };
+  db.prepare(
+    `INSERT INTO op_document_versions(academy_id,document_id,revision,input,state)
+    SELECT ?,?,1,?,'published' WHERE NOT EXISTS
+    (SELECT 1 FROM op_document_versions WHERE academy_id=? AND document_id=?)`,
+  ).run(
+    academyId,
+    guide.documentId,
+    JSON.stringify(guide),
+    academyId,
+    guide.documentId,
+  );
+}

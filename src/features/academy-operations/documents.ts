@@ -596,8 +596,8 @@ async function renderDocuments(ctx: PageContext) {
             : activeIds.has(input.documentId + ':' + input.revision)
               ? '공개 중'
               : '승인됨';
-      return `<tr><td><a href="/documents?${link(input)}#document-preview">${h(input.title)}</a></td>
-      <td>v${input.revision}</td><td>${h(visibilityLabels[input.visibility])}</td>
+      return `<tr><td><a class="workspace-link" href="/documents?${link(input)}#document-preview">${h(input.title)} <span aria-hidden="true">›</span></a></td>
+      <td>v${input.revision}</td>
       <td>${h(label)}</td></tr>`;
     })
     .join('');
@@ -613,7 +613,7 @@ async function renderDocuments(ctx: PageContext) {
   return `<div class="workspace-heading"><h1>학원 자료</h1>${admin ? '<a class="button-link" href="/documents?view=create#document-edit">자료 등록</a>' : ''}</div>
     ${create ? revisionForm(ctx) : ''}
     ${admin && selected?.state === 'draft' && ctx.url.searchParams.get('scan') === 'ready' ? '<p class="notice" role="status">판독을 완료했습니다. 내용을 검수해 주세요.</p>' : ''}
-    ${scheduleDocs.length ? `<section class="panel"><h2>일정에서 자동 반영된 자료</h2><p class="muted">원본 일정에서 관리합니다. 수업 시간·휴강·보강 상담은 이 자료를 기준으로 답합니다.</p>${scheduleDocs.map((d) => `<details><summary>${h(d.title)} · v${d.revision}</summary><pre class="preview">${h(d.text)}</pre><a href="/schedule?view=makeup">원본 일정 보기</a></details>`).join('')}</section>` : ''}
+    ${scheduleDocs.length ? `<section class="panel"><h2>일정에서 자동 반영된 자료</h2><p class="muted">원본 일정에서 관리합니다. 수업 시간·휴강·보강 상담은 이 자료를 기준으로 답합니다.</p>${scheduleDocs.map((d) => `<details><summary>${h(d.title)} · v${d.revision}</summary><pre class="preview">${h(d.text)}</pre><a class="workspace-link" href="/schedule?view=makeup">원본 일정 보기 <span aria-hidden="true">›</span></a></details>`).join('')}</section>` : ''}
     <section class="panel">
       <h2>자료 목록</h2><form class="document-filters" method="get"><label>자료 검색<input name="q" value="${h(search)}" maxlength="200" placeholder="제목 또는 본문"></label><label>분류<select name="category"><option value="">전체 분류</option>${Object.entries(
         documentTypes,
@@ -625,7 +625,7 @@ async function renderDocuments(ctx: PageContext) {
         .join(
           '',
         )}</select></label><label class="check-label"><input type="checkbox" name="withdrawn" value="1"${includeWithdrawn ? ' checked' : ''}>철회 이력 포함</label><button>검색</button></form>
-      ${list ? `<div class="table-wrap"><table><thead><tr><th>제목</th><th>개정</th><th>공개 범위</th><th>상태</th></tr></thead><tbody>${list}</tbody></table></div>` : '<p class="muted">열람할 수 있는 자료가 없습니다.</p>'}
+      ${list ? `<div class="table-wrap document-list"><table><thead><tr><th>제목</th><th>개정</th><th>상태</th></tr></thead><tbody>${list}</tbody></table></div>` : '<p class="muted">열람할 수 있는 자료가 없습니다.</p>'}
     </section>
     ${
       selected
@@ -635,8 +635,8 @@ async function renderDocuments(ctx: PageContext) {
       ${admin && selected.state === 'draft' && hasScanReview(selected.input) ? '<p class="notice">판독이 일치하지 않은 위치를 원본에서 확인하고 새 개정판의 본문을 수정해 주세요.</p>' : ''}
       <pre class="preview">${h(selected.input.text)}</pre>${canPreview ? `<details class="panel" ${question ? 'open' : ''}><summary>이 자료로 답변 미리보기</summary><form method="get"><input type="hidden" name="id" value="${h(selected.input.documentId)}"><input type="hidden" name="revision" value="${selected.input.revision}"><label>질문<input name="previewQuestion" maxlength="500" required value="${h(question)}"></label><button>근거 확인</button></form>${preview}</details>` : ''}
       <div class="actions">
-        <a href="/documents/download?${link(selected.input)}">확인한 텍스트 내려받기</a>
-        ${admin && selected.originalName ? `<a href="/documents/download?${link(selected.input)}&amp;original=1">원본 파일 내려받기</a>` : ''}
+        <a class="workspace-link" href="/documents/download?${link(selected.input)}">확인한 텍스트 내려받기</a>
+        ${admin && selected.originalName ? `<a class="workspace-link" href="/documents/download?${link(selected.input)}&amp;original=1">원본 파일 내려받기</a>` : ''}
       </div>
       ${
         admin && canWithdraw
