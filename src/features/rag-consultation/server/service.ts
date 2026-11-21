@@ -39,6 +39,7 @@ import {
   answerEventReading,
   answerEventRegistration,
 } from './answer/event-evidence.ts';
+import { answerPublicOffice } from './answer/public-office.ts';
 import { answerConsultationWindow } from './answer/consultation-window.ts';
 import {
   answerConsultationBookingTime,
@@ -361,6 +362,11 @@ export function createRagConsultationService(
       return routeAnalysis(ctx, studentIdHint);
     }
     if (ctx.engine === 'planned') {
+      const office = await answerPublicOffice(ctx);
+      if (office) {
+        trace.domain = 'info';
+        return office;
+      }
       const booking = await answerConsultationBookingTime(ctx);
       if (booking) {
         trace.domain = 'info';

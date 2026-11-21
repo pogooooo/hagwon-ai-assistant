@@ -94,7 +94,7 @@ export function seedAcademyChoices(db: OperationsDatabase) {
 }
 
 /** Add the public program guide to existing demos as well as fresh installs. */
-export function seedDemoCourseGuide(db: OperationsDatabase) {
+export function seedDemoConsultationGuides(db: OperationsDatabase) {
   const course = db
     .prepare(
       `SELECT c.name FROM classes c JOIN academies a ON a.id=c.academy_id
@@ -103,26 +103,54 @@ export function seedDemoCourseGuide(db: OperationsDatabase) {
     )
     .get(academyId);
   if (!course) return;
-  const guide = {
-    academyId,
-    documentId: 'ONDAP_LANGUAGE_COURSES',
-    revision: 1,
-    documentType: 'academy_info',
-    visibility: 'academy_public',
-    title: '온답 어학원 정규 수업 안내',
-    text: '## 교육 대상 및 개설 과목\n\n| 과목 | 개설 반 | 수강 대상 |\n| --- | --- | --- |\n| 영어 | 영어 회화반 | 중학생 |',
-    validFrom: '2026-01-01T00:00:00+09:00',
-    approvedAt: '2026-01-01T00:00:00+09:00',
-  };
-  db.prepare(
+  const guides = [
+    {
+      documentId: 'ONDAP_LANGUAGE_COURSES',
+      documentType: 'academy_info',
+      title: '온답 어학원 정규 수업 안내',
+      text: '## 교육 대상 및 개설 과목\n\n| 과목 | 개설 반 | 수강 대상 |\n| --- | --- | --- |\n| 영어 | 영어 회화반 | 중학생 |',
+    },
+    {
+      documentId: 'ONDAP_LANGUAGE_FEES',
+      documentType: 'fee',
+      title: '영어 회화반 수강료',
+      text: '# 영어 회화반 월 수강료\n\n| 반 | 월 수강료 |\n| --- | --- |\n| 영어 회화반 | 210,000원 |',
+    },
+    {
+      documentId: 'ONDAP_LANGUAGE_TIMETABLE',
+      documentType: 'schedule',
+      title: '영어 회화반 정규 시간표',
+      text: '# 영어 회화반 정규 시간표\n\n| 반 | 요일 | 수업 시간 |\n| --- | --- | --- |\n| 영어 회화반 | 화요일·목요일 | 17:00~18:20 |',
+    },
+    {
+      documentId: 'ONDAP_LANGUAGE_VISIT',
+      documentType: 'academy_info',
+      title: '온답 어학원 방문과 상담 안내',
+      text: '# 학원 위치\n\n학원 주소는 가상시 온답구 배움로 24, 온답센터 2층입니다.\n\n## 주차\n\n온답센터는 방문자 주차장을 운영하지 않습니다.\n\n## 상담 신청 방법\n\n상담 예약은 앱의 일정·예약 메뉴에서 희망 시간대를 선택하여 신청합니다.',
+    },
+  ];
+  const add = db.prepare(
     `INSERT INTO op_document_versions(academy_id,document_id,revision,input,state)
     SELECT ?,?,1,?,'published' WHERE NOT EXISTS
     (SELECT 1 FROM op_document_versions WHERE academy_id=? AND document_id=?)`,
-  ).run(
-    academyId,
-    guide.documentId,
-    JSON.stringify(guide),
-    academyId,
-    guide.documentId,
   );
+  transaction(db, () => {
+    for (const guide of guides) {
+      const input = {
+        ...guide,
+        academyId,
+        revision: 1,
+        visibility: 'academy_public',
+        validFrom: '2026-01-01T00:00:00+09:00',
+        approvedAt: '2026-01-01T00:00:00+09:00',
+      };
+      add.run(
+        academyId,
+        guide.documentId,
+        JSON.stringify(input),
+        academyId,
+        guide.documentId,
+      );
+    }
+  });
 }
