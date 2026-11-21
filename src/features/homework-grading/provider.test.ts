@@ -167,9 +167,9 @@ test('vision aliases are reversible and one bad page does not erase another page
     return Response.json({
       result: {
         message: {
-          content: JSON.stringify({
-            items: [{ ...reading(a.items[1]), item_ref: 'i001' }],
-          }),
+          content: JSON.stringify([
+            { ...reading(a.items[1]), item_ref: 'i001' },
+          ]),
         },
       },
     });

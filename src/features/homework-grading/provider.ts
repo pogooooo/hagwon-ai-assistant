@@ -181,7 +181,10 @@ export function createNaverGrader(
         if (!manifest.length) continue;
         try {
           const envelope = parse(
-            z.object({ items: z.array(z.unknown()).max(500) }).strict(),
+            z.preprocess(
+              (v) => (Array.isArray(v) ? { items: v } : v),
+              z.object({ items: z.array(z.unknown()).max(500) }).strict(),
+            ),
             await chat(
               'HCX-005',
               mode === 'literal_verification'
