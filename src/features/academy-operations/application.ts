@@ -13,7 +13,10 @@ import {
   setupAcademySelection,
 } from './academy-switcher.ts';
 import { listedDemoLogins, setupDemoLogins } from './demo-logins.ts';
-import { seedAcademyChoices } from './academy-switcher-demo.ts';
+import {
+  seedAcademyChoices,
+  seedDemoCourseGuide,
+} from './academy-switcher-demo.ts';
 import type { OperationsDatabase } from './database.ts';
 import {
   createExternalServices,
@@ -52,7 +55,7 @@ import { studentReportsModule } from './student-reports.ts';
 import { previewTeamSchedule } from './team-schedule.ts';
 import { renderHome } from './home.ts';
 import { serviceNavigation } from './service-navigation.ts';
-import { preferencesModule, selectedCharacter } from './preferences.ts';
+import { preferencesModule } from './preferences.ts';
 import {
   escapeHtml as h,
   field,
@@ -202,6 +205,7 @@ export function createOperationsServer({
   for (const operation of modules) operation.setup(db, documentsRoot);
   if (showDemoAccounts) {
     seedAcademyChoices(db);
+    seedDemoCourseGuide(db);
     setupDemoLogins(db, trialPasswordHashes);
   }
   function hashSession(token: string) {
@@ -295,7 +299,6 @@ export function createOperationsServer({
       : 'AXR 학원';
     const pages = actor ? serviceMenu(actor) : [];
     const staff = actor?.role === 'admin' || actor?.role === 'teacher';
-    const character = actor ? selectedCharacter({ db, actor }) : 'walnut';
     const navigation = serviceNavigation(pages, current, staff);
     const brand = `<a class="brand" href="/"><img src="/assets/ondap-logo.png" alt="온답"></a>`;
     const title =
@@ -304,13 +307,13 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=academy-choice"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=consult-followup"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
       '" data-role="' +
       h(actor?.role ?? 'guest') +
-      '"><script src="/service-ui.js?v=ondap2" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=consult-followup" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName
@@ -321,9 +324,7 @@ export function createOperationsServer({
           (['admin', 'guardian'].includes(actor.role)
             ? `<a class="parent-inbox-link" href="/messages" aria-label="학원 알림${unreadParentCount({ db, actor, url: new URL('http://localhost/') }) ? ' · 읽지 않은 알림 있음' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="m4 6 8 7 8-7"/></svg>${unreadParentCount({ db, actor, url: new URL('http://localhost/') }) ? '<span class="unread-dot" aria-hidden="true"></span>' : ''}</a>`
             : '') +
-          '<a class="profile-link" href="/settings" aria-label="계정 설정"><img src="/assets/' +
-          character +
-          '.png" alt=""></a><span>' +
+          '<span>' +
           h(actor.name) +
           (actor.name === roleLabels[actor.role]
             ? ''
@@ -604,6 +605,7 @@ export function createOperationsServer({
         actor: sessionActor,
         url,
         assertCurrentAccess,
+        showReportExamples: showDemoAccounts,
         maxDocumentBytes,
         scanVision,
         scanPdfAvailable,

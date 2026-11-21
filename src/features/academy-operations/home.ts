@@ -1,7 +1,7 @@
 import { homeworkDashboard } from './homework-dashboard.ts';
 import { visibleParentMessages } from './parent-messages-model.ts';
 import { visibleCalendarEntries } from './calendar.ts';
-import { consultationOverview } from './consultation.ts';
+import { canAskConsultation, consultationOverview } from './consultation.ts';
 import { recentPublishedDocuments } from './documents.ts';
 import { homeworkOverview } from './homework.ts';
 import { recentLearningReports } from './learning.ts';
@@ -71,6 +71,7 @@ function schedulePanel(ctx: PageContext, from: string) {
 export function renderHome(ctx: PageContext) {
   const { actor } = ctx;
   const staff = actor.role === 'admin' || actor.role === 'teacher';
+  const showChat = canAskConsultation(actor);
   const visitor = actor.role === 'visitor';
   const now = new Date();
   const date = now.toLocaleDateString('ko-KR', {
@@ -122,7 +123,7 @@ export function renderHome(ctx: PageContext) {
     );
 
   const shortcuts = `<nav class="home-shortcuts" aria-label="자주 사용하는 서비스">${[
-    ...(actor.role === 'guardian' ? [['/consultation', '학원 상담']] : []),
+    ...(showChat ? [['/consultation', '학원 상담']] : []),
     ...(!visitor
       ? [
           ['/schedule', '수업 일정'],
@@ -265,7 +266,7 @@ export function renderHome(ctx: PageContext) {
     : '';
   return `${heading}${familyHero}${pendingMakeupNotices(ctx)}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
     <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
-    ${guardian ? `<div class="home-help">${search}</div>` : ''}
-    <div class="home-secondary">${visitor ? '' : documentList()}${guardian ? recentConsultations() : ''}</div>
+    ${showChat ? `<div class="home-help">${search}</div>` : ''}
+    <div class="home-secondary">${visitor ? '' : documentList()}${showChat ? recentConsultations() : ''}</div>
   </div>`;
 }
