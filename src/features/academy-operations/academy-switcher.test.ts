@@ -111,6 +111,21 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       ).text();
       assert.match(assignments, /일과와 약속 시간 복습/);
     }
+    if (role === 'admin' || role === 'teacher') {
+      const work = await (
+        await send('/consultation?status=reply', cookie)
+      ).text();
+      assert.match(work, /시간을 말할 때 at과 on/);
+      if (role === 'teacher') {
+        const makeup = await (
+          await send('/schedule?view=makeup', cookie)
+        ).text();
+        assert.match(makeup, /휴강 확정/);
+        assert.match(makeup, /보강 투표 진행 중/);
+        assert.match(makeup, /보강 투표 현황 보기/);
+        assert.doesNotMatch(makeup, /보강 가능 시간 등록|안내문 발송 대기/);
+      }
+    }
     if (role === 'admin') {
       const doc = await (await send('/documents', cookie)).text();
       assert.match(doc, /온답 어학원 운영시간 안내/);

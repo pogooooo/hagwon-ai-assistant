@@ -59,6 +59,9 @@ test('CLOVA Speech 요청: 키워드·동기 처리·오디오 외부 저장 금
       (init!.headers as Record<string, string>)['X-CLOVASPEECH-API-KEY'],
       'fixture-only',
     );
+    const media = (init!.body as FormData).get('media') as File;
+    assert.equal(media.name, 'question.wav');
+    assert.equal(media.type, 'audio/wav');
     const params = JSON.parse(String((init!.body as FormData).get('params')));
     assert.deepEqual(params.boostings, [
       { words: '중2 내신반' },

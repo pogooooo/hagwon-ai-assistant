@@ -125,7 +125,7 @@ test('음성 HTTP에서는 인식 원문만 저장하고 확인 요청 전 엔�
   assert.equal(input.status, 303);
   const page = await s.send(input.headers.get('location')!, guardian);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /반·날짜·시간이 맞나요/);
+  assert.match(await page.text(), /인식한 질문이 맞나요/);
   const record = s.db.prepare('SELECT * FROM op_voice_turns').get()!;
   assert.equal(record.original, '목요일 수업은 몇 시인가요?');
   assert.equal(record.state, 'pending');

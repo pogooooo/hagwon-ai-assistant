@@ -1316,6 +1316,7 @@ export class GradingService {
         ctx.actor.academyId,
         result.result_set_id,
         result.revision,
+        staff ? 1 : 0,
       )?.report;
     const found = lookup();
     if (found || !staff) return found;

@@ -88,7 +88,18 @@ if (restoredSchedule) {
 for (const form of document.querySelectorAll('#makeup form')) {
   const classSelect = form.querySelector('select[name="classId"]');
   const studentSelect = form.querySelector('select[name="studentId"]');
+  const scopeSelect = form.querySelector('select[name="scope"]');
   if (classSelect && studentSelect) {
+    if (scopeSelect) {
+      const setStudentField = () => {
+        const individual = scopeSelect.value === 'student';
+        studentSelect.closest('label').hidden = !individual;
+        studentSelect.disabled = !individual;
+        studentSelect.required = individual;
+      };
+      scopeSelect.addEventListener('change', setStudentField);
+      setStudentField();
+    }
     const filterStudents = () => {
       for (const option of studentSelect.options) {
         const allowed =

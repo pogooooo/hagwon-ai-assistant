@@ -201,6 +201,12 @@ test('HTTP photo upload → teacher review → purge → approved report with li
   assert.equal(approved.status, 303, await approved.text());
   assert.equal(readSubmission(f.ctx(), submission).raw_state, 'VERIFIED');
   assert.equal((await send(rawPath, teacher)).status, 410);
+  const completed = await send(location, instructor);
+  assert.equal(completed.status, 200);
+  const completedHtml = await completed.text();
+  assert.match(completedHtml, /원문은 삭제되었습니다/);
+  assert.match(completedHtml, /이 과제의 분석 리포트/);
+
   for (const actor of [instructor, student, parent])
     assert.ok(
       (await (await send('/learning', actor)).text()).includes(location),

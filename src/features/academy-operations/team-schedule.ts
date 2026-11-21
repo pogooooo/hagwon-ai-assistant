@@ -1,7 +1,7 @@
 import type { OperationsDatabase } from './database.ts';
 import type { SourceDocumentInput } from '../rag-consultation/server/types.ts';
 import { assertUnifiedSchedule } from './schedule-conflicts.ts';
-import { assertPollSourceEditable } from './makeup-polls.ts';
+import { assertPollSourceEditable, teamMakeupPoll } from './makeup-polls.ts';
 import { z } from 'zod';
 import {
   createEvent,
@@ -693,10 +693,49 @@ function render(ctx: PageContext) {
     list
       .map((x) => `<option value="${h(x.id)}">${h(x.name)}</option>`)
       .join('');
-  const eventCard = (
-    event: ScheduleEvent,
-  ) => `<article class="panel" id="event-${h(event.eventId)}"><div class="panel-heading"><h2>${h(academy.classes.find((c) => c.classId === event.classId)?.name)} ${event.scope === 'student' ? h(students.find((s) => s.id === event.studentId)?.name) + ' 결석' : '휴강'}</h2><span class="pill">${{ draft: '임시 저장', confirmed: '확정', withdrawn: '취소' }[event.status]}</span></div><p>${h(event.date)} · ${event.makeup ? `${h(event.makeup.date)} ${h(event.makeup.start)}~${h(event.makeup.end)} ${h(event.makeup.room)} 보강` : '보강 미정'}</p>
-    ${staff(ctx) && event.status !== 'withdrawn' && (ctx.actor.role === 'admin' || event.status === 'draft') ? `<form method="post">${hidden}<input type="hidden" name="eventId" value="${h(event.eventId)}"><div class="fields"><label>새 보강일<input type="date" name="makeupDate"></label><label>시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((r) => `<option>${h(r)}</option>`).join('')}</select></label></div><div class="actions"><button name="action" value="change">보강 지정·변경</button>${event.status === 'draft' && ctx.actor.role === 'admin' ? '<button name="action" value="confirm">일정 확정</button>' : ''}${event.makeup ? '<button class="secondary" name="action" value="clear">보강 취소</button>' : ''}<button class="secondary" name="action" value="withdraw">휴강·결석 취소</button></div></form>` : ''}${recommendation(event)}</article>`;
+  const eventCard = (event: ScheduleEvent) => {
+    const poll = teamMakeupPoll(ctx, event);
+    const slots = event.makeup ? [event.makeup] : (poll?.slots ?? []);
+    const description = event.scope === 'student' ? '결석' : '휴강';
+    const eventState =
+      event.status === 'draft'
+        ? '원장 승인 대기'
+        : event.status === 'withdrawn'
+          ? description + ' 취소'
+          : description + ' 확정';
+    const stage =
+      event.status === 'withdrawn'
+        ? '일정 취소'
+        : event.status === 'draft'
+          ? '보강 검토 중'
+          : slots.length
+            ? '보강 확정'
+            : poll?.state === 'open'
+              ? '보강 투표 진행 중'
+              : '보강 일정 미정';
+    const date = slots[0]?.date;
+    const next =
+      event.status !== 'confirmed'
+        ? ''
+        : date
+          ? `<a class="workspace-link" href="/schedule?month=${h(date.slice(0, 7))}">학원 일정 보기</a>`
+          : poll
+            ? `<a class="workspace-link" href="${h(poll.href)}">${staff(ctx) ? (poll.state === 'draft' ? '보강 후보 선택' : '보강 투표 현황 보기') : poll.responded ? '내 응답 보기' : '가능한 보강 시간 응답'}</a>`
+            : staff(ctx) && event.scope === 'class'
+              ? `<a class="workspace-link" href="/makeup-votes?source=${encodeURIComponent('team:' + event.eventId)}">보강 투표 준비</a>`
+              : '<p class="muted">보강 일정이 정해지면 학원 일정에 표시됩니다.</p>';
+    const mayEdit =
+      staff(ctx) &&
+      event.status !== 'withdrawn' &&
+      (ctx.actor.role === 'admin' || event.status === 'draft');
+    return `<article class="panel makeup-event" id="event-${h(event.eventId)}">
+      <div class="panel-heading"><h2>${h(academy.classes.find((c) => c.classId === event.classId)?.name)}${event.scope === 'student' ? ' · ' + h(students.find((s) => s.id === event.studentId)?.name) : ''}</h2></div>
+      <dl class="makeup-event-summary"><div><dt>${eventState}</dt><dd>${h(event.date)}</dd></div><div><dt>${stage}</dt><dd>${event.status === 'withdrawn' ? '취소된 일정입니다.' : slots.length ? slots.map((slot) => h(slot.date + ' · ' + slot.start + '~' + slot.end + ' · ' + slot.room)).join('<br>') : event.status === 'draft' ? '원장이 승인하면 일정에 공개됩니다.' : poll?.state === 'open' ? '학생·보호자가 가능한 시간에 응답합니다.' : '보강 시간이 아직 정해지지 않았습니다.'}</dd></div></dl>
+      ${next}
+      ${event.status === 'draft' && ctx.actor.role === 'admin' ? `<form method="post" class="actions">${hidden}<input type="hidden" name="eventId" value="${h(event.eventId)}"><button name="action" value="confirm">${description} 일정 확정</button></form>` : ''}
+      ${mayEdit && poll?.state !== 'approved' ? `<details><summary>일정 변경·취소</summary><form method="post">${hidden}<input type="hidden" name="eventId" value="${h(event.eventId)}"><div class="fields"><label>새 보강일<input type="date" name="makeupDate"></label><label>시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((room) => `<option>${h(room)}</option>`).join('')}</select></label></div><div class="actions"><button name="action" value="change">${event.status === 'draft' ? '보강 시간 제안' : '보강 시간 지정'}</button>${event.makeup ? '<button class="secondary" name="action" value="clear">보강 취소</button>' : ''}<button class="secondary" name="action" value="withdraw">${description} 취소</button></div></form>${recommendation(event)}</details>` : ''}
+    </article>`;
+  };
   const today = new Date(Date.now() + 32400000).toISOString().slice(0, 10);
   const monthEnd = new Date(Date.now() + 31 * 86400000 + 32400000)
     .toISOString()
@@ -730,30 +769,17 @@ function render(ctx: PageContext) {
     "SELECT id, name FROM accounts WHERE academy_id = ? AND role IN ('admin','teacher') ORDER BY name",
     ctx.actor.academyId,
   );
-  return `<div class="page-heading"><h2>휴·보강 일정</h2><p class="muted">원장이 확정한 일정이 상담에 반영됩니다.</p></div>
+  return `<div class="page-heading"><h2>휴·보강 일정</h2><p class="muted">${staff(ctx) ? '휴강은 원장이 확정합니다. 보강 투표는 교사가 열고 학생·보호자가 직접 응답합니다.' : '취소된 수업, 보강 투표, 확정된 보강 시간·교실을 확인하세요.'}</p></div>
     ${ctx.actor.role === 'admin' ? `<details class="panel" ${config.classes.length ? '' : 'open'}><summary>정규 시간표 설정 · ${config.classes.length}개 반 등록</summary><p class="muted">모든 반의 정규 수업을 등록하면 강사·교실·원생의 시간 겹침을 함께 확인할 수 있습니다.</p><ul>${academy.classes.map((c) => `<li>${h(c.name)} · ${c.days.map((d) => '일월화수목금토'[d]).join('·')} · ${h(c.start)}~${h(c.end)} · ${h(c.room)}</li>`).join('')}</ul><form method="post">${hidden}<input type="hidden" name="action" value="class-config"><div class="fields"><label>반<select name="classId">${options(classes)}</select></label><label>담당 강사<select name="teacher">${options(teachers)}</select></label><label>교실<input name="room" maxlength="60" required value="1강의실"></label><label>시작<input name="start" type="time" required></label><label>적용일<input name="effectiveFrom" type="date"></label><label>종료<input name="end" type="time" required></label><label>학원 동시 수용 인원<input name="capacity" type="number" min="1" max="1000" value="${config.capacity}" required></label><label>학원 수업 종료 한도<input name="closeTime" type="time" value="${h(config.closeTime)}" required></label></div><fieldset><legend>정규 수업 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><button>시간표 저장</button></form></details>` : ''}
-    ${staff(ctx) ? `<details class="panel"><summary>휴강·결석 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="create"><div class="fields"><label>반<select name="classId" required>${options(classes.filter((c) => academy.classes.some((x) => x.classId === c.id)))}</select></label><label>대상<select name="scope"><option value="class">반 전체 휴강</option><option value="student">학생 결석</option></select></label><label>결석 학생<select name="studentId"><option value="">반 휴강은 선택하지 않음</option>${students.map((s) => `<option value="${h(s.id)}" data-class-ids="${h(JSON.stringify(s.classIds))}">${h(s.name)}</option>`).join('')}</select></label><label>휴강·결석일<input type="date" name="date" required></label><label>보강일 (미정이면 비움)<input type="date" name="makeupDate"></label><label>보강 시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((r) => `<option>${h(r)}</option>`).join('')}</select></label></div><label>사유<input name="reason" maxlength="500"></label>${ctx.actor.role === 'admin' ? '<label class="check-label"><input type="checkbox" name="confirm" value="yes">일정 확정</label>' : ''}<button>일정 저장</button></form></details>` : ''}
-    ${sessions}<div class="module-grid">${
+    ${staff(ctx) ? `<details class="panel makeup-registration"${ctx.formError && ctx.submittedForm?.get('action') === 'create' ? ' open' : ''}><summary>휴강·결석 일정 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="create"><div class="fields"><label>반<select name="classId" required>${options(classes.filter((c) => academy.classes.some((x) => x.classId === c.id)))}</select></label><label>등록 유형<select name="scope"><option value="class">반 전체 휴강</option><option value="student">개별 학생 결석</option></select></label><label>휴강·결석일<input type="date" name="date" required></label><label>결석 학생<select name="studentId"><option value="">개별 결석일 때 선택</option>${students.map((s) => `<option value="${h(s.id)}" data-class-ids="${h(JSON.stringify(s.classIds))}">${h(s.name)}</option>`).join('')}</select></label></div><label>사유<input name="reason" maxlength="500"></label><details${ctx.submittedForm?.get('makeupDate') ? ' open' : ''}><summary>정해둔 보강 시간 추가</summary><div class="fields"><label>보강일<input type="date" name="makeupDate"></label><label>보강 시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((room) => `<option>${h(room)}</option>`).join('')}</select></label></div></details><div class="actions">${ctx.actor.role === 'admin' ? '<button name="confirm" value="yes">휴강·결석 확정</button><button class="secondary" type="submit">초안 저장</button>' : '<button>원장 검토로 보내기</button>'}</div></form></details>` : ''}
+    ${sessions}<div class="makeup-events">${
       state.events
         .filter((e) => visible(ctx, e))
         .map(eventCard)
         .join('') || '<p class="empty">등록된 일정이 없습니다.</p>'
     }</div>
-    ${configuredStudents.length ? `<details class="panel" ${ctx.url.searchParams.get('saved') === 'availability' ? 'open' : ''}><summary>보강 가능 시간 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="availability"><label>학생<select name="studentId">${options(configuredStudents)}</select></label><fieldset><legend>가능 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><div class="fields"><label>시작<input name="start" type="time"></label><label>종료<input name="end" type="time"></label></div><p class="muted">저장하면 기존 가능 시간을 선택한 요일·시간으로 바꿉니다.</p><div class="actions"><button>가능 시간 저장</button><button class="secondary" name="clearAvailability" value="yes">가능 시간 초기화</button></div></form><ul>${configuredStudents.map((s) => `<li>${h(s.name)} · ${h(formatWindows(state.availability?.[s.id] ?? [])) || '미등록'}</li>`).join('')}</ul></details>` : ''}
-    ${
-      staff(ctx)
-        ? `<details class="panel"><summary>안내문 발송 대기</summary><p class="muted">안내문은 저장되어 있으며 외부 메시지는 발송하지 않습니다.</p>${state.outbox
-            .filter((n) => {
-              const e = state.events.find((e) => e.eventId === n.eventId);
-              return e && visible(ctx, e);
-            })
-            .map(
-              (n) =>
-                `<article class="message"><strong>${h(n.kind)}</strong><p class="preserve">${h(n.text)}</p></article>`,
-            )
-            .join('')}</details>`
-        : ''
-    }`;
+    ${ctx.actor.role !== 'teacher' && configuredStudents.length ? `<details class="panel" ${ctx.url.searchParams.get('saved') === 'availability' ? 'open' : ''}><summary>${ctx.actor.role === 'admin' ? '학생별 정기 가능 시간(관리자 설정)' : '보강 가능 시간 등록'}</summary><form method="post">${hidden}<input type="hidden" name="action" value="availability"><label>학생<select name="studentId">${options(configuredStudents)}</select></label><fieldset><legend>가능 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><div class="fields"><label>시작<input name="start" type="time"></label><label>종료<input name="end" type="time"></label></div><p class="muted">저장하면 기존 가능 시간을 선택한 요일·시간으로 바꿉니다.</p><div class="actions"><button>가능 시간 저장</button><button class="secondary" name="clearAvailability" value="yes">가능 시간 초기화</button></div></form><ul>${configuredStudents.map((s) => `<li>${h(s.name)} · ${h(formatWindows(state.availability?.[s.id] ?? [])) || '미등록'}</li>`).join('')}</ul></details>` : ''}
+    `;
 }
 export const teamScheduleModule: OperationModule = {
   path: '/makeup',
@@ -774,10 +800,28 @@ export function renderTeamNotices(ctx: PageContext) {
   );
   return state.events
     .filter((e) => e.status === 'confirmed' && visible(ctx, e))
-    .map(
-      (e) =>
-        `<article class="message"><a class="workspace-link" href="/schedule?view=makeup#event-${h(e.eventId)}">${h(academy.classes.find((c) => c.classId === e.classId)?.name)} · ${h(e.date)} ${e.scope === 'student' ? '결석' : '휴강'}</a><p>${e.makeup ? `${h(e.makeup.date)} ${h(e.makeup.start)}~${h(e.makeup.end)} 보강` : '보강 일정 미정'}</p></article>`,
-    )
+    .map((e) => {
+      const poll = teamMakeupPoll(ctx, e);
+      const slots = e.makeup ? [e.makeup] : (poll?.slots ?? []);
+      const text = slots.length
+        ? slots
+            .map((slot) =>
+              h(
+                slot.date +
+                  ' ' +
+                  slot.start +
+                  '~' +
+                  slot.end +
+                  ' · ' +
+                  slot.room,
+              ),
+            )
+            .join('<br>')
+        : poll?.state === 'open'
+          ? '보강 투표 진행 중'
+          : '보강 일정 미정';
+      return `<article class="message"><a class="workspace-link" href="/schedule?view=makeup#event-${h(e.eventId)}">${h(academy.classes.find((c) => c.classId === e.classId)?.name)} · ${h(e.date)} ${e.scope === 'student' ? '결석' : '휴강'}</a><p>${text}</p></article>`;
+    })
     .join('');
 }
 
