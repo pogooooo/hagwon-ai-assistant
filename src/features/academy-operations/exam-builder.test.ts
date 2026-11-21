@@ -198,3 +198,31 @@ test('CLOVA variants send only selected references, reject repeated or answer-le
     await assert.rejects(generate('덧셈 변형 1문항', [item]), /저장하지 않았/);
   }
 });
+
+test('a Worker-compatible request never follows provider redirects', async () => {
+  let calls = 0;
+  const generate = examVariantGenerator(
+    { CLOVA_STUDIO_API_KEY: 'fake' },
+    async (_, init) => {
+      assert.equal(init?.redirect, 'manual');
+      calls++;
+      return new Response(null, {
+        status: 307,
+        headers: { Location: 'https://example.test/other' },
+      });
+    },
+  )!;
+  await assert.rejects(
+    generate('변형', [
+      {
+        source: 'test',
+        sourceTitle: '시험',
+        number: 1,
+        prompt: '2+4?',
+        answer: '6',
+      },
+    ]),
+    /네이버 출제 요청/,
+  );
+  assert.equal(calls, 1);
+});
