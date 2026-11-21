@@ -148,6 +148,54 @@ async function answerRegularClosure(
   };
 }
 
+async function answerAcademyAddress(
+  ctx: AnswerContext,
+): Promise<AnswerDraft | undefined> {
+  const q = compactText(ctx.question).replace(/[.!?？]+$/, '');
+  if (
+    !/^(?:여기|이)?(?:학원(?:의|은|이)?(?:주소|위치)(?:가|는|를)?(?:어디(?:예요|에요|인가요|입니까|죠)|알려(?:줘|주세요)|궁금해요)?|학원(?:이|은)?어디에?(?:있나요|있어요|있죠))$/.test(
+      q,
+    )
+  )
+    return;
+  const hits = await ctx.documents.searchApprovedChunks({
+    access: ctx.access,
+    studentIds: [],
+    asOf: ctx.asOf,
+    query: '학원 주소 위치 오시는 길',
+    limit: 60,
+    documentTypes: ['academy_info', 'facility'],
+  });
+  recordChunks(
+    ctx.trace,
+    hits.map((h) => h.chunk),
+  );
+  if (hits.length === 60) return;
+  const options = hits.flatMap(({ chunk }) => {
+    if (
+      chunk.classId !== null ||
+      !isCleanPublicEvidence(chunk, ctx.asOf) ||
+      chunk.location.kind !== 'paragraph'
+    )
+      return [];
+    return splitSentences(chunk.text)
+      .filter(
+        (line) =>
+          /^(?:저희\s*)?학원(?:의)?\s*주소(?:는|는\s*다음과\s*같습니다|[:：])\s*.+(?:로|길|동)\s*\d/.test(
+            line,
+          ) && !/예정|이전|변경|옛\s*주소|예시|였습|아닙/.test(line),
+      )
+      .map((line) => ({ chunk, line }));
+  });
+  if (!options.length) return;
+  if (new Set(options.map((p) => compactText(p.line))).size !== 1)
+    return abstain(
+      '승인된 학원 주소가 서로 달라 확인이 필요합니다.',
+      'CONFLICTING_EVIDENCE',
+    );
+  ctx.trace.intent = 'explicit_academy_address';
+  return fromPublicExcerpts([options[0]]);
+}
 async function answerRailAccess(
   ctx: AnswerContext,
 ): Promise<AnswerDraft | undefined> {
@@ -442,6 +490,8 @@ export async function answerFacilityHours(
   const { frame } = ctx;
   const eligibility = await answerStudyRoomEligibility(ctx);
   if (eligibility) return eligibility;
+  const address = await answerAcademyAddress(ctx);
+  if (address) return address;
   const rail = await answerRailAccess(ctx);
   if (rail) return rail;
   const announced = await answerAnnouncedClosure(ctx);
