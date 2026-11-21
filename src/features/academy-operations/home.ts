@@ -92,7 +92,7 @@ export function renderHome(ctx: PageContext) {
           ? '오늘의 학원 소식'
           : actor.role === 'student'
             ? '나의 학원'
-            : '학원 상담';
+            : '학원 안내';
   const heading = `<div class="ondap-heading"><h1>${title}</h1><time datetime="${today}">${h(date)}</time></div>`;
   const { pending, recent } = consultationOverview(ctx);
   const homework = visitor ? undefined : homeworkOverview(ctx);
@@ -122,7 +122,7 @@ export function renderHome(ctx: PageContext) {
     );
 
   const shortcuts = `<nav class="home-shortcuts" aria-label="자주 사용하는 서비스">${[
-    ['/consultation', '학원 상담'],
+    ...(actor.role === 'guardian' ? [['/consultation', '학원 상담']] : []),
     ...(!visitor
       ? [
           ['/schedule', '수업 일정'],
@@ -209,7 +209,7 @@ export function renderHome(ctx: PageContext) {
              ])
            : ''
        }
-       ${board.summary}${agenda}${search}${documentList()}${recentConsultations()}</div></div>`;
+       ${board.summary}${agenda}${documentList()}</div></div>`;
   }
 
   const homeworkPanel =
@@ -263,9 +263,9 @@ export function renderHome(ctx: PageContext) {
         '도착한 알림이 없습니다.',
       )}`
     : '';
-  return `${heading}${familyHero}${pendingMakeupNotices(ctx)}${visitor ? `<div class="home-overview">${search}</div>` : ''}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
+  return `${heading}${familyHero}${pendingMakeupNotices(ctx)}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
     <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
-    ${visitor ? '' : `<div class="home-help">${search}</div>`}
-    <div class="home-secondary">${visitor ? '' : documentList()}${recentConsultations()}</div>
+    ${guardian ? `<div class="home-help">${search}</div>` : ''}
+    <div class="home-secondary">${visitor ? '' : documentList()}${guardian ? recentConsultations() : ''}</div>
   </div>`;
 }

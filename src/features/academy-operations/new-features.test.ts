@@ -63,7 +63,11 @@ function setup(t: TestContext, fetchImpl?: typeof fetch) {
     url: new URL('http://localhost/'),
     services,
   });
-  async function ask(question: string, who = 'TA_VISITOR', studentId = '') {
+  async function ask(
+    question: string,
+    who = 'TA_GUARDIAN_E_MATH',
+    studentId = '',
+  ) {
     const id = randomUUID();
     await consultationModule.submit(
       ctx(who),
@@ -777,9 +781,7 @@ test('보호자 일반 상담은 공개된 상담 예약 시각만 해당 문서
   const { answer } = await s.ask(question, guardian);
   assert.equal(answer.status, 'abstained', answer.answer);
   assert.deepEqual(answer.citations, []);
-  const staff = await s.ask(question, 'TA_DIRECTOR');
-  assert.equal(staff.answer.status, 'answered', staff.answer.answer);
-  assert.match(staff.answer.answer, /수요일 오전 8시/);
+  await assert.rejects(s.ask(question, 'TA_DIRECTOR'), /학부모만/);
   const { answer: makeup } = await s.ask(
     year + '년 12월 1일 초등 수학반 휴강 보강은 언제인가요?',
     guardian,

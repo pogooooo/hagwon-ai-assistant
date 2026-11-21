@@ -320,12 +320,9 @@ test('다른 반·보호자의 결과 쓰기는 차단하고 반 이동 후 본�
   );
   assert.equal(parent.status, 'answered', parent.answer);
   assert.match(parent.answer, /100/);
-  const formerTeacher = await s.ask('TA_TEACHER', '11월 전체 정답률 알려줘');
-  assert.equal(
-    formerTeacher.citations.some((c: { documentId: string }) =>
-      c.documentId.startsWith('learning-'),
-    ),
-    false,
+  await assert.rejects(
+    s.ask('TA_TEACHER', '11월 전체 정답률 알려줘'),
+    /학부모만/,
   );
   await assert.rejects(s.result('results', '2', { complete: 'yes' }), /권한/);
 });

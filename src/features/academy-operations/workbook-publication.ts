@@ -479,5 +479,5 @@ export function renderWorkbookSource(ctx: PageContext, id: string) {
     )
   )
     throw new OperationError('조회 가능한 최신 상담 근거가 아닙니다.', 404);
-  return `<section class="panel source-record"><h1>${h(document.title)}</h1><p>상담 공개 버전 ${p!.revision}</p><p class="preserve">${h(document.text)}</p><a href="/consultation">상담으로</a></section>`;
+  return `<section class="panel source-record"><h1>${h(document.title)}</h1><p>상담 공개 버전 ${p!.revision}</p><p class="preserve">${h(document.text)}</p>${ctx.actor.role === 'student' ? '<a href="/learning">학습 기록으로</a>' : '<a href="/consultation">상담으로</a>'}</section>`;
 }
