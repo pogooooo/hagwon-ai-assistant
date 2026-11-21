@@ -182,6 +182,33 @@ export const workerGradingMedia = {
       }
     });
   },
+  mask(bytes, regions) {
+    return exclusive(async () => {
+      const { PhotonImage } = await import('@cf-wasm/photon/workerd');
+      const original = PhotonImage.new_from_byteslice(bytes);
+      try {
+        const width = original.get_width(),
+          pixels = original.get_raw_pixels();
+        try {
+          for (const r of regions)
+            for (let y = r.y; y < r.y + r.height; y++) {
+              const start = 4 * (y * width + r.x);
+              pixels.fill(255, start, start + 4 * r.width);
+            }
+          const masked = new PhotonImage(pixels, width, original.get_height());
+          try {
+            return masked.get_bytes();
+          } finally {
+            masked.free();
+          }
+        } finally {
+          pixels.fill(0);
+        }
+      } finally {
+        original.free();
+      }
+    });
+  },
   crop(bytes, { x, y, width, height }) {
     return exclusive(async () => {
       const { PhotonImage, crop } = await import('@cf-wasm/photon/workerd');

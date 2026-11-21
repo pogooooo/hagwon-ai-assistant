@@ -4,7 +4,12 @@ import { test } from 'node:test';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { PDFDocument } from 'pdf-lib';
 import { workerGradingMedia } from '../../../deploy/cloudflare/grading-media.mjs';
-import { configureGradingMedia, cropAnswer, decodeUploads } from './media.ts';
+import {
+  configureGradingMedia,
+  cropAnswer,
+  decodeUploads,
+  maskStudentAnswers,
+} from './media.ts';
 import { item, reading } from './test-fixtures.ts';
 
 test('Worker grading codecs render and crop photo and PDF pixels and enforce upload limits', async (t) => {
@@ -65,6 +70,12 @@ test('Worker grading codecs render and crop photo and PDF pixels and enforce upl
     const pixels = await inspect(clip.bytes);
     assert.deepEqual([pixels.width, pixels.height], [64, 48]);
     assert.ok(pixels.dark > 1400);
+    const before = await inspect(page.bytes);
+    const masked = await maskStudentAnswers(page, [ref]);
+    assert.ok(masked);
+    assert.ok((await inspect(masked.bytes)).dark < before.dark - 1400);
+    assert.deepEqual(await inspect(page.bytes), before);
+    assert.equal(await maskStudentAnswers(page, []), null);
   }
   const exif = Buffer.from(
     'ffe1002245786966000049492a0008000000010012010300010000000600000000000000',

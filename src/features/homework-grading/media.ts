@@ -20,6 +20,7 @@ export interface GradingMediaRuntime {
   decodePhoto(bytes: Uint8Array): Promise<Uint8Array>;
   renderPdf(bytes: Uint8Array, remainingPages: number): Promise<Uint8Array[]>;
   crop(bytes: Uint8Array, region: Crop): Promise<Uint8Array>;
+  mask(bytes: Uint8Array, regions: Crop[]): Promise<Uint8Array>;
 }
 let media: GradingMediaRuntime = {
   maxPages: 10,
@@ -44,6 +45,20 @@ let media: GradingMediaRuntime = {
     }
   },
   renderPdf: renderGradingPdf,
+  async mask(bytes, regions) {
+    const { loadImage, createCanvas } = await import('@napi-rs/canvas');
+    const image = await loadImage(Buffer.from(bytes));
+    const canvas = createCanvas(image.width, image.height);
+    try {
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0);
+      ctx.fillStyle = '#fff';
+      for (const r of regions) ctx.fillRect(r.x, r.y, r.width, r.height);
+      return new Uint8Array(canvas.toBuffer('image/png'));
+    } finally {
+      canvas.width = canvas.height = 1;
+    }
+  },
   async crop(bytes, { x, y, width, height }) {
     const { loadImage, createCanvas } = await import('@napi-rs/canvas');
     const image = await loadImage(Buffer.from(bytes));
@@ -121,6 +136,39 @@ export async function decodeUploads(
     throw new GradingError('INPUT_UNREADABLE');
   }
   return result;
+}
+export async function maskStudentAnswers(
+  page: ImagePage,
+  readings: Reading[],
+): Promise<ImagePage | null> {
+  const size = imageDimensions(page.bytes);
+  if (!size) return null;
+  const boxes = readings
+    .flatMap((r) => r.regions.filter((b) => b.page_no === page.page_no))
+    .flatMap(({ bbox }) => {
+      if (
+        !bbox.every((n) => Number.isFinite(n) && n >= 0 && n <= 1) ||
+        bbox[2] <= bbox[0] ||
+        bbox[3] <= bbox[1]
+      )
+        return [];
+      const x = Math.max(0, Math.floor((bbox[0] - 0.012) * size.width)),
+        y = Math.max(0, Math.floor((bbox[1] - 0.012) * size.height));
+      return [
+        {
+          x,
+          y,
+          width:
+            Math.min(size.width, Math.ceil((bbox[2] + 0.012) * size.width)) - x,
+          height:
+            Math.min(size.height, Math.ceil((bbox[3] + 0.012) * size.height)) -
+            y,
+        },
+      ];
+    });
+  return boxes.length
+    ? { ...page, bytes: await media.mask(page.bytes, boxes) }
+    : null;
 }
 export async function cropAnswer(
   page: ImagePage,
