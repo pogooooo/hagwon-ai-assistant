@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { renderReportExamples } from './report-examples.ts';
+import { demoReports } from './demo-reports.ts';
+import { renderReportDocument } from './report-document.ts';
 import { accessibleClasses, accessibleStudents } from './directory.ts';
 import { parseClassification, tagById } from './classification.ts';
 import { readWorkbookAnalysis } from './workbook-analysis.ts';
@@ -227,7 +228,20 @@ function draft(
         )
         .join(' · ')
     : '출석·지각 등 출결 기록이 없습니다. 출석이나 태도를 추정하지 않습니다.';
-  const body = `${student.name} · ${period} 월간 리포트\n${score}\n${repeat}\n${practice}\n${attendance}${e.unknown ? '\n미확인 ' + e.unknown + '문항은 정답률에서 제외했습니다.' : ''}`;
+  const body = [
+    '# ' + student.name + ' · ' + period + ' 월간 리포트',
+    '## 성취도',
+    score +
+      (e.unknown
+        ? ' 미확인 ' + e.unknown + '문항은 정답률에서 제외했습니다.'
+        : ''),
+    '## 오답 유형',
+    repeat,
+    '## 다음 학습',
+    practice,
+    '## 출결',
+    attendance,
+  ].join('\n\n');
   return {
     body,
     counsel: `교사용 상담 자료 초안\n${body}\n상담 확인 항목: 반복 오답을 함께 살펴보고 다음 연습 유형을 협의합니다. 기록에 없는 원인·태도·가정 상황은 단정하지 않습니다.`,
@@ -423,11 +437,17 @@ export function renderStudentReports(
   readPublishedLearning: () => { href: string; title: string }[] = () => [],
 ) {
   const family = ctx.actor.role === 'guardian';
+  const embedded = ['/grading', '/homework'].includes(ctx.url.pathname);
+  const reportLink = (id: string) =>
+    (embedded
+      ? ctx.url.pathname + '?view=reports&id='
+      : '/student-reports?id=') + encodeURIComponent(id);
   const assignments =
     family && ctx.url.searchParams.get('view') === 'assignments';
-  const tabs = family
-    ? `<div class="workspace-heading"><h1>학습 리포트</h1></div><nav class="page-tabs view-tabs" aria-label="리포트 종류"><a href="/student-reports?view=assignments"${assignments ? ' aria-current="page"' : ''}>과제별 결과</a><a href="/student-reports"${!assignments ? ' aria-current="page"' : ''}>월간 리포트</a></nav>`
-    : '';
+  const tabs =
+    family && !embedded
+      ? `<div class="workspace-heading"><h1>학습 리포트</h1></div><nav class="page-tabs view-tabs" aria-label="리포트 종류"><a href="/student-reports?view=assignments"${assignments ? ' aria-current="page"' : ''}>과제별 결과</a><a href="/student-reports"${!assignments ? ' aria-current="page"' : ''}>월간 리포트</a></nav>`
+      : '';
   if (assignments) {
     const entries = readAssignments();
     return (
@@ -442,7 +462,7 @@ export function renderStudentReports(
   const students = accessibleStudents(ctx.db, ctx.actor),
     classes = accessibleClasses(ctx.db, ctx.actor);
   let html = family
-    ? tabs + '<h2>월간 리포트</h2>'
+    ? tabs + (embedded ? '' : '<h2>월간 리포트</h2>')
     : '<div class="workspace-heading"><h1>월간 리포트</h1></div><p>확정된 학습과 출결 기록으로 학생별 리포트를 작성합니다.</p>';
   const options = (list: { id: string; name: string }[]) =>
     list
@@ -462,28 +482,94 @@ export function renderStudentReports(
       return false;
     }
   });
-  html += `<nav class="report-links">${list.map((r) => `<a class="workspace-link" href="/student-reports?id=${h(r.id)}">${h(students.find((s) => s.id === r.student_id)?.name)} ${h(r.period)} · ${r.state === 'approved' ? '승인' : '초안'}</a>`).join('')}</nav>`;
-  const id = ctx.url.searchParams.get('id');
-  if (!id) {
-    const publishedLearning = family ? readPublishedLearning() : [];
-    const previous = publishedLearning.length
-      ? `<section class="panel"><h2>공개 학습 기록</h2><nav class="report-links">${publishedLearning.map((record) => `<a class="workspace-link" href="${h(record.href)}">${h(record.title)}</a>`).join('')}</nav></section>`
-      : '';
+  const samples = demoReports(ctx).filter(
+    (sample) =>
+      !list.some(
+        (r) =>
+          r.period === sample.period &&
+          sample.studentId === r.student_id &&
+          sample.classId === r.class_id,
+      ),
+  );
+  const entries = [
+    ...list.map((r) => ({
+      id: r.id,
+      period: r.period,
+      title:
+        students.find((s) => s.id === r.student_id)?.name + ' · ' + r.period,
+      description: classes.find((c) => c.id === r.class_id)?.name ?? '',
+      status: r.state === 'approved' ? '공개' : '초안',
+    })),
+    ...samples.map((r) => ({
+      id: r.id,
+      period: r.period,
+      title: r.title,
+      description: r.unit,
+      status: '공개',
+    })),
+  ].sort((a, b) => b.period.localeCompare(a.period));
+  const selected = ctx.url.searchParams.get('id');
+  const previous =
+    family && !selected && !embedded ? readPublishedLearning() : [];
+  if (previous.length)
+    html +=
+      '<section class="panel"><h2>공개 학습 기록</h2><nav class="report-links">' +
+      previous
+        .map(
+          (record) =>
+            '<a class="workspace-link" href="' +
+            h(record.href) +
+            '">' +
+            h(record.title) +
+            '</a>',
+        )
+        .join('') +
+      '</nav></section>';
+  const id =
+    selected ??
+    samples[Number(ctx.url.searchParams.get('example')) - 1]?.id ??
+    entries[0]?.id;
+  if (!id) return html + '<p class="muted">아직 열람할 리포트가 없습니다.</p>';
+  if (entries.length)
+    html +=
+      '<nav class="report-links report-library" aria-label="월간 리포트 목록">' +
+      entries
+        .map(
+          (r) =>
+            '<a class="grade-report-row" href="' +
+            h(reportLink(r.id)) +
+            '"' +
+            (id === r.id ? ' aria-current="page"' : '') +
+            '><span><strong>' +
+            h(r.title) +
+            '</strong><small>' +
+            h(r.description) +
+            '</small></span><span class="pill">' +
+            h(r.status) +
+            '</span></a>',
+        )
+        .join('') +
+      '</nav>';
+  const archived = samples.find((r) => r.id === id);
+  if (archived)
     return (
       html +
-      (list.length
-        ? '<p>리포트를 선택해 주세요.</p>'
-        : '<p>아직 열람할 리포트가 없습니다.</p>') +
-      previous +
-      renderReportExamples(ctx)
+      renderReportDocument(
+        archived.title,
+        archived.body,
+        archived.studentName + ' · ' + archived.className,
+        archived.period + '-학습-리포트',
+      )
     );
-  }
   const r = load(ctx, id);
-  if (!staff(ctx))
-    return (
-      html +
-      `<section class="panel"><h2>교사 승인 월간 리포트</h2><p class="preserve">${h(r.body)}</p></section>`
-    );
+  const name = students.find((s) => s.id === r.student_id)?.name ?? '';
+  html += renderReportDocument(
+    r.period + ' 월간 학습 리포트',
+    r.body,
+    name + ' · ' + (classes.find((c) => c.id === r.class_id)?.name ?? ''),
+    r.period + '-학습-리포트',
+  );
+  if (!staff(ctx)) return html;
   const e = studentReportEvidence(ctx, r.student_id, r.class_id, r.period),
     hidden = `<input type="hidden" name="id" value="${h(r.id)}"><input type="hidden" name="version" value="${r.version}">`;
   const publication =

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import {
   checkMakeup,
+  createEvent,
+  emptyState,
   suggestMakeups,
 } from '../makeup-schedule/model/schedule.ts';
 import type {
@@ -8,7 +10,11 @@ import type {
   ScheduleState,
   MakeupSlot,
 } from '../makeup-schedule/model/types.ts';
-import { accessibleClasses, accessibleStudents } from './directory.ts';
+import {
+  accessibleClasses,
+  accessibleStudents,
+  getActor,
+} from './directory.ts';
 import {
   escapeHtml as h,
   field,
@@ -380,6 +386,232 @@ export function pollChoices(
     ).slice(0, 5),
   };
 }
+function suggestPollOptions(
+  ctx: PageContext,
+  data: Payload,
+  config: AcademyConfig,
+  state: ScheduleState,
+  after: string,
+) {
+  return config.rooms
+    .flatMap((room) =>
+      suggestMakeups(
+        config,
+        state,
+        {
+          scope: 'class',
+          classId: data.closure.classId,
+          studentId: null,
+          eventId: data.closure.eventId,
+          room,
+          after,
+        },
+        12,
+      ).map((s) => s.slot),
+    )
+    .filter((s) => {
+      try {
+        conflicts(ctx, data, s);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .slice(0, 12);
+}
+
+/** Provision an open, in-app poll only in the two hosted synthetic academies. */
+export function seedDemoMakeupPolls(db: OperationsDatabase) {
+  const scenarios = [
+    [
+      'AC_TEST_A',
+      '[가상] 테스트 교습소',
+      'TA_DIRECTOR',
+      'TA_TEACHER',
+      'TA_E_MATH',
+      'TA_STU_001',
+      '초등 수학반',
+      [1, 3],
+      '16:00',
+      '17:00',
+    ],
+    [
+      'AC_ONDAP_LANGUAGE_DEMO',
+      '[가상] 온답 어학원',
+      'ONDAP_LANGUAGE_TA_DIRECTOR',
+      'ONDAP_LANGUAGE_TA_TEACHER',
+      'ONDAP_DEMO_ENGLISH',
+      'ONDAP_DEMO_LEARNER',
+      '영어 회화반',
+      [2, 4],
+      '17:00',
+      '18:20',
+    ],
+  ] as const;
+  for (const [
+    academy,
+    name,
+    admin,
+    teacher,
+    classId,
+    learner,
+    className,
+    days,
+    start,
+    end,
+  ] of scenarios) {
+    const id = 'trial-makeup-' + academy;
+    const actor = getActor(db, admin);
+    if (
+      !actor ||
+      actor.academyId !== academy ||
+      actor.role !== 'admin' ||
+      !one(
+        db,
+        'SELECT 1 FROM academies WHERE id=? AND name=?',
+        academy,
+        name,
+      ) ||
+      !one(
+        db,
+        'SELECT 1 FROM classes WHERE id=? AND academy_id=?',
+        classId,
+        academy,
+      ) ||
+      !one(
+        db,
+        'SELECT 1 FROM teacher_classes WHERE teacher_id=? AND class_id=?',
+        teacher,
+        classId,
+      ) ||
+      one(db, 'SELECT 1 FROM op_makeup_polls WHERE id=?', id)
+    )
+      continue;
+    const ctx = { db, actor, url: new URL('http://localhost/makeup-votes') };
+    const students = roster(ctx, classId);
+    if (!students.includes(learner)) continue;
+    const stored = one<{ version: number; config: string; state: string }>(
+      db,
+      'SELECT version,config,state FROM op_team_schedule WHERE academy_id=?',
+      academy,
+    );
+    const config: AcademyConfig = stored
+      ? team(ctx).config
+      : {
+          academyId: academy,
+          name,
+          capacity: 12,
+          closeTime: '22:00',
+          rooms: ['1강의실'],
+          holidays: {},
+          students: [],
+          classes: [
+            {
+              classId,
+              name: className,
+              days: [...days],
+              start,
+              end,
+              teacher,
+              room: '1강의실',
+            },
+          ],
+        };
+    const fallback = config.classes.find((c) => c.classId === classId);
+    if (!fallback) continue;
+    const state: ScheduleState = stored
+      ? (JSON.parse(stored.state) as ScheduleState)
+      : emptyState();
+    if (!stored)
+      config.students = students.map((studentId) => ({
+        studentId,
+        name: '',
+        classIds: [classId],
+      }));
+    const now = new Date();
+    const dates = Array.from(
+      { length: 14 },
+      (_, i) => new Date(now.getTime() + (i + 2) * 86400000 + 32400000),
+    );
+    const events = dates.map((day) =>
+      createEvent(
+        config,
+        state,
+        {
+          scope: 'class',
+          classId,
+          date: day.toISOString().slice(0, 10),
+          reason: '원내 연수',
+          confirm: true,
+        },
+        now.toISOString(),
+      ),
+    );
+    const created = events.find((result) => result.ok);
+    if (!created?.ok) continue;
+    const { event } = created;
+    const closure: Closure = {
+      key: 'team:' + event.eventId,
+      stamp: JSON.stringify(event),
+      date: event.date,
+      classId,
+      eventId: event.eventId,
+      label: event.date + ' ' + className + ' 휴강',
+    };
+    try {
+      transaction(db, () => {
+        const next = { ...created.state, outbox: state.outbox };
+        const schedule = JSON.stringify(next);
+        if (stored)
+          db.prepare(
+            'UPDATE op_team_schedule SET version=version+1,state=? WHERE academy_id=?',
+          ).run(schedule, academy);
+        else
+          db.prepare('INSERT INTO op_team_schedule VALUES(?,1,?,?)').run(
+            academy,
+            JSON.stringify(config),
+            schedule,
+          );
+        db.prepare(
+          'INSERT INTO op_team_schedule_history VALUES(?,?,?,?,?)',
+        ).run(
+          academy,
+          (stored?.version ?? 0) + 1,
+          actor.id,
+          JSON.stringify({
+            config: stored ? JSON.parse(stored.config) : config,
+            state: next,
+          }),
+          now.toISOString(),
+        );
+        const data: Payload = { closure, students, options: [], votes: {} };
+        data.options = suggestPollOptions(
+          ctx,
+          data,
+          config,
+          next,
+          closure.date,
+        ).slice(0, 5);
+        if (!data.options.length)
+          throw new OperationError('체험 학급에 보강 후보가 없습니다.', 422);
+        if (students.includes('ONDAP_DEMO_QA_LEARNER'))
+          data.votes.ONDAP_DEMO_QA_LEARNER =
+            data.options.length > 1 ? [0, 1] : [0];
+        db.prepare('INSERT INTO op_makeup_polls VALUES(?,?,?,1,?,?)').run(
+          id,
+          academy,
+          closure.key,
+          'open',
+          JSON.stringify(data),
+        );
+      });
+    } catch (error) {
+      if (!(error instanceof OperationError) || error.status !== 422)
+        throw error;
+    }
+  }
+}
+
 function submit(ctx: PageContext, form: FormData) {
   return transaction(ctx.db, () => {
     ctx.assertCurrentAccess?.();
@@ -401,31 +633,7 @@ function submit(ctx: PageContext, form: FormData) {
         .sort()
         .at(-1)!;
       const data: Payload = { closure, students, options: [], votes: {} };
-      data.options = config.rooms
-        .flatMap((room) =>
-          suggestMakeups(
-            config,
-            state,
-            {
-              scope: 'class',
-              classId: closure.classId,
-              studentId: null,
-              eventId: closure.eventId,
-              room,
-              after,
-            },
-            12,
-          ).map((s) => s.slot),
-        )
-        .filter((s) => {
-          try {
-            conflicts(ctx, data, s);
-            return true;
-          } catch {
-            return false;
-          }
-        })
-        .slice(0, 12);
+      data.options = suggestPollOptions(ctx, data, config, state, after);
       if (!data.options.length)
         throw new OperationError(
           '충돌 없는 보강 후보가 없습니다. 시간표와 예약을 확인해 주세요.',
@@ -624,7 +832,9 @@ function render(ctx: PageContext) {
   if (chosen && !ids.some((p) => p.id === chosen))
     throw new OperationError('조회 가능한 투표가 아닙니다.', 404);
   let html =
-    '<h1>보강 시간 투표</h1><p>앱 안에서만 공지합니다. 미응답은 가능으로 계산하지 않습니다. 선택하지 않은 시간은 불가입니다.</p><a href="/schedule?view=makeup">휴강·시간표 관리</a>';
+    '<div class="workspace-heading"><h1>보강 시간 투표</h1><a class="button-link subtle-link" href="/schedule' +
+    (staff(ctx) ? '?view=makeup">휴강 관리' : '">학원 일정') +
+    '</a></div><div class="poll-workspace">';
   if (staff(ctx))
     html += `<section class="panel"><h2>보강 후보 추천</h2><form method="post"><label>확정 휴강<select name="source">${closures(
       ctx,
@@ -633,23 +843,24 @@ function render(ctx: PageContext) {
       .join(
         '',
       )}</select></label><button name="action" value="create">충돌 없는 후보 찾기</button></form></section>`;
-  html += `<nav>${ids.map((p) => `<a href="/makeup-votes?id=${h(p.id)}">${h((JSON.parse(p.payload) as Payload).closure.label)} · ${h(p.state)}</a>`).join(' · ')}</nav>`;
+  if (ids.length)
+    html += `<nav class="report-library" aria-label="보강 투표 목록">${ids.map((p) => `<a class="grade-report-row" href="/makeup-votes?id=${h(p.id)}"${p.id === (chosen ?? ids[0].id) ? ' aria-current="page"' : ''}><strong>${h((JSON.parse(p.payload) as Payload).closure.label)}</strong><span class="pill">${p.state === 'open' ? '응답 중' : p.state === 'approved' ? '확정' : p.state === 'draft' ? '후보 선택' : '취소'}</span></a>`).join('')}</nav>`;
   const id = chosen ?? ids[0]?.id;
-  if (!id) return html + '<p>등록된 보강 투표가 없습니다.</p>';
+  if (!id) return html + '<p>등록된 보강 투표가 없습니다.</p></div>';
   const { p, data, own } = load(ctx, id),
     hidden = `<input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="version" value="${p.version}">`;
   html += `<section class="panel"><h2>${h(data.closure.label)}</h2><p>${p.state === 'draft' ? '교사 후보 선택' : p.state === 'approved' ? '교사 승인 완료 · 앱 일정 반영' : p.state === 'cancelled' ? '취소됨' : '학생·보호자 응답 중'}</p>`;
   if (p.state === 'draft')
     return (
       html +
-      `<form method="post">${hidden}${data.options.map((s, i) => `<label class="check-label"><input type="checkbox" name="options" value="${i}"${i < 5 ? ' checked' : ''}>${h(label(s))}</label>`).join('')}<button name="action" value="publish">선택 후보 공지 · 투표 시작</button></form></section>`
+      `<form method="post">${hidden}${data.options.map((s, i) => `<label class="check-label"><input type="checkbox" name="options" value="${i}"${i < 5 ? ' checked' : ''}>${h(label(s))}</label>`).join('')}<button name="action" value="publish">선택 후보 공지 · 투표 시작</button></form></section></div>`
     );
   if (staff(ctx))
     html += `<form method="post">${hidden}<button name="action" value="cancel">투표·승인 일정 취소</button></form>`;
-  html += `<ol>${data.options.map((s) => `<li>${h(label(s))}</li>`).join('')}</ol>`;
+  html += `<p class="muted">선택하지 않은 시간은 불가로 표시됩니다.</p><ol>${data.options.map((s) => `<li>${h(label(s))}</li>`).join('')}</ol>`;
   if (p.state === 'open' && !staff(ctx))
     for (const s of own)
-      html += `<form method="post">${hidden}<input type="hidden" name="student" value="${h(s.id)}"><h3>${h(s.name)} 응답${Object.hasOwn(data.votes, s.id) ? ' · 기존 응답 변경' : ''}</h3>${[1, 2, 3].map((rank) => `<label>${rank}순위<select name="rank${rank}"><option value="">선택 안 함</option>${data.options.map((slot, i) => `<option value="${i}"${data.votes[s.id]?.[rank - 1] === i ? ' selected' : ''}>${h(label(slot))}</option>`).join('')}</select></label>`).join('')}<label><input type="checkbox" name="unavailable" value="yes">모두 불가</label><button name="action" value="vote">가능 시간 응답</button></form>`;
+      html += `<form method="post">${hidden}<input type="hidden" name="student" value="${h(s.id)}"><h3>${h(s.name)} 응답${Object.hasOwn(data.votes, s.id) ? ' · 기존 응답 변경' : ''}</h3>${[1, 2, 3].map((rank) => `<label>${rank}순위<select name="rank${rank}"><option value="">선택 안 함</option>${data.options.map((slot, i) => `<option value="${i}"${data.votes[s.id]?.[rank - 1] === i ? ' selected' : ''}>${h(label(slot))}</option>`).join('')}</select></label>`).join('')}<label class="check-label"><input type="checkbox" name="unavailable" value="yes"${Object.hasOwn(data.votes, s.id) && !data.votes[s.id].length ? ' checked' : ''}>모두 불가</label><button name="action" value="vote">가능 시간 응답</button></form>`;
   if (staff(ctx) && p.state === 'open') {
     const blocked = data.options
       .map((s, i) => {
@@ -673,7 +884,7 @@ function render(ctx: PageContext) {
       ? `<form method="post">${hidden}${summary.choices.map((c, i) => `<label><input type="radio" name="choice" value="${i}" required>${c.groups.map((g) => h(label(data.options[g.option])) + ' · ' + g.students.map((id) => h(names.get(id))).join(', ')).join(' / ')}</label>`).join('')}<button name="action" value="approve">교사 최종 승인 · 일정 반영</button></form>`
       : '<p>확정 가능한 조합이 없습니다. 미응답·불가·충돌을 확인해 주세요.</p>';
   }
-  return html + '</section>';
+  return html + '</section></div>';
 }
 export function pollCalendarEntries(
   ctx: PageContext,
