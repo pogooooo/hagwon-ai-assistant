@@ -23,6 +23,7 @@ export interface PageContext {
   assertCurrentAccess?: () => void;
   submittedForm?: FormData;
   formError?: string;
+  showReportExamples?: boolean;
 }
 
 export interface OperationModule {

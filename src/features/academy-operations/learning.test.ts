@@ -322,7 +322,7 @@ test('다른 반·보호자의 결과 쓰기는 차단하고 반 이동 후 본�
   assert.match(parent.answer, /100/);
   await assert.rejects(
     s.ask('TA_TEACHER', '11월 전체 정답률 알려줘'),
-    /학부모만/,
+    /학생과 학부모만/,
   );
   await assert.rejects(s.result('results', '2', { complete: 'yes' }), /권한/);
 });

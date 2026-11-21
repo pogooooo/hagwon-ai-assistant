@@ -74,7 +74,7 @@ const answerLabels: Record<RagAnswerStatus, string> = {
   abstained: '자료 확인 필요',
   clarify: '추가 확인 필요',
   denied: '조회 범위 제한',
-  handoff: '담당자 확인 필요',
+  handoff: '추가 확인이 필요한 질문',
 };
 
 interface Thread {
@@ -136,6 +136,10 @@ function isStaff(actor: Actor) {
   return actor.role === 'admin' || actor.role === 'teacher';
 }
 
+export function canAskConsultation(actor: Actor) {
+  return actor.role === 'guardian' || actor.role === 'student';
+}
+
 function coversScope(db: OperationsDatabase, actor: Actor, thread: Thread) {
   if (thread.staff_scope && !isStaff(actor)) return false;
   const students = new Set(accessibleStudents(db, actor).map(({ id }) => id));
@@ -151,7 +155,7 @@ function coversScope(db: OperationsDatabase, actor: Actor, thread: Thread) {
 function canViewThread(ctx: PageContext, thread: Thread) {
   const { actor, db } = ctx;
   if (thread.academy_id !== actor.academyId) return false;
-  if (actor.role === 'guardian')
+  if (canAskConsultation(actor))
     return thread.owner_id === actor.id && coversScope(db, actor, thread);
   if (actor.role === 'admin') return thread.status !== 'open';
   return (
@@ -162,10 +166,10 @@ function canViewThread(ctx: PageContext, thread: Thread) {
   );
 }
 
-// Only guardian-origin conversations belong in the family inbox. Preserve historical records in storage.
+// Keep staff-authored legacy records out of the student and family inbox.
 const familyThreads = `SELECT t.* FROM op_consultation_threads t
   JOIN accounts a ON a.id=t.owner_id AND a.academy_id=t.academy_id
-  WHERE a.role='guardian' AND t.staff_scope=0 AND t.academy_id=?`;
+  WHERE a.role IN ('guardian','student') AND t.staff_scope=0 AND t.academy_id=?`;
 export function loadThread(ctx: PageContext, id: string) {
   const thread = one<Thread>(
     ctx.db,
@@ -196,7 +200,7 @@ function needsStaffAttention(actor: Actor, thread: Thread) {
 }
 
 export function consultationOverview(ctx: PageContext) {
-  if (!isStaff(ctx.actor) && ctx.actor.role !== 'guardian')
+  if (!isStaff(ctx.actor) && !canAskConsultation(ctx.actor))
     return { pending: [], recent: [] };
   const threads = visibleThreads(ctx);
   return {
@@ -384,8 +388,8 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
 
 export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
   const { db, actor } = ctx;
-  if (actor.role !== 'guardian')
-    throw new OperationError('학부모만 상담을 신청할 수 있습니다.', 403);
+  if (!canAskConsultation(actor))
+    throw new OperationError('학생과 학부모만 질문할 수 있습니다.', 403);
   if (
     existing &&
     (existing.owner_id !== actor.id || existing.status === 'closed')
@@ -584,13 +588,6 @@ export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
           409,
         );
     }
-    const needsFollowUp = ['abstained', 'partial', 'handoff'].includes(
-      answer.status,
-    );
-    if (needsFollowUp)
-      db.prepare(
-        "UPDATE op_consultation_threads SET status=CASE WHEN status='open' THEN 'requested' ELSE status END, title=? WHERE id=?",
-      ).run(question.slice(0, 65), conversationId);
     const targets = trace.targetStudentIds.length
       ? trace.targetStudentIds
       : studentId
@@ -600,12 +597,22 @@ export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
           : [];
     const storedAnswer = {
       ...answer,
+      answer: answer.answer
+        .replaceAll('연결해 드리겠습니다.', '연결을 요청할 수 있습니다.')
+        .replaceAll('연결해 드립니다.', '연결을 요청할 수 있습니다.'),
       operations: {
         studentIds: targets.filter((id) => currentStudentIds.includes(id)),
       },
     };
     addMessage(db, conversationId, 'question', question, at);
-    addMessage(db, conversationId, 'answer', answer.answer, at, storedAnswer);
+    addMessage(
+      db,
+      conversationId,
+      'answer',
+      storedAnswer.answer,
+      at,
+      storedAnswer,
+    );
   });
   return conversationId;
 }
@@ -641,8 +648,11 @@ async function submitConsultation(ctx: PageContext, form: FormData) {
     );
     return '/consultation?id=' + encodeURIComponent(conversationId);
   }
-  if (action === 'handoff' && ctx.actor.role !== 'guardian')
-    throw new OperationError('학부모만 담당자 상담을 요청할 수 있습니다.', 403);
+  if (['handoff', 'resume'].includes(action) && !canAskConsultation(ctx.actor))
+    throw new OperationError(
+      '학생과 학부모만 담당자 상담을 요청하거나 취소할 수 있습니다.',
+      403,
+    );
   if (!id) throw new OperationError('상담 기록을 찾을 수 없습니다.', 404);
   transaction(ctx.db, () => {
     ctx.assertCurrentAccess?.();
@@ -658,6 +668,16 @@ function submitThreadAction(
 ) {
   const { db, actor } = ctx;
   const now = new Date().toISOString();
+  if (
+    action === 'resume' &&
+    thread.owner_id === actor.id &&
+    thread.status === 'requested'
+  ) {
+    db.prepare(
+      "UPDATE op_consultation_threads SET status='open',assignee_id=NULL,updated_at=?,version=version+1 WHERE id=?",
+    ).run(now, thread.id);
+    return;
+  }
   if (
     action === 'handoff' &&
     thread.owner_id === actor.id &&
@@ -780,8 +800,11 @@ function renderMessage(
 
 function renderConsultation(ctx: PageContext) {
   const { db, actor, url } = ctx;
-  if (!isStaff(actor) && actor.role !== 'guardian')
-    throw new OperationError('학부모와 상담 담당자만 열람할 수 있습니다.', 403);
+  if (!isStaff(actor) && !canAskConsultation(actor))
+    throw new OperationError(
+      '학생, 학부모와 상담 담당자가 이용할 수 있습니다.',
+      403,
+    );
   const id = url.searchParams.get('id');
   const thread = id ? loadThread(ctx, id) : undefined;
   const allThreads = visibleThreads(ctx);
@@ -801,7 +824,7 @@ function renderConsultation(ctx: PageContext) {
   const staff =
     active && (actor.role === 'admin' || thread.assignee_id === actor.id);
   const own =
-    actor.role === 'guardian' && (!thread || thread.owner_id === actor.id);
+    canAskConsultation(actor) && (!thread || thread.owner_id === actor.id);
   const students = accessibleStudents(db, actor);
   const messages = thread
     ? rows<Message>(
@@ -845,21 +868,22 @@ function renderConsultation(ctx: PageContext) {
             ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
             : inbox || archive
               ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : '<p class="muted">현재 목록이 비어 있습니다.</p>'}`
-              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="질문 예시">${['학원 위치와 주차 안내가 궁금해요.', '상담 가능한 시간과 신청 방법은?', '자습실 위치와 이용 시간 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
+              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="자주 묻는 질문">${['수업 대상 학년을 알려주세요.', '학원 운영시간을 알려주세요.', '이번 주 수업 일정을 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
         }
         <div class="conversation-messages">${messages.map((message) => renderMessage(message, currentRevisions)).join('')}</div>
         ${
           own && thread?.status !== 'closed' && (thread || !queue)
             ? `<form data-jump-label="질문 쓰기" class="chat-composer" method="post" action="${h(link)}">
           ${hiddenThread}<input type="hidden" name="conversationId" value="${thread?.id ?? randomUUID()}">
-          <label class="compose-question"><span>질문</span><textarea name="question" rows="2" maxlength="500" required placeholder="${active ? '담당자에게 전할 내용을 입력하세요' : '학원에 궁금한 점을 입력하세요'}">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
-          <div class="compose-actions">${!active && students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
+          <label class="compose-question"><span>질문</span><textarea name="question" rows="2" maxlength="500" required placeholder="${active ? '담당자에게 전할 내용을 입력하세요' : thread ? '이어서 궁금한 점을 입력하세요' : '학원에 궁금한 점을 입력하세요'}">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
+          <div class="compose-actions">${!active && actor.role === 'guardian' && students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
           <button name="action" value="ask">${active ? '담당자에게 보내기' : '질문 보내기'} <span aria-hidden="true">↑</span></button></div>
           <p class="chat-progress" role="status" aria-live="polite"></p>
         </form>`
             : ''
         }
         ${own && thread?.status === 'open' ? `<form class="actions" method="post">${hiddenThread}<button class="secondary" name="action" value="handoff">담당자 상담 요청</button></form>` : ''}
+        ${own && thread?.status === 'requested' ? `<form class="actions" method="post">${hiddenThread}<button class="secondary" name="action" value="resume">요청 취소하고 AI 상담 계속</button></form>` : ''}
         ${
           active && actor.role === 'admin'
             ? `<form class="actions" method="post">
@@ -891,7 +915,7 @@ function renderConsultation(ctx: PageContext) {
 export const consultationModule: OperationModule = {
   path: '/consultation',
   label: '학원 상담',
-  roles: ['guardian', 'teacher', 'admin'],
+  roles: ['guardian', 'student', 'teacher', 'admin'],
   setup: setupConsultation,
   render: renderConsultation,
   submit: submitConsultation,

@@ -781,7 +781,7 @@ test('보호자 일반 상담은 공개된 상담 예약 시각만 해당 문서
   const { answer } = await s.ask(question, guardian);
   assert.equal(answer.status, 'abstained', answer.answer);
   assert.deepEqual(answer.citations, []);
-  await assert.rejects(s.ask(question, 'TA_DIRECTOR'), /학부모만/);
+  await assert.rejects(s.ask(question, 'TA_DIRECTOR'), /학생과 학부모만/);
   const { answer: makeup } = await s.ask(
     year + '년 12월 1일 초등 수학반 휴강 보강은 언제인가요?',
     guardian,

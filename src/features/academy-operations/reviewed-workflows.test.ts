@@ -365,7 +365,9 @@ for (const origin of ['team', 'notice']) {
     s.submit('approve', { choice: '0' }, 'TA_TEACHER');
     const own = await ask('TA_GUARDIAN_E_MATH');
     const other = await ask('TA_GUARDIAN_M2', 'TA_STU_002');
-    await assert.rejects(ask('TA_STUDENT_001'), /학부모만/);
+    const ownStudent = await ask('TA_STUDENT_001', 'TA_STU_001');
+    assert.equal(ownStudent.status, 'answered', ownStudent.answer);
+    assert.match(ownStudent.answer, /12월 5일/);
     await assert.rejects(
       ask('TA_GUARDIAN_E_MATH', 'TA_STU_002'),
       /조회 가능한 학생/,

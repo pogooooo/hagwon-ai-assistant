@@ -322,6 +322,37 @@ test('학교급 오타가 있어도 대상이 맞는 승인 과정 행으로 수
   assert.doesNotMatch(answer.citations[0].location ?? '', /표 1 · 1행/);
 });
 
+test('대상 질문은 공개 안내의 학년과 반을 읽고 개설 예정 반은 제외한다', async () => {
+  const { register, ask } = setup();
+  await register(
+    'FAMILY_COURSES',
+    'academy_info',
+    '수강 안내',
+    '| 강좌명 | 수강 대상 |\n|---|---|\n| 어휘 읽기반 | 초4~초6 |\n| 회화반 | 중등 |\n| 개설 예정 | 고등학생 |',
+  );
+  for (const question of [
+    '수업 대상이 누구인지',
+    '수강 대상 학년 알려주세요',
+    '누가 수강할 수 있나요?',
+  ]) {
+    const { answer } = await ask(question);
+    assert.equal(answer.status, 'answered', answer.answer);
+    assert.match(answer.answer, /어휘 읽기반/);
+    assert.match(answer.answer, /회화반/);
+    assert.doesNotMatch(answer.answer, /고등학생|개설 예정/);
+    assert.ok(
+      answer.citations.every(
+        ({ documentId }) => documentId === 'FAMILY_COURSES',
+      ),
+    );
+  }
+  const { answer } = await ask('중학생도 수업하는지');
+  assert.equal(answer.status, 'answered', answer.answer);
+  assert.match(answer.answer, /회화반/);
+  assert.doesNotMatch(answer.answer, /어휘 읽기반/);
+  assert.match(answer.citations[0].location ?? '', /표 1 · 2행/);
+});
+
 test('일부 과목표는 개설 여부를 보류하고 승인된 전체 안내는 정규 과정 범위로 답한다', async () => {
   const { register, ask } = setup({ ...catalog, classes: [] });
   await register(
