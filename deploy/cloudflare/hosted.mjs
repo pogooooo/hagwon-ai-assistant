@@ -80,6 +80,7 @@ export class AcademyDemo extends DurableObject {
       publicOrigin: new URL(env.AXR_OPERATIONS_PUBLIC_ORIGIN),
       demoPassword: env.AXR_HOSTED_DEMO_PASSWORD,
       showDemoAccounts: true,
+      trialPasswordHashes: env.AXR_TRIAL_PASSWORD_HASHES_V1,
       assetsRoot: null,
       fixturesRoot: new URL('file://' + fixtureRoot + 'AC_TEST_A/'),
       documentsRoot: fixtureRoot,
