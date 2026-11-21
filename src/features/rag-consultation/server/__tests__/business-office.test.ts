@@ -241,7 +241,7 @@ test('operations upload and approval preserve the original workbook through fina
   );
   const thread = randomUUID();
   await consultationModule.submit(
-    context('TA_VISITOR'),
+    context('TA_GUARDIAN_M2'),
     form({
       action: 'ask',
       conversationId: thread,

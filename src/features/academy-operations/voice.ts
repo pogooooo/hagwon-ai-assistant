@@ -408,6 +408,20 @@ export const voiceModule: OperationModule = {
         ? loadThread(ctx, parent.thread_id)
         : undefined;
       await ask(ctx, query, existing);
+      if (
+        existing &&
+        (existing.status === 'requested' || existing.status === 'assigned')
+      ) {
+        transaction(ctx.db, () => {
+          ctx.db
+            .prepare("UPDATE op_voice_turns SET state='forwarded' WHERE id=?")
+            .run(result.id);
+          ctx.db
+            .prepare('UPDATE op_voice_sessions SET closed=1 WHERE id=?')
+            .run(parent.id);
+        });
+        return '/consultation?id=' + parent.thread_id;
+      }
       const answer = one<{ response: string }>(
         ctx.db,
         "SELECT response FROM op_consultation_messages WHERE thread_id=? AND kind='answer' ORDER BY id DESC LIMIT 1",

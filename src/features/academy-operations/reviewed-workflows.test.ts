@@ -367,7 +367,7 @@ for (const origin of ['team', 'notice']) {
     s.submit('approve', { choice: '0' }, 'TA_TEACHER');
     const own = await ask('TA_GUARDIAN_E_MATH');
     const other = await ask('TA_GUARDIAN_M2', 'TA_STU_002');
-    assert.deepEqual((await ask('TA_STUDENT_001')).citations, own.citations);
+    await assert.rejects(ask('TA_STUDENT_001'), /학부모만/);
     await assert.rejects(
       ask('TA_GUARDIAN_E_MATH', 'TA_STU_002'),
       /조회 가능한 학생/,

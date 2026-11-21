@@ -95,23 +95,27 @@ test('QA: 날짜·상대일 질문은 업로드 안내문 대신 달력 DB를 �
   });
   const s = setup(t);
   await s.config();
+  await assert.rejects(
+    s.ask('초등 수학반 시간표 알려주세요', 'TA_DIRECTOR'),
+    /학부모만/,
+  );
+  for (const q of [
+    '초등 수학반 11월 16일 수업 있나요?',
+    '초등 수학반 내일 수업 있나요?',
+    '초등 수학반 시간표 알려주세요',
+  ]) {
+    const answer = await s.ask(q);
+    assert.equal(answer.status, 'answered', JSON.stringify(answer));
+    assert.match(answer.answer, /16:00/);
+    assert.match(answer.answer, /17:00/);
+    assert.doesNotMatch(answer.answer, /17:20|14:20|휴강입니다|11월 21일/);
+    assert.ok(
+      answer.citations.every((c: { documentId: string }) =>
+        c.documentId.startsWith('timetable-'),
+      ),
+    );
+  }
   for (const who of ['TA_GUARDIAN_E_MATH', 'TA_DIRECTOR']) {
-    for (const q of [
-      '초등 수학반 11월 16일 수업 있나요?',
-      '초등 수학반 내일 수업 있나요?',
-      '초등 수학반 시간표 알려주세요',
-    ]) {
-      const answer = await s.ask(q, who);
-      assert.equal(answer.status, 'answered', JSON.stringify(answer));
-      assert.match(answer.answer, /16:00/);
-      assert.match(answer.answer, /17:00/);
-      assert.doesNotMatch(answer.answer, /17:20|14:20|휴강입니다|11월 21일/);
-      assert.ok(
-        answer.citations.every((c: { documentId: string }) =>
-          c.documentId.startsWith('timetable-'),
-        ),
-      );
-    }
     assert.ok(
       visibleCalendarEntries(s.ctx(who), '2026-11-16', '2026-11-16').some(
         (x) => x.kind === 'regular',
@@ -366,7 +370,7 @@ test('보강 횟수 규정 질문을 개인 결석 일정 확인으로 가로채
   const s = setup(t);
   const answer = await s.ask(
     '결석하면 보강은 한 달에 몇 번까지 받을 수 있어요?',
-    'TA_DIRECTOR',
+    'TA_GUARDIAN_E_MATH',
     '',
   );
   assert.notEqual(answer.status, 'clarify', answer.answer);
