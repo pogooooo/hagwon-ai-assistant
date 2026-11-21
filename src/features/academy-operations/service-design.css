@@ -3713,7 +3713,7 @@ a.workspace-link {
 }
 a.workspace-link:hover {
   border-color: currentColor;
-  background: var(--soft);
+  background: var(--accent-soft);
 }
 a.workspace-link:focus-visible {
   outline: 2px solid var(--accent);

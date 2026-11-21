@@ -326,7 +326,7 @@ test('대상 질문은 공개 안내의 학년과 반을 읽고 개설 예정 �
   const { register, ask } = setup();
   await register(
     'FAMILY_COURSES',
-    'curriculum',
+    'academy_info',
     '수강 안내',
     '| 강좌명 | 수강 대상 |\n|---|---|\n| 어휘 읽기반 | 초4~초6 |\n| 회화반 | 중등 |\n| 개설 예정 | 고등학생 |',
   );
