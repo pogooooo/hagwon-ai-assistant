@@ -670,7 +670,11 @@ test(
       303,
     );
     assert.match((await send(submission, guardian)).text, /5\/5점/);
-    assert.ok((await send('/', guardian)).text.includes(submission));
+    assert.ok(
+      (await send('/student-reports?view=assignments', guardian)).text.includes(
+        submission,
+      ),
+    );
     assert.ok(
       !(await send('/homework?view=review', teacher)).text.includes(submission),
     );
