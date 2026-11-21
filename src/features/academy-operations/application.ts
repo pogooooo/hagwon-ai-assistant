@@ -17,6 +17,7 @@ import { listedDemoLogins, setupDemoLogins } from './demo-logins.ts';
 import {
   seedAcademyChoices,
   seedDemoConsultationGuides,
+  seedDemoLanguageHomework,
 } from './academy-switcher-demo.ts';
 import type { OperationsDatabase } from './database.ts';
 import {
@@ -56,7 +57,7 @@ import { setupLearning, renderLearningPublication } from './learning.ts';
 import { parentMessagesModule } from './parent-messages.ts';
 import { unreadParentCount } from './parent-messages-model.ts';
 import { calendarModule } from './calendar.ts';
-import { makeupPollsModule } from './makeup-polls.ts';
+import { seedDemoMakeupPolls, makeupPollsModule } from './makeup-polls.ts';
 import { gradingOverview } from '../homework-grading/overview.ts';
 import {
   renderStudentReports,
@@ -258,6 +259,8 @@ export function createOperationsServer({
     seedAcademyChoices(db);
     seedDemoConsultationGuides(db);
     setupDemoLogins(db, trialPasswordHashes);
+    seedDemoMakeupPolls(db);
+    seedDemoLanguageHomework(db);
   }
   function hashSession(token: string) {
     return createHash('sha256').update(token).digest('hex');
@@ -378,7 +381,7 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=role-workflows"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=reports-voice"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
@@ -724,7 +727,7 @@ export function createOperationsServer({
         actor: sessionActor,
         url,
         assertCurrentAccess,
-        showReportExamples: showDemoAccounts,
+        showDemoRecords: showDemoAccounts,
         maxDocumentBytes,
         scanVision,
         scanPdfAvailable,

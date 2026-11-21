@@ -1,3 +1,5 @@
+import { renderStudentReports } from '../academy-operations/student-reports.ts';
+import { renderReportDocument } from '../academy-operations/report-document.ts';
 import { photoItem } from './assigned-work.ts';
 import { gradingOverview, gradingStates as names } from './overview.ts';
 import { createHash } from 'node:crypto';
@@ -810,7 +812,41 @@ async function render(ctx: PageContext) {
           f.period_role === 'primary' &&
           f.n_evaluable > 0,
       );
-      detail += `<section class="panel grade-report"><img class="report-owl" src="/assets/ondap-report.png" alt=""><h2>학습 리포트 ${report.status === 'approved' ? '공개본' : '초안'}</h2><p>${report.model_id === 'deterministic-template' ? '확정 기록을 정형 문장으로 정리했습니다.' : 'AI가 확정 기록에서 관찰 항목을 선택하고 정리했습니다.'}</p><div class="grade-stat-list">${stats.map((f) => `<div><strong>${h(f.skill_label || subjectNames[f.subject_id])}</strong><progress value="${f.n_correct}" max="${f.n_evaluable}" aria-label="${h(f.skill_label || subjectNames[f.subject_id])} 정답 수"></progress><span>${f.n_correct} / ${f.n_evaluable}문항 정답</span></div>`).join('')}</div><div class="record-body">${h(report.rendered_text).replaceAll('\n', '<br>')}</div>${staff && report.status === 'draft' ? `${startForm('approve_report')}${hidden('report', report.report_id)}${hidden('revision', report.revision)}${hidden('generation', report.source_generation)}${hidden('hash', report.facts_hash)}<label><input type="checkbox" name="review_complete" value="yes" required>근거와 내용을 검수했습니다.</label><button>학생·보호자에게 공개</button></form>` : ''}</section>`;
+      const sections = [
+        ...(stats.length
+          ? [
+              '## 성취도',
+              [
+                '| 학습 유형 | 정답 | 전체 |',
+                '| --- | ---: | ---: |',
+                ...stats.map(
+                  (f) =>
+                    '| ' +
+                    (f.skill_label || subjectNames[f.subject_id])
+                      .replaceAll('|', '｜')
+                      .replace(/\s+/g, ' ') +
+                    ' | ' +
+                    f.n_correct +
+                    ' | ' +
+                    f.n_evaluable +
+                    ' |',
+                ),
+              ].join('\n'),
+            ]
+          : []),
+        '## 학습 분석',
+        report.rendered_text.split('\n').join('\n\n'),
+      ].join('\n\n');
+      detail += renderReportDocument(
+        report.assignment_title || '학습 리포트',
+        sections,
+        (report.status === 'approved' ? '공개' : '검토 대기') +
+          ' · ' +
+          report.generated_at.slice(0, 10),
+        '과제-학습-리포트',
+      );
+      if (staff && report.status === 'draft')
+        detail += `<section class="panel">${startForm('approve_report')}${hidden('report', report.report_id)}${hidden('revision', report.revision)}${hidden('generation', report.source_generation)}${hidden('hash', report.facts_hash)}<label><input type="checkbox" name="review_complete" value="yes" required>근거와 내용을 검수했습니다.</label><button>학생·보호자에게 공개</button></form></section>`;
     }
 
     const params = ctx.url.searchParams;
@@ -846,14 +882,16 @@ async function render(ctx: PageContext) {
         : view === 'queue'
           ? '제출 현황'
           : view === 'reports'
-            ? '채점 리포트'
+            ? ctx.actor.role === 'guardian'
+              ? '학습 리포트'
+              : '채점 리포트'
             : '채점 결과';
     const intro =
       `<script src="/grading-ui.js?v=2" defer></script><div class="page-heading"><h1>${title}</h1></div><nav class="grade-filters" aria-label="숙제 메뉴">` +
       tabs
         .map(
           ([key, label]) =>
-            `<a href="${ctx.actor.role === 'guardian' && key === 'reports' ? '/student-reports' : '/grading?view=' + key}"${view === key ? ' aria-current="page"' : ''}>${label}</a>`,
+            `<a href="/grading?view=${key}"${view === key ? ' aria-current="page"' : ''}>${label}</a>`,
         )
         .join('') +
       '</nav>';
@@ -948,7 +986,7 @@ async function render(ctx: PageContext) {
           }
         });
       const list =
-        '<section class="panel"><h2>학습 리포트</h2>' +
+        '<section class="panel"><h2>과제별 채점 리포트</h2>' +
         (reports
           .map(
             (r) =>
@@ -958,6 +996,7 @@ async function render(ctx: PageContext) {
         '</section>';
       return (
         intro +
+        (ctx.actor.role === 'guardian' ? renderStudentReports(ctx) : '') +
         list +
         (staff
           ? `<section class="panel"><h2>분석 리포트 만들기</h2>${startForm('report')}${choice(

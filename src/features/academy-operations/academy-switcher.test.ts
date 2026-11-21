@@ -83,6 +83,12 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       (await send('/settings', cookie, { character: 'water' })).status,
       409,
     );
+    if (role === 'student') {
+      const assignments = await (
+        await send('/grading?view=upload', cookie)
+      ).text();
+      assert.match(assignments, /일과와 약속 시간 복습/);
+    }
     if (role === 'admin') {
       const doc = await (await send('/documents', cookie)).text();
       assert.match(doc, /온답 어학원 운영시간 안내/);
@@ -156,15 +162,34 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
         assert.match(html, /value="handoff">담당자 상담 요청/);
         assert.doesNotMatch(html, /180,000원|중2 내신반/);
       }
-      const examples = await (
-        await send('/student-reports?example=3', cookie)
+      const monthly = await (
+        await send('/student-reports?id=archived-2026-09', cookie)
       ).text();
       assert.equal(
-        (examples.match(/href="\/student-reports\?example=/g) ?? []).length,
+        (monthly.match(/href="\/student-reports\?id=archived-/g) ?? []).length,
         3,
       );
-      assert.match(examples, /출결 기록 없음/);
-      assert.doesNotMatch(examples, /초등 수학 · 분수 계산/);
+      assert.match(monthly, /길 묻고 설명하기/);
+      assert.match(monthly, /<table>/);
+      assert.match(monthly, /data:text\/markdown/);
+      assert.doesNotMatch(monthly, /리포트 예시|분수의 덧셈과 뺄셈/);
+      const inHomework = await (
+        await send('/grading?view=reports', cookie)
+      ).text();
+      assert.match(inHomework, /2026년 11월 학습 리포트/);
+      assert.ok(
+        inHomework.includes(
+          'href="/grading?view=reports&amp;id=archived-2026-09"',
+        ),
+      );
+      const poll = await (await send('/makeup-votes', cookie)).text();
+      assert.match(poll, /영어 회화반 휴강/);
+      assert.match(poll, /name="rank1"/);
+      assert.match(poll, /name="rank3"/);
+      assert.doesNotMatch(poll, /초등 수학반 휴강/);
+      const voice = await (await send('/voice', cookie)).text();
+      assert.match(voice, /voice-workspace/);
+      assert.match(voice, /채팅 상담 열기/);
       const documents = await (await send('/documents', cookie)).text();
       assert.doesNotMatch(documents, /<th>공개 범위<\/th>|철회 이력 포함/);
       const reportHub = await (
@@ -207,6 +232,10 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       .all()
       .map((r) => r.student_id),
     ['ONDAP_DEMO_QA_LEARNER'],
+  );
+  assert.equal(
+    (await send('/student-reports?id=archived-2026-11', qaCookie)).status,
+    404,
   );
   const user = 'TA_GUARDIAN_M2';
   const cookie = await login(user, '/'),
