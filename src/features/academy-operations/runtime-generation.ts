@@ -50,7 +50,11 @@ export function createOperationsClovaFetch(
           ).changes)
     )
       return new Response(null, { status: 402 });
-    return (fetchImpl ?? fetch)(url, init);
+    // workerd accepts manual redirects. Never forward a provider credential to a redirect target.
+    return (fetchImpl ?? fetch)(url, {
+      ...init,
+      redirect: 'manual',
+    });
   }) as typeof fetch;
 }
 

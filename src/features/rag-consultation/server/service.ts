@@ -1709,6 +1709,9 @@ export function createRagConsultationService(
             // Identity, permission and specialized evidence decisions run first.
             // Do not replace a fact/cell-bound result with a looser prose answer.
             const bound =
+              (plan.requests.length === 1 &&
+                draft.status === 'answered' &&
+                trace.intent === 'explicit_academy_address') ||
               draft.usedFacts.length > 0 ||
               draft.citations.some(
                 (c) =>
