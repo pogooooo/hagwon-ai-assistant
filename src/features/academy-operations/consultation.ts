@@ -898,6 +898,16 @@ function renderConsultation(ctx: PageContext) {
   const own =
     canAskConsultation(actor) && (!thread || thread.owner_id === actor.id);
   const students = accessibleStudents(db, actor);
+  const [classroom] = canAskConsultation(actor)
+    ? accessibleClasses(db, actor)
+    : [];
+  const suggestions = [
+    '수업 대상 학년을 알려주세요.',
+    '학원 운영시간을 알려주세요.',
+    classroom
+      ? classroom.name + ' 시간표를 알려주세요.'
+      : '상담은 어떻게 신청하나요?',
+  ];
   const messages = thread
     ? rows<Message>(
         db,
@@ -955,7 +965,7 @@ function renderConsultation(ctx: PageContext) {
             ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
             : inbox || archive
               ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : '<p class="muted">현재 목록이 비어 있습니다.</p>'}`
-              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="자주 묻는 질문">${['수업 대상 학년을 알려주세요.', '학원 운영시간을 알려주세요.', '이번 주 수업 일정을 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
+              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="자주 묻는 질문">${suggestions.map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
         }
         <div class="conversation-messages">${messages.map((message) => renderMessage(message, currentRevisions)).join('')}</div>
         ${

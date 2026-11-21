@@ -25,6 +25,10 @@ const audienceRequest =
   /^(?:(?:이|은|는)?(?:누구|어떤학년|몇학년|어디까지|어떻게되)(?:인지|인가요|인가|예요|이에요|나요|는지|요)?|(?:을|를)?(?:알려(?:주실수있나요|주세요|줘)|궁금해요)?)(?:요)?[?!.]*$/;
 const alternateAudience =
   /^(?:누가(?:수업을받을수|수강할수|다닐수)(?:있나요|있어요|있는지)|(?:어떤|몇)학년(?:을|부터|까지)?(?:가르치나요|가르쳐요|가르치는지)|(?:누구|어떤학년|몇학년)(?:를)?대상(?:으로)?(?:수업|교육)(?:하나요|해요|하는지))[?!.]*$/;
+const shortEnrollment =
+  /^(?:(?:여기|(?:이)?학원)(?:에서는|에서|은|는)?)?(?:초등학생|중학생|고등학생|[초중고][1-6])(?:도|은|는)?(?:다니나요|다녀요|받아요|받나요|(?:다닐수|수강할수|등록할수)(?:있나요|있어요|있는지))[?!.]*$/;
+const naturalAudience =
+  /^(?:(?:여기|(?:이)?학원)(?:에서는|에서|은|는)?)?(?:어떤|몇)학년(?:을|부터|까지)?(?:받아요|받나요|받으세요|가르치나요|가르쳐요|다닐수있나요)[?!.]*$/;
 const schoolLevel = /^([초중고])(?:등(?:학생|부|학교)?|학생|학교)$/;
 const unavailableCourse = /^(?:미개설|없음|운영안함|개설예정|[-—]+)$/;
 const contentColumn = /^(?:주요내용|수업방식|수업내용|학습내용|과정소개)$/;
@@ -234,10 +238,11 @@ export async function answerCourseOverview(
   const schoolGrades = askedSchoolGrades(q, grades);
   const asksSchoolOffering =
     schoolGrades.length > 0 &&
-    /수업|과정|수강|등록|개설|운영/.test(q) &&
-    /하나요|해요|합니까|(?:있|없)(?:나요|어요)|받아주|가능|열려|하는지/.test(
-      q,
-    ) &&
+    (shortEnrollment.test(compactText(q)) ||
+      (/수업|과정|수강|등록|개설|운영/.test(q) &&
+        /하나요|해요|합니까|(?:있|없)(?:나요|어요)|받아주|가능|열려|하는지/.test(
+          q,
+        ))) &&
     !frame.classIds.length &&
     !frame.matchedStudentIds.length &&
     !frame.selfReference &&
@@ -250,13 +255,11 @@ export async function answerCourseOverview(
     !frame.selfReference &&
     (topic
       ? audienceRequest.test(compactText(q).slice(topic[0].length))
-      : alternateAudience.test(compactText(q)));
+      : alternateAudience.test(compactText(q)) ||
+        naturalAudience.test(compactText(q)));
   const simpleOffering =
     asksSchoolOffering &&
-    (simpleOfferingQuestion.test(q) ||
-      /^(?:(?:여기|(?:이)?학원)(?:에서는|에서|은|는)?)?(?:초등학생|중학생|고등학생|[초중고][1-6])(?:도|은|는)?(?:수강할수|등록할수)(?:있나요|있어요|있는지)[?!.]*$/.test(
-        compactText(q),
-      ));
+    (simpleOfferingQuestion.test(q) || shortEnrollment.test(compactText(q)));
   const asksCourseList =
     /^(?:(?:(?:이\s*)?학원|여기)(?:에서는|에서|은|는)?\s*)?(?:(?:어떤|무슨)\s*(?:수업|반|과정|강좌)(?:들이|이|가|을|를)?\s*(?:있나요|있어요|하나요|운영하나요)|(?:정규\s*)?(?:수업|과정|강좌|반)\s*(?:목록|종류)(?:을|를)?\s*(?:알려\s*주세요|알려\s*줘)?)[?!. ]*$/.test(
       q,
