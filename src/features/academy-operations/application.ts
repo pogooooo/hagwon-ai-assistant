@@ -15,6 +15,7 @@ import { knowledgeModule } from './knowledge.ts';
 import { schoolsModule } from './schools.ts';
 import { voiceModule, voiceAudio } from './voice.ts';
 
+import { examBuilderModule } from './exam-builder.ts';
 import { consultationModule } from './consultation.ts';
 import {
   authenticate,
@@ -63,6 +64,7 @@ const modules: OperationModule[] = [
   makeupPollsModule,
   studentReportsModule,
   documentsModule,
+  examBuilderModule,
   consultationModule,
   preferencesModule,
   publicDataModule,
@@ -79,6 +81,7 @@ const menuOrder = [
   '/makeup-votes',
   '/student-reports',
   '/documents',
+  '/exam-builder',
   '/learning',
   '/briefing',
   '/homework',
@@ -145,6 +148,7 @@ export function createOperationsServer({
       'workbook-ui.js',
       'voice-ui.js',
       'voice-worklet.js',
+      'assets/ondap-exam-example.txt',
       'assets/walnut.png',
       'assets/water.png',
       'assets/owl.png',
@@ -159,19 +163,23 @@ export function createOperationsServer({
       'assets/fonts/noto-latin-400.woff2',
       'assets/fonts/noto-latin-700.woff2',
     ]) {
-      const contentType = path.endsWith('.webp')
-        ? 'image/webp'
-        : path.endsWith('.woff2')
-          ? 'font/woff2'
-          : path.endsWith('.css')
-            ? 'text/css; charset=utf-8'
-            : path.endsWith('.json')
-              ? 'application/json; charset=utf-8'
-              : path.endsWith('.webmanifest')
-                ? 'application/manifest+json; charset=utf-8'
-                : path.endsWith('.js')
-                  ? 'text/javascript; charset=utf-8'
-                  : 'image/png';
+      const contentType = path.endsWith('.txt')
+        ? 'text/plain; charset=utf-8'
+        : path.endsWith('.pdf')
+          ? 'application/pdf'
+          : path.endsWith('.webp')
+            ? 'image/webp'
+            : path.endsWith('.woff2')
+              ? 'font/woff2'
+              : path.endsWith('.css')
+                ? 'text/css; charset=utf-8'
+                : path.endsWith('.json')
+                  ? 'application/json; charset=utf-8'
+                  : path.endsWith('.webmanifest')
+                    ? 'application/manifest+json; charset=utf-8'
+                    : path.endsWith('.js')
+                      ? 'text/javascript; charset=utf-8'
+                      : 'image/png';
       staticFiles.set('/' + path, {
         contentType,
         bytes: readFileSync(new URL(path, assetsRoot)),
@@ -588,7 +596,9 @@ export function createOperationsServer({
           redirect(response, target ?? url.pathname + url.search);
         } catch (error) {
           if (
-            ![calendarModule, parentMessagesModule].includes(operation) ||
+            ![calendarModule, parentMessagesModule, examBuilderModule].includes(
+              operation,
+            ) ||
             !(error instanceof OperationError) ||
             ![400, 409, 422, 502, 503].includes(error.status)
           )
