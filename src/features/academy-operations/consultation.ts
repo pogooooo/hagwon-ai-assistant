@@ -1,3 +1,4 @@
+import { accountDisplayName, isAcceptanceRecord } from './demo-presentation.ts';
 import { randomUUID } from 'node:crypto';
 import { setupKnowledge, knowledgeEvidence } from './knowledge.ts';
 import {
@@ -210,9 +211,16 @@ export function consultationOverview(ctx: PageContext) {
   return {
     pending: threads
       .filter((thread) => needsStaffAttention(ctx.actor, thread))
+      .filter(
+        (thread) => !isAcceptanceRecord(ctx.actor.academyId, thread.title),
+      )
       .map((thread) => toOverviewItem(ctx, thread)),
     recent: threads
-      .filter((thread) => thread.owner_id === ctx.actor.id)
+      .filter(
+        (thread) =>
+          thread.owner_id === ctx.actor.id &&
+          !isAcceptanceRecord(ctx.actor.academyId, thread.title),
+      )
       .slice(0, 4)
       .map((thread) => toOverviewItem(ctx, thread)),
   };
@@ -241,13 +249,15 @@ function threadDetail(ctx: PageContext, thread: Thread) {
       unresolved = answer;
     }
   }
-  const owner =
-    one<{ name: string }>(
-      ctx.db,
-      'SELECT name FROM accounts WHERE academy_id=? AND id=?',
-      ctx.actor.academyId,
-      thread.owner_id,
-    )?.name ?? '탈퇴 계정';
+  const account = one<{ name: string; role: Actor['role'] }>(
+    ctx.db,
+    'SELECT name,role FROM accounts WHERE academy_id=? AND id=?',
+    ctx.actor.academyId,
+    thread.owner_id,
+  );
+  const owner = account
+    ? accountDisplayName(thread.academy_id, account.name, account.role)
+    : '탈퇴 계정';
   if (!unresolved || messages.at(-1)?.kind === 'question')
     question = latestQuestion;
   const targets = (
@@ -264,7 +274,8 @@ function threadDetail(ctx: PageContext, thread: Thread) {
   return {
     question,
     owner,
-    target: targets.join(', ') || '학생 미지정',
+    lastKind: messages.at(-1)?.kind,
+    target: targets.join(', '),
     summary: unresolved
       ? [
           answerLabels[unresolved.status],
@@ -274,12 +285,18 @@ function threadDetail(ctx: PageContext, thread: Thread) {
   };
 }
 
+function participantLabel(detail: ReturnType<typeof threadDetail>) {
+  return detail.target && detail.target !== detail.owner
+    ? detail.owner + ' · ' + detail.target
+    : detail.owner;
+}
+
 function toOverviewItem(ctx: PageContext, thread: Thread) {
   const detail = threadDetail(ctx, thread);
   return {
     id: thread.id,
     title: thread.status === 'open' ? thread.title : detail.question,
-    label: `${threadLabels[thread.status]} · ${detail.owner} · ${detail.target}`,
+    label: `${threadLabels[thread.status]} · ${participantLabel(detail)}`,
   };
 }
 
@@ -833,12 +850,47 @@ function renderConsultation(ctx: PageContext) {
   const inbox = actorIsStaff && view !== 'archive';
   const archive = actorIsStaff && view === 'archive';
   const queue = inbox || archive;
-  const threads = inbox
+  const scope = inbox
     ? allThreads.filter((row) => needsStaffAttention(actor, row))
     : archive
       ? allThreads.filter((row) => row.status === 'closed')
       : allThreads.filter((row) => row.owner_id === actor.id);
-  const filter = inbox ? '&amp;view=inbox' : archive ? '&amp;view=archive' : '';
+  const indexed = scope.map((row) => {
+    const detail = threadDetail(ctx, row);
+    const validation = isAcceptanceRecord(actor.academyId, row.title);
+    const state =
+      row.status === 'requested'
+        ? 'unassigned'
+        : detail.lastKind === 'staff'
+          ? 'waiting'
+          : 'reply';
+    return { row, detail, validation, state };
+  });
+  const requestedStatus = url.searchParams.get('status');
+  const statuses = [
+    { id: 'all', label: '전체' },
+    ...(actor.role === 'admin' ? [{ id: 'unassigned', label: '미배정' }] : []),
+    { id: 'reply', label: '답변 대기' },
+    { id: 'waiting', label: '답변 보냄' },
+    ...(indexed.some(({ validation }) => validation)
+      ? [{ id: 'validation', label: '검증 기록' }]
+      : []),
+  ];
+  const status =
+    queue && statuses.some((s) => s.id === requestedStatus)
+      ? requestedStatus
+      : 'all';
+  const threads = indexed.filter((item) =>
+    status === 'validation'
+      ? item.validation
+      : !item.validation &&
+        (!inbox || status === 'all' || status === item.state),
+  );
+  const filter =
+    (inbox ? '&amp;view=inbox' : archive ? '&amp;view=archive' : '') +
+    (status && status !== 'all'
+      ? '&amp;status=' + encodeURIComponent(status)
+      : '');
   const active =
     thread && (thread.status === 'requested' || thread.status === 'assigned');
   const staff =
@@ -860,7 +912,12 @@ function renderConsultation(ctx: PageContext) {
     ? '/consultation?' +
       new URLSearchParams({
         id: thread.id,
-        ...(queue ? { view: inbox ? 'inbox' : 'archive' } : {}),
+        ...(queue
+          ? {
+              view: inbox ? 'inbox' : 'archive',
+              ...(status && status !== 'all' ? { status } : {}),
+            }
+          : {}),
       })
     : '/consultation';
   const hiddenThread = thread
@@ -872,14 +929,24 @@ function renderConsultation(ctx: PageContext) {
         <h2>상담 목록</h2>
         ${actorIsStaff ? `<nav class="view-tabs" aria-label="상담 목록 범위"><a href="/consultation?view=inbox"${inbox ? ' aria-current="page"' : ''}>처리 중</a><a href="/consultation?view=archive"${archive ? ' aria-current="page"' : ''}>완료</a></nav>` : ''}
         ${
+          queue
+            ? `<nav class="consultation-status-links" aria-label="상담 상태">${statuses
+                .filter((s) => inbox || s.id === 'all' || s.id === 'validation')
+                .map(
+                  ({ id: key, label }) =>
+                    `<a class="workspace-link" href="/consultation?view=${inbox ? 'inbox' : 'archive'}&amp;status=${key}"${key === status ? ' aria-current="page"' : ''}>${label}</a>`,
+                )
+                .join('')}</nav>`
+            : ''
+        }
+        ${
           threads.length
             ? `<ul class="item-list">${threads
-                .map((row) => {
-                  const detail = threadDetail(ctx, row);
-                  return `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}#conversation"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.status === 'open' ? row.title : detail.question)}</span><small>${h(threadLabels[row.status])} · ${h(detail.owner)} · ${h(detail.target)}</small>${queue ? `<small>${h(detail.summary)}</small>` : ''}</a></li>`;
+                .map(({ row, detail, state }) => {
+                  return `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}#conversation"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.status === 'open' ? row.title : detail.question)}</span><small>${h(inbox ? (statuses.find((item) => item.id === state)?.label ?? threadLabels[row.status]) : threadLabels[row.status])} · ${h(participantLabel(detail))}</small>${queue ? `<small>${h(detail.summary)}</small>` : ''}</a></li>`;
                 })
                 .join('')}</ul>`
-            : `<p class="muted">${inbox ? '처리할 상담이 없습니다.' : archive ? '완료된 상담이 없습니다.' : '저장된 상담이 없습니다.'}</p>`
+            : `<p class="muted">${inbox ? '이 상태의 상담이 없습니다.' : archive ? '완료된 상담이 없습니다.' : '저장된 상담이 없습니다.'}</p>`
         }
       </aside>
       <section class="consultation-main" id="conversation" tabindex="-1">

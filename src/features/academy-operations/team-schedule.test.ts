@@ -147,7 +147,7 @@ test('QA: 날짜·상대일 질문은 업로드 안내문 대신 달력 DB를 �
   assert.match(notice, /2026-11-25/);
   assert.match(notice, /2026-11-28 14:00~15:00/);
   const docs = await documentsModule.render(s.ctx('TA_GUARDIAN_E_MATH'));
-  assert.match(docs, /일정에서 자동 반영된 자료/);
+  assert.match(docs, /시간표·휴보강 자료/);
   for (const q of [
     '중3반 11월 19일 수업 있나요?',
     '가상학생B 성적과 보강 알려주세요',

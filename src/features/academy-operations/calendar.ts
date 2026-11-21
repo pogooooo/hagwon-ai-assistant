@@ -64,14 +64,15 @@ function calendar(ctx: PageContext) {
     (_, i) => {
       const day = month + '-' + String(i + 1).padStart(2, '0');
       const items = entries(day);
-      return `<a class="calendar-day${day === today ? ' today' : ''}${day === selected ? ' selected' : ''}" href="/schedule?month=${month}&amp;day=${day}#day-detail" aria-label="${day} 일정 ${items.length}건"${day === selected ? ' aria-current="date"' : ''}><strong>${i + 1}</strong>${items
+      return `<a class="calendar-day${day === today ? ' today' : ''}${day === selected ? ' selected' : ''}" href="/schedule?month=${month}&amp;day=${day}#day-detail" aria-label="${day} 일정 ${items.length}건"${day === selected ? ' aria-current="date"' : ''}><strong>${i + 1}</strong>${items.length ? `<span class="calendar-day-count" aria-hidden="true">${items.length}건 ${[...new Set(items.map(({ kind }) => kind))].map((kind) => `<i class="event-dot calendar-${h(kind)}"></i>`).join('')}</span>` : ''}${items
         .slice(0, 3)
         .map(
-          (s) => `<small class="calendar-${h(s.kind)}">${h(s.title)}</small>`,
+          (s) =>
+            `<small class="calendar-event-title calendar-${h(s.kind)}">${h(s.title)}</small>`,
         )
         .join(
           '',
-        )}${items.length > 3 ? `<small>외 ${items.length - 3}건</small>` : ''}</a>`;
+        )}${items.length > 3 ? `<small class="calendar-event-title">외 ${items.length - 3}건</small>` : ''}</a>`;
     },
   ).join(
     '',

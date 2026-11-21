@@ -1,4 +1,5 @@
 import { previewDocument } from './document-preview.ts';
+import { isAcceptanceRecord } from './demo-presentation.ts';
 import { visibleScheduleDocuments } from './team-schedule.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { OperationsDatabase } from './database.ts';
@@ -392,7 +393,11 @@ function visibleVersions(ctx: PageContext): DocumentVersion[] {
 export function recentPublishedDocuments(ctx: PageContext) {
   const sorted = readablePublishedVersions(ctx)
     .map(({ input }) => input)
-    .filter(({ validFrom }) => Date.parse(validFrom) <= Date.now())
+    .filter(
+      ({ title, validFrom }) =>
+        Date.parse(validFrom) <= Date.now() &&
+        !isAcceptanceRecord(ctx.actor.academyId, title),
+    )
     .sort(
       (a, b) =>
         Date.parse(b.approvedAt ?? '') - Date.parse(a.approvedAt ?? '') ||
@@ -548,6 +553,8 @@ async function renderDocuments(ctx: PageContext) {
   const versions = visibleVersions(ctx);
   const selected = selectedDocument(ctx, versions);
   const admin = ctx.actor.role === 'admin';
+  const diagnostics =
+    admin && ctx.url.searchParams.get('records') === 'validation';
   const canWithdraw =
     selected?.state === 'draft' ||
     (selected?.state === 'published' &&
@@ -558,7 +565,7 @@ async function renderDocuments(ctx: PageContext) {
           selected.input.documentId,
         ));
   const link = (input: SourceDocumentInput) =>
-    `id=${encodeURIComponent(input.documentId)}&amp;revision=${input.revision}`;
+    `id=${encodeURIComponent(input.documentId)}&amp;revision=${input.revision}${diagnostics ? '&amp;records=validation' : ''}`;
   const now = Date.now();
   const activeIds = new Set(
     applicableVersions(knownPublishedVersions(versions, now), now)
@@ -571,6 +578,7 @@ async function renderDocuments(ctx: PageContext) {
   const filtered = versions.filter(
     ({ input, state }) =>
       (state !== 'withdrawn' || includeWithdrawn) &&
+      isAcceptanceRecord(ctx.actor.academyId, input.title) === diagnostics &&
       (!category || input.documentType === category) &&
       (!search ||
         (input.title + ' ' + input.text)
@@ -597,8 +605,7 @@ async function renderDocuments(ctx: PageContext) {
               ? '공개 중'
               : '승인됨';
       return `<tr><td><a class="workspace-link" href="/documents?${link(input)}#document-preview">${h(input.title)} <span aria-hidden="true">›</span></a></td>
-      <td>v${input.revision}</td>
-      <td>${h(label)}</td></tr>`;
+      ${admin ? `<td>v${input.revision}</td><td>${h(label)}</td>` : `<td>${h(documentTypes[input.documentType])}</td>`}</tr>`;
     })
     .join('');
   const create = admin && ctx.url.searchParams.get('view') === 'create';
@@ -613,9 +620,9 @@ async function renderDocuments(ctx: PageContext) {
   return `<div class="workspace-heading"><h1>학원 자료</h1>${admin ? '<a class="button-link" href="/documents?view=create#document-edit">자료 등록</a>' : ''}</div>
     ${create ? revisionForm(ctx) : ''}
     ${admin && selected?.state === 'draft' && ctx.url.searchParams.get('scan') === 'ready' ? '<p class="notice" role="status">판독을 완료했습니다. 내용을 검수해 주세요.</p>' : ''}
-    ${scheduleDocs.length ? `<section class="panel"><h2>일정에서 자동 반영된 자료</h2><p class="muted">원본 일정에서 관리합니다. 수업 시간·휴강·보강 상담은 이 자료를 기준으로 답합니다.</p>${scheduleDocs.map((d) => `<details><summary>${h(d.title)} · v${d.revision}</summary><pre class="preview">${h(d.text)}</pre><a class="workspace-link" href="/schedule?view=makeup">원본 일정 보기 <span aria-hidden="true">›</span></a></details>`).join('')}</section>` : ''}
+
     <section class="panel">
-      <h2>자료 목록</h2><form class="document-filters" method="get"><label>자료 검색<input name="q" value="${h(search)}" maxlength="200" placeholder="제목 또는 본문"></label><label>분류<select name="category"><option value="">전체 분류</option>${Object.entries(
+      <div class="panel-heading"><h2>${diagnostics ? '검증 자료' : '자료 목록'}</h2>${admin && versions.some(({ input }) => isAcceptanceRecord(ctx.actor.academyId, input.title)) ? `<a class="workspace-link" href="${diagnostics ? '/documents' : '/documents?records=validation'}">${diagnostics ? '자료 목록' : '검증 자료 보기'}</a>` : ''}</div><form class="document-filters" method="get">${diagnostics ? '<input type="hidden" name="records" value="validation">' : ''}<label>자료 검색<input name="q" value="${h(search)}" maxlength="200" placeholder="제목 또는 본문"></label><label>분류<select name="category"><option value="">전체 분류</option>${Object.entries(
         documentTypes,
       )
         .map(
@@ -624,8 +631,8 @@ async function renderDocuments(ctx: PageContext) {
         )
         .join(
           '',
-        )}</select></label><label class="check-label"><input type="checkbox" name="withdrawn" value="1"${includeWithdrawn ? ' checked' : ''}>철회 이력 포함</label><button>검색</button></form>
-      ${list ? `<div class="table-wrap document-list"><table><thead><tr><th>제목</th><th>개정</th><th>상태</th></tr></thead><tbody>${list}</tbody></table></div>` : '<p class="muted">열람할 수 있는 자료가 없습니다.</p>'}
+        )}</select></label>${admin ? `<label class="check-label"><input type="checkbox" name="withdrawn" value="1"${includeWithdrawn ? ' checked' : ''}>철회 이력 포함</label>` : ''}<button>검색</button></form>
+      ${list ? `<div class="table-wrap document-list"><table><thead><tr><th>제목</th>${admin ? '<th>개정</th><th>상태</th>' : '<th>분류</th>'}</tr></thead><tbody>${list}</tbody></table></div>` : '<p class="muted">열람할 수 있는 자료가 없습니다.</p>'}
     </section>
     ${
       selected
@@ -651,6 +658,7 @@ async function renderDocuments(ctx: PageContext) {
     </section>`
         : ''
     }
+    ${scheduleDocs.length ? `<details class="panel source-schedule"><summary>시간표·휴보강 자료 <span>${scheduleDocs.length}건</span></summary><p class="muted">원본 일정에서 관리합니다. 수업 시간·휴강·보강 상담은 이 자료를 기준으로 답합니다.</p>${scheduleDocs.map((d) => `<details><summary>${h(d.title)} · v${d.revision}</summary><pre class="preview">${h(d.text)}</pre><a class="workspace-link" href="/schedule?view=makeup">원본 일정 보기 <span aria-hidden="true">›</span></a></details>`).join('')}</details>` : ''}
     ${admin && selected && !create ? revisionForm(ctx, selected.input) : ''}`;
 }
 

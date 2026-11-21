@@ -1066,11 +1066,20 @@ test('운영 홈과 상담 목록은 열람 범위와 처리 상태를 따른다
     (await s.send(path, parent, { action: 'handoff', id })).status,
     303,
   );
-  assert.match((await s.send('/', admin)).text, new RegExp(title));
+  const adminHome = await s.send('/', admin);
+  assert.match(adminHome.text, new RegExp(title));
+  assert.match(adminHome.text, /처리할 상담이 1건 있습니다/);
   assert.match(
     (await s.send('/consultation?view=inbox', admin)).text,
     new RegExp(title),
   );
+  const unassigned = (
+    await s.send('/consultation?view=inbox&status=unassigned', admin)
+  ).text;
+  const reply = (await s.send('/consultation?view=inbox&status=reply', admin))
+    .text;
+  assert.match(unassigned, new RegExp(title));
+  assert.doesNotMatch(reply, new RegExp(title));
   assert.doesNotMatch((await s.send('/', other)).text, new RegExp(title));
   assert.equal(
     (await s.send(path, admin, { action: 'close', id })).status,

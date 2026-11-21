@@ -23,6 +23,10 @@ const symbols: Record<string, [string, string]> = {
     '<path d="M5 3h14v18H5Z"/><path d="m8 12 3 3 5-6M8 6h5"/>',
   ],
   '/learning': ['learning', '<path d="M4 3v18h17M8 17v-5m5 5V7m5 10V3"/>'],
+  '/student-reports': [
+    'learning',
+    '<path d="M4 3v18h17M8 17v-5m5 5V7m5 10V3"/>',
+  ],
   '/briefing': [
     'learning',
     '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
@@ -123,9 +127,12 @@ export function serviceNavigation(
         : '';
     })
     .join('');
-  const primary = ['/', '/consultation', '/schedule', '/grading'].flatMap(
-    (path) => all.filter((p) => p.path === path),
-  );
+  const primary = [
+    '/',
+    '/consultation',
+    '/schedule',
+    all.some((p) => p.path === '/grading') ? '/grading' : '/homework',
+  ].flatMap((path) => all.filter((p) => p.path === path));
   const secondarySelected = !primary.some((p) => p.path === current);
   return {
     sidebar: `<aside class="sidebar"><a class="rail-brand" href="/" aria-label="온답 홈"><span aria-hidden="true"></span></a><nav class="service-nav" aria-label="학원 메뉴">${grouped}</nav></aside>`,
