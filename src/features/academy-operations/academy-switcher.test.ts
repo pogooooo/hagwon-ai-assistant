@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+import { initializeIdentity } from './directory.ts';
 import { createOperationsServer } from './application.ts';
 
 test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과 권한 회수', async (t) => {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys=ON');
   const password = 'synthetic-selector-test';
+  initializeIdentity(db, password);
+  db.exec(`INSERT INTO accounts(id,academy_id,username,name,role,password_hash)
+    SELECT 'qa-parent-test',academy_id,'AXR_CHECK_GUARDIAN_20261119','체험 보호자',role,password_hash FROM accounts WHERE id='TA_GUARDIAN_E_MATH';`);
   const server = createOperationsServer({
     db,
     demoPassword: password,
@@ -108,6 +112,26 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       ),
     );
   }
+  const qaCookie = await login('AXR_CHECK_GUARDIAN_20261119', '/academies');
+  assert.equal(
+    (
+      await send('/academies', qaCookie, {
+        action: 'switch',
+        profile: 'ONDAP_LANGUAGE_qa-parent-test',
+        _academyAccount: 'qa-parent-test',
+      })
+    ).status,
+    303,
+  );
+  assert.deepEqual(
+    db
+      .prepare(
+        "SELECT student_id FROM guardian_students WHERE guardian_id='ONDAP_LANGUAGE_qa-parent-test'",
+      )
+      .all()
+      .map((r) => r.student_id),
+    ['ONDAP_DEMO_QA_LEARNER'],
+  );
   const user = 'TA_GUARDIAN_M2';
   const cookie = await login(user, '/'),
     separate = await login(user, '/');

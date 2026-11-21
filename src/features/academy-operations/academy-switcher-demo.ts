@@ -1,5 +1,5 @@
 import type { OperationsDatabase } from './database.ts';
-import { transaction } from './shared.ts';
+import { rows, transaction } from './shared.ts';
 
 const academyId = 'AC_ONDAP_LANGUAGE_DEMO';
 
@@ -40,11 +40,27 @@ export function seedAcademyChoices(db: OperationsDatabase) {
     db.prepare(
       "INSERT INTO op_document_versions(academy_id,document_id,revision,input,state) VALUES (?,?,1,?,'published')",
     ).run(academyId, notice.documentId, JSON.stringify(notice));
-    for (const [source, role] of [
-      ['TA_DIRECTOR', 'admin'],
-      ['TA_TEACHER', 'teacher'],
-      ['TA_STUDENT_001', 'student'],
-      ['TA_GUARDIAN_E_MATH', 'guardian'],
+    // The hosted acceptance accounts also belong to this synthetic roster. Bind their
+    // immutable account IDs once, when creating the empty demo academy.
+    const qa = rows<{ id: string; role: string }>(
+      db,
+      `SELECT id,role FROM accounts WHERE academy_id='AC_TEST_A'
+      AND ((username='AXR_CHECK_ADMIN_20261119' AND role='admin')
+        OR (username='AXR_CHECK_TEACHER_20261119' AND role='teacher')
+        OR (username='AXR_CHECK_STUDENT_20261119' AND role='student')
+        OR (username='AXR_CHECK_GUARDIAN_20261119' AND role='guardian'))`,
+    );
+    const qaStudent = 'ONDAP_DEMO_QA_LEARNER';
+    if (qa.length)
+      db.prepare(
+        'INSERT INTO students(id,academy_id,class_id,name) VALUES (?,?,?,?)',
+      ).run(qaStudent, academyId, classroom, '체험 원생');
+    for (const [source, role, learner] of [
+      ['TA_DIRECTOR', 'admin', student],
+      ['TA_TEACHER', 'teacher', student],
+      ['TA_STUDENT_001', 'student', student],
+      ['TA_GUARDIAN_E_MATH', 'guardian', student],
+      ...qa.map((p) => [p.id, p.role, qaStudent]),
     ]) {
       const profile = 'ONDAP_LANGUAGE_' + source;
       // Non-login profiles keep each academy's own class, child and permission records.
@@ -57,7 +73,7 @@ export function seedAcademyChoices(db: OperationsDatabase) {
           profile,
           academyId,
           profile,
-          role === 'student' ? student : null,
+          role === 'student' ? learner : null,
           source,
           role,
         );
@@ -72,7 +88,7 @@ export function seedAcademyChoices(db: OperationsDatabase) {
       if (role === 'guardian')
         db.prepare(
           'INSERT INTO guardian_students(guardian_id,student_id) VALUES (?,?)',
-        ).run(profile, student);
+        ).run(profile, learner);
     }
   });
 }
