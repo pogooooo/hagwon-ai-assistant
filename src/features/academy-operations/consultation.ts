@@ -23,8 +23,6 @@ import {
   setupTeamSchedule,
   regularScheduleDocuments,
 } from './team-schedule.ts';
-import { buildExam } from './exam-builder.ts';
-import { looksLikeExamRequest } from './exam-questions.ts';
 import { scheduleAuthority } from './schedule-authority.ts';
 import type { OperationsDatabase } from './database.ts';
 
@@ -157,19 +155,25 @@ function coversScope(db: OperationsDatabase, actor: Actor, thread: Thread) {
 function canViewThread(ctx: PageContext, thread: Thread) {
   const { actor, db } = ctx;
   if (thread.academy_id !== actor.academyId) return false;
-  if (thread.owner_id === actor.id) return coversScope(db, actor, thread);
+  if (actor.role === 'guardian')
+    return thread.owner_id === actor.id && coversScope(db, actor, thread);
   if (actor.role === 'admin') return thread.status !== 'open';
   return (
     actor.role === 'teacher' &&
+    thread.status !== 'open' &&
     thread.assignee_id === actor.id &&
     coversScope(db, actor, thread)
   );
 }
 
+// Only guardian-origin conversations belong in the family inbox. Preserve historical records in storage.
+const familyThreads = `SELECT t.* FROM op_consultation_threads t
+  JOIN accounts a ON a.id=t.owner_id AND a.academy_id=t.academy_id
+  WHERE a.role='guardian' AND t.staff_scope=0 AND t.academy_id=?`;
 export function loadThread(ctx: PageContext, id: string) {
   const thread = one<Thread>(
     ctx.db,
-    'SELECT * FROM op_consultation_threads WHERE academy_id = ? AND id = ?',
+    familyThreads + ' AND t.id=?',
     ctx.actor.academyId,
     id,
   );
@@ -182,7 +186,7 @@ export function loadThread(ctx: PageContext, id: string) {
 function visibleThreads(ctx: PageContext) {
   return rows<Thread>(
     ctx.db,
-    'SELECT * FROM op_consultation_threads WHERE academy_id = ? ORDER BY updated_at DESC, id',
+    familyThreads + ' ORDER BY t.updated_at DESC, t.id',
     ctx.actor.academyId,
   ).filter((thread) => canViewThread(ctx, thread));
 }
@@ -196,6 +200,8 @@ function needsStaffAttention(actor: Actor, thread: Thread) {
 }
 
 export function consultationOverview(ctx: PageContext) {
+  if (!isStaff(ctx.actor) && ctx.actor.role !== 'guardian')
+    return { pending: [], recent: [] };
   const threads = visibleThreads(ctx);
   return {
     pending: threads
@@ -238,7 +244,8 @@ function threadDetail(ctx: PageContext, thread: Thread) {
       ctx.actor.academyId,
       thread.owner_id,
     )?.name ?? '탈퇴 계정';
-  if (!unresolved) question = latestQuestion;
+  if (!unresolved || messages.at(-1)?.kind === 'question')
+    question = latestQuestion;
   const targets = (
     (unresolved ?? lastAnswer)?.operations?.studentIds ?? []
   ).flatMap((id) => {
@@ -392,6 +399,8 @@ export async function ask(
   readGrades = gradingEvidence,
 ) {
   const { db, actor } = ctx;
+  if (actor.role !== 'guardian')
+    throw new OperationError('학부모만 상담을 신청할 수 있습니다.', 403);
   if (
     existing &&
     (existing.owner_id !== actor.id || existing.status === 'closed')
@@ -411,6 +420,45 @@ export async function ask(
   const conversationId = existing?.id ?? field(form, 'conversationId', 40);
   if (!/^[a-f0-9-]{36}$/.test(conversationId)) {
     throw new OperationError('상담 화면을 다시 열어 주세요.');
+  }
+  if (
+    existing &&
+    (existing.status === 'requested' || existing.status === 'assigned')
+  ) {
+    transaction(db, () => {
+      ctx.assertCurrentAccess?.();
+      const thread = loadThread(ctx, existing.id);
+      const widened = {
+        ...thread,
+        student_scope: mergeScope(thread.student_scope, currentStudentIds),
+        class_scope: mergeScope(thread.class_scope, currentClassIds),
+      };
+      const assignee = thread.assignee_id && getActor(db, thread.assignee_id);
+      const keepAssignment =
+        assignee && isStaff(assignee) && coversScope(db, assignee, widened);
+      const at = new Date().toISOString();
+      const updated = db
+        .prepare(
+          "UPDATE op_consultation_threads SET student_scope=?,class_scope=?,status=?,assignee_id=?,updated_at=?,version=version+1 WHERE id=? AND owner_id=? AND version=? AND status IN ('requested','assigned')",
+        )
+        .run(
+          widened.student_scope,
+          widened.class_scope,
+          keepAssignment ? 'assigned' : 'requested',
+          keepAssignment ? thread.assignee_id : null,
+          at,
+          thread.id,
+          actor.id,
+          existing.version,
+        );
+      if (!updated.changes)
+        throw new OperationError(
+          '상담 내용이 변경됐습니다. 다시 열어 주세요.',
+          409,
+        );
+      addMessage(db, thread.id, 'question', question, at);
+    });
+    return conversationId;
   }
   let conversation: ConversationState | null = existing?.conversation_state
     ? (JSON.parse(existing.conversation_state) as ConversationState)
@@ -601,24 +649,6 @@ async function submitConsultation(ctx: PageContext, form: FormData) {
   const action = field(form, 'action');
   const id = field(form, 'id', 40);
   if (action === 'ask') {
-    const question = field(form, 'question', 500);
-    if (isStaff(ctx.actor) && looksLikeExamRequest(question)) {
-      if (id) loadThread(ctx, id);
-      try {
-        return await buildExam(
-          ctx,
-          question,
-          field(form, 'examRequestKey', 80) || randomUUID(),
-          false,
-        );
-      } catch (error) {
-        if (error instanceof OperationError && error.status === 422)
-          return (
-            '/exam-builder?request=' + encodeURIComponent(question) + '&check=1'
-          );
-        throw error;
-      }
-    }
     const conversationId = await ask(
       ctx,
       form,
@@ -626,6 +656,8 @@ async function submitConsultation(ctx: PageContext, form: FormData) {
     );
     return '/consultation?id=' + encodeURIComponent(conversationId);
   }
+  if (action === 'handoff' && ctx.actor.role !== 'guardian')
+    throw new OperationError('학부모만 담당자 상담을 요청할 수 있습니다.', 403);
   if (!id) throw new OperationError('상담 기록을 찾을 수 없습니다.', 404);
   transaction(ctx.db, () => {
     ctx.assertCurrentAccess?.();
@@ -768,12 +800,14 @@ function renderMessage(
 
 function renderConsultation(ctx: PageContext) {
   const { db, actor, url } = ctx;
+  if (!isStaff(actor) && actor.role !== 'guardian')
+    throw new OperationError('학부모와 상담 담당자만 열람할 수 있습니다.', 403);
   const id = url.searchParams.get('id');
   const thread = id ? loadThread(ctx, id) : undefined;
   const allThreads = visibleThreads(ctx);
   const actorIsStaff = isStaff(actor);
   const view = url.searchParams.get('view');
-  const inbox = actorIsStaff && view === 'inbox';
+  const inbox = actorIsStaff && view !== 'archive';
   const archive = actorIsStaff && view === 'archive';
   const queue = inbox || archive;
   const threads = inbox
@@ -786,7 +820,8 @@ function renderConsultation(ctx: PageContext) {
     thread && (thread.status === 'requested' || thread.status === 'assigned');
   const staff =
     active && (actor.role === 'admin' || thread.assignee_id === actor.id);
-  const own = !thread || thread.owner_id === actor.id;
+  const own =
+    actor.role === 'guardian' && (!thread || thread.owner_id === actor.id);
   const students = accessibleStudents(db, actor);
   const messages = thread
     ? rows<Message>(
@@ -808,11 +843,11 @@ function renderConsultation(ctx: PageContext) {
   const hiddenThread = thread
     ? `<input type="hidden" name="id" value="${h(thread.id)}">`
     : '';
-  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="#consultation-history">상담 목록</a>${thread || inbox || archive ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
+  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="#consultation-history">상담 목록</a>${own && thread ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
     <div class="split consultation-layout" data-has-thread="${!!thread}" data-consultation-view="${queue ? 'queue' : 'conversation'}">
       <aside class="consultation-history" id="consultation-history" tabindex="-1">
         <h2>상담 목록</h2>
-        ${actorIsStaff ? `<nav class="view-tabs" aria-label="상담 목록 범위"><a href="/consultation?view=inbox"${inbox ? ' aria-current="page"' : ''}>처리 중</a><a href="/consultation"${!inbox && !archive ? ' aria-current="page"' : ''}>내 상담</a><a href="/consultation?view=archive"${archive ? ' aria-current="page"' : ''}>완료</a></nav>` : ''}
+        ${actorIsStaff ? `<nav class="view-tabs" aria-label="상담 목록 범위"><a href="/consultation?view=inbox"${inbox ? ' aria-current="page"' : ''}>처리 중</a><a href="/consultation?view=archive"${archive ? ' aria-current="page"' : ''}>완료</a></nav>` : ''}
         ${
           threads.length
             ? `<ul class="item-list">${threads
@@ -837,9 +872,9 @@ function renderConsultation(ctx: PageContext) {
           own && thread?.status !== 'closed' && (thread || !queue)
             ? `<form data-jump-label="질문 쓰기" class="chat-composer" method="post" action="${h(link)}">
           ${hiddenThread}<input type="hidden" name="conversationId" value="${thread?.id ?? randomUUID()}">
-          ${actorIsStaff ? `<input type="hidden" name="examRequestKey" value="${randomUUID()}">` : ''}<label class="compose-question"><span>질문</span><textarea name="question" rows="2" maxlength="500" required placeholder="학원에 궁금한 점을 입력하세요">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
-          <div class="compose-actions">${students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
-          <button name="action" value="ask">질문 보내기 <span aria-hidden="true">↑</span></button></div>
+          <label class="compose-question"><span>질문</span><textarea name="question" rows="2" maxlength="500" required placeholder="${active ? '담당자에게 전할 내용을 입력하세요' : '학원에 궁금한 점을 입력하세요'}">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
+          <div class="compose-actions">${!active && students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
+          <button name="action" value="ask">${active ? '담당자에게 보내기' : '질문 보내기'} <span aria-hidden="true">↑</span></button></div>
           <p class="chat-progress" role="status" aria-live="polite"></p>
         </form>`
             : ''
@@ -865,7 +900,7 @@ function renderConsultation(ctx: PageContext) {
           staff
             ? `<form method="post">
           ${hiddenThread}<label>담당자 답변 <textarea name="text" maxlength="1000" rows="3"></textarea></label>
-          <div class="actions"><button name="action" value="reply">답변 저장</button><button class="secondary" name="action" value="close">상담 완료</button></div>
+          <div class="actions"><button name="action" value="reply">답변 보내기</button><button class="secondary" name="action" value="close">상담 완료</button></div>
         </form>`
             : ''
         }
@@ -875,8 +910,8 @@ function renderConsultation(ctx: PageContext) {
 
 export const consultationModule: OperationModule = {
   path: '/consultation',
-  label: '상담 및 이력',
-  roles: ['admin', 'teacher', 'student', 'guardian', 'visitor'],
+  label: '학원 상담',
+  roles: ['guardian', 'teacher', 'admin'],
   setup: setupConsultation,
   render: renderConsultation,
   submit: submitConsultation,

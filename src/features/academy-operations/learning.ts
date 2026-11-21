@@ -697,7 +697,11 @@ export function renderLearningPublication(
     h(payload.documents[0].text) +
     '</p><p>분석 버전 ' +
     publication.revision +
-    '</p><a href="/consultation">상담으로 돌아가기</a></section>'
+    '</p>' +
+    (ctx.actor.role === 'student'
+      ? '<a href="/learning">학습 기록으로</a>'
+      : '<a href="/consultation">상담으로 돌아가기</a>') +
+    '</section>'
   );
 }
 

@@ -80,7 +80,9 @@ export function serviceNavigation(
       staff && p.path === '/consultation' ? '/consultation?view=inbox' : p.path;
     const label =
       p.path === '/consultation'
-        ? '상담'
+        ? staff
+          ? '상담함'
+          : '상담'
         : short && p.path === '/schedule'
           ? '일정'
           : p.label;

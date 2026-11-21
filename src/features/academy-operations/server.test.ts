@@ -494,7 +494,7 @@ test(
   async (t) => {
     const { send, login, readDatabase } = await startOperations(t);
     const administrator = await login('TA_DIRECTOR');
-    const visitor = await login('TA_VISITOR');
+    const guardian = await login('TA_GUARDIAN_M2');
     const doc = {
       action: 'save',
       title: '공개 범위 변경 테스트',
@@ -528,9 +528,9 @@ test(
       conversationId: id,
       question: '초등 수학반 수강료 얼마예요?',
     };
-    assert.equal((await send('/consultation', visitor, question)).status, 303);
+    assert.equal((await send('/consultation', guardian, question)).status, 303);
     const thread = '/consultation?id=' + id;
-    const before = await send(thread, visitor);
+    const before = await send(thread, guardian);
     assert.match(before.text, /99만원/);
     assert.match(before.text, /공개 범위 변경 테스트/);
     assert.equal(
@@ -555,7 +555,7 @@ test(
       ).status,
       303,
     );
-    const after = await send(thread, visitor);
+    const after = await send(thread, guardian);
     assert.equal(after.status, 200);
     assert.doesNotMatch(after.text, /99만원|공개 범위 변경 테스트/);
     assert.match(after.text, /열람 범위가 변경/);
@@ -563,7 +563,7 @@ test(
       (
         await send(
           '/documents/download?id=' + documentId + '&revision=1',
-          visitor,
+          guardian,
         )
       ).status,
       404,
@@ -613,7 +613,7 @@ test(
   async (t) => {
     const { send, login, readDatabase } = await startOperations(t);
     const administrator = await login('TA_DIRECTOR');
-    const visitor = await login('TA_VISITOR');
+    const guardian = await login('TA_GUARDIAN_M2');
     const doc = {
       action: 'save',
       title: '정규 수강료 안내',
@@ -659,7 +659,7 @@ test(
       const id = randomUUID();
       assert.equal(
         (
-          await send('/consultation', visitor, {
+          await send('/consultation', guardian, {
             action: 'ask',
             conversationId: id,
             question,
@@ -667,7 +667,7 @@ test(
         ).status,
         303,
       );
-      return (await send('/consultation?id=' + id, visitor)).text;
+      return (await send('/consultation?id=' + id, guardian)).text;
     };
     const current = await ask('현재 초등 수학반 수강료 얼마예요?');
     assert.match(current, /99만원/);
@@ -1068,4 +1068,133 @@ test('운영 홈과 상담 목록은 열람 범위와 처리 상태를 따른다
     (await s.send('/consultation?view=archive', admin)).text,
     new RegExp(title),
   );
+});
+
+test('학부모만 질문하고 원장·배정 교사가 접수된 상담에 답변한다', async (t) => {
+  const s = await startOperations(t);
+  const guardian = await s.login('TA_GUARDIAN_E_MATH');
+  const teacher = await s.login('TA_TEACHER');
+  const admin = await s.login('TA_DIRECTOR');
+  const student = await s.login('TA_STUDENT_001');
+  const visitor = await s.login('TA_VISITOR');
+  const other = await s.login('TA_GUARDIAN_M2');
+  const id = randomUUID();
+  const ask = { action: 'ask', conversationId: id, question: '안녕하세요' };
+  for (const cookie of [student, visitor]) {
+    assert.equal((await s.send('/consultation', cookie)).status, 403);
+    assert.doesNotMatch(
+      (await s.send('/', cookie)).text,
+      /href="\/consultation|action="\/consultation/,
+    );
+  }
+  for (const cookie of [teacher, admin, student, visitor]) {
+    assert.equal((await s.send('/consultation', cookie, ask)).status, 403);
+  }
+  for (const staff of [teacher, admin]) {
+    const page = await s.send('/consultation', staff);
+    assert.equal(page.status, 200);
+    assert.match(page.text, /상담 관리/);
+    assert.doesNotMatch(page.text, /class="chat-composer"|>새 상담<|>내 상담</);
+    assert.doesNotMatch(
+      (await s.send('/', staff)).text,
+      /action="\/consultation"|최근 내 상담/,
+    );
+  }
+  assert.equal((await s.send('/consultation', guardian, ask)).status, 303);
+  const thread = '/consultation?id=' + id;
+  assert.equal((await s.send(thread, admin)).status, 404);
+  assert.equal(
+    (await s.send(thread, guardian, { action: 'handoff', id })).status,
+    303,
+  );
+  assert.equal((await s.send(thread, teacher)).status, 404);
+  assert.equal((await s.send(thread, other)).status, 404);
+  assert.equal(
+    (await s.send(thread, guardian, { action: 'reply', id, text: '권한 확인' }))
+      .status,
+    403,
+  );
+  assert.equal(
+    (
+      await s.send(thread, admin, {
+        action: 'assign',
+        id,
+        assignee: 'TA_TEACHER',
+      })
+    ).status,
+    303,
+  );
+  assert.equal(
+    (
+      await s.send(thread, teacher, {
+        action: 'ask',
+        id,
+        question: '시험지 만들어줘',
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await s.send(thread, teacher, {
+        action: 'reply',
+        id,
+        text: '보호자님, 확인했습니다.',
+      })
+    ).status,
+    303,
+  );
+  const reply = await s.send(thread, guardian);
+  assert.match(reply.text, /보호자님, 확인했습니다/);
+  assert.match(reply.text, /담당자에게 보내기/);
+  assert.equal(
+    (
+      await s.send(thread, guardian, {
+        action: 'ask',
+        id,
+        question: '추가로 여쭙습니다.',
+      })
+    ).status,
+    303,
+  );
+  assert.equal(
+    s.readDatabase(
+      (db) =>
+        db
+          .prepare(
+            "SELECT COUNT(*) AS n FROM op_consultation_messages WHERE thread_id=? AND kind='answer'",
+          )
+          .get(id)?.n,
+    ),
+    1,
+  );
+  assert.match(
+    (await s.send('/consultation', teacher)).text,
+    /추가로 여쭙습니다/,
+  );
+  assert.equal(
+    (
+      await s.send(thread, admin, {
+        action: 'reply',
+        id,
+        text: '원장 답변입니다.',
+      })
+    ).status,
+    303,
+  );
+  assert.equal(
+    (await s.send(thread, admin, { action: 'close', id })).status,
+    303,
+  );
+  assert.equal(
+    (
+      await s.send(thread, guardian, {
+        action: 'ask',
+        id,
+        question: '추가 질문',
+      })
+    ).status,
+    403,
+  );
+  assert.match((await s.send(thread, guardian)).text, /원장 답변입니다/);
 });

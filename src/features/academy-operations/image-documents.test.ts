@@ -274,7 +274,7 @@ test('image upload → draft → approval → consultation keeps selected class,
   );
   const thread = randomUUID();
   await consultationModule.submit(
-    ctx('TA_VISITOR'),
+    ctx('TA_GUARDIAN_M2'),
     form({
       action: 'ask',
       conversationId: thread,

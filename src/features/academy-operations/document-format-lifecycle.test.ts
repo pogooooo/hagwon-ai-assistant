@@ -74,7 +74,7 @@ for (const source of allFeeFormats())
       const query = async () => {
         const conversationId = randomUUID();
         await consultationModule.submit(
-          ctx('TA_VISITOR'),
+          ctx('TA_GUARDIAN_M2'),
           form({
             action: 'ask',
             conversationId,
