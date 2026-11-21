@@ -16,7 +16,7 @@ import { accountDisplayName } from './demo-presentation.ts';
 import { listedDemoLogins, setupDemoLogins } from './demo-logins.ts';
 import {
   seedAcademyChoices,
-  seedDemoCourseGuide,
+  seedDemoConsultationGuides,
 } from './academy-switcher-demo.ts';
 import type { OperationsDatabase } from './database.ts';
 import {
@@ -256,7 +256,7 @@ export function createOperationsServer({
   for (const operation of modules) operation.setup(db, documentsRoot);
   if (showDemoAccounts) {
     seedAcademyChoices(db);
-    seedDemoCourseGuide(db);
+    seedDemoConsultationGuides(db);
     setupDemoLogins(db, trialPasswordHashes);
   }
   function hashSession(token: string) {

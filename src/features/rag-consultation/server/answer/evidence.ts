@@ -55,7 +55,13 @@ export type AnswerType =
 export function expectedAnswerTypes(question: string): AnswerType[] {
   const q = normalizeText(question);
   const types = new Set<AnswerType>();
-  if (/얼마|금액|비용|가격|요금|이용료|몇\s*원/.test(q)) types.add('amount');
+  if (
+    /얼마|금액|비용|가격|요금|이용료|몇\s*원/.test(q) ||
+    /^(?:그럼|그러면|그\s*반)?\s*(?:수강료|학원비|교재비|재료비)(?:은|는|이|을)?(?:요|알려\s*주(?:세요|실래요)|궁금해요)?[?!. ]*$/.test(
+      q,
+    )
+  )
+    types.add('amount');
   if (/며칠|몇\s*월\s*몇\s*일|날짜|무슨\s*요일|몇\s*일(?!\s*(동안|간))/.test(q))
     types.add('date');
   if (/몇\s*시|몇\s*분(?!\s*(동안|간))|시간(?!표)|언제/.test(q))
