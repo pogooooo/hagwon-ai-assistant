@@ -807,7 +807,9 @@ export function renderTeamNotices(ctx: PageContext) {
         ? slots
             .map((slot) =>
               h(
-                slot.date + ' ' + slot.start +
+                slot.date +
+                  ' ' +
+                  slot.start +
                   '~' +
                   slot.end +
                   ' · ' +

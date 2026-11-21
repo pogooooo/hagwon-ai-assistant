@@ -318,7 +318,8 @@ export const voiceModule: OperationModule = {
             audio,
             recognitionKeywords(ctx),
           ));
-        if (!text) throw new OperationError('질문을 입력하거나 다시 녹음해 주세요.');
+        if (!text)
+          throw new OperationError('질문을 입력하거나 다시 녹음해 주세요.');
         guardian(ctx);
         if (session(ctx, parent.id).closed)
           throw new OperationError('종료된 상담입니다.', 409);
@@ -330,9 +331,14 @@ export const voiceModule: OperationModule = {
         if (confidence !== null && confidence < 0.5)
           throw new OperationError('인식 결과를 확인할 수 없습니다.');
       } catch (error) {
-        const message = error instanceof OperationError ? error.message : '음성 인식 중 문제가 발생했습니다.';
+        const message =
+          error instanceof OperationError
+            ? error.message
+            : '음성 인식 중 문제가 발생했습니다.';
         ctx.db
-          .prepare("UPDATE op_voice_turns SET state='failed',question=? WHERE id=?")
+          .prepare(
+            "UPDATE op_voice_turns SET state='failed',question=? WHERE id=?",
+          )
           .run(message, turnId);
         if (!(error instanceof OperationError))
           throw new OperationError(

@@ -116,7 +116,11 @@ export function createExternalServices(
         throw new OperationError('16kHz 모노 PCM WAV 녹음이 필요합니다.');
       budget('speech', maximum);
       const body = new FormData();
-      body.set('media', new Blob([bytes], { type: 'audio/wav' }), 'question.wav');
+      body.set(
+        'media',
+        new Blob([bytes], { type: 'audio/wav' }),
+        'question.wav',
+      );
       body.set(
         'params',
         JSON.stringify({
