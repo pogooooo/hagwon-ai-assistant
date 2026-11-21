@@ -255,14 +255,29 @@ function conflicts(ctx: PageContext, data: Payload, slot: MakeupSlot) {
     start: slot.start,
     room: slot.room,
   });
-  if (
-    !result.slot ||
-    result.slot.end !== slot.end ||
-    result.issues.some((i) => i.blocking) ||
-    config.holidays[slot.date]
-  )
+  const blockedBy = new Set(
+    result.issues.filter((issue) => issue.blocking).map((issue) => issue.type),
+  );
+  if (config.holidays[slot.date]) blockedBy.add('공휴일');
+  if (!result.slot || result.slot.end !== slot.end) blockedBy.add('시간');
+  if (blockedBy.size)
     throw new OperationError(
-      '시간표·공휴일·강사·교실·학생 충돌이 있는 후보입니다.',
+      '확정 불가 · ' +
+        [...blockedBy]
+          .map(
+            (reason) =>
+              ({
+                입력: '후보 시간 정보 오류',
+                시간: '운영 시간 또는 수업 길이 변경',
+                정원: '동시 수강 정원 초과',
+                공휴일: '공휴일',
+                강사: '교사 일정 겹침',
+                교실: '교실 사용 중',
+                원생: '학생 일정 겹침',
+                가능시간: '학생 가능 시간과 겹치지 않음',
+              })[reason],
+          )
+          .join(' · '),
       409,
     );
   const [start, end] = at(slot);
@@ -893,8 +908,8 @@ function render(ctx: PageContext) {
   const selectedSource = selectable.find((c) => c.key === source);
   if (selectable.length)
     html += `<section class="panel"><h2>보강 투표 준비</h2><p>휴강한 반을 고르면 시간표에 겹치지 않는 후보를 찾습니다.</p><form class="inline-form" method="post"><label>휴강한 반<select name="source" required>${selectable.map((c) => `<option value="${h(c.key)}"${selectedSource?.key === c.key ? ' selected' : ''}>${h(c.label)}</option>`).join('')}</select></label><button name="action" value="create">보강 후보 찾기</button></form></section>`;
-  if (ids.length)
-    html += `<nav class="report-library" aria-label="보강 투표 목록">${ids.map((p) => `<a class="grade-report-row" href="/makeup-votes?id=${h(p.id)}"${p.id === (chosen ?? ids[0].id) ? ' aria-current="page"' : ''}><strong>${h((JSON.parse(p.payload) as Payload).closure.label)}</strong><span class="pill">${p.state === 'open' ? '응답 중' : p.state === 'approved' ? '확정' : p.state === 'draft' ? '후보 선택' : '취소'}</span></a>`).join('')}</nav>`;
+  if (ids.length > 1 || (ids.length && selectedSource))
+    html += `<details class="poll-index"><summary>다른 보강 투표 보기</summary><nav class="report-library" aria-label="보강 투표 목록">${ids.map((p) => `<a class="grade-report-row" href="/makeup-votes?id=${h(p.id)}"${p.id === (chosen ?? ids[0].id) ? ' aria-current="page"' : ''}><strong>${h((JSON.parse(p.payload) as Payload).closure.label)}</strong><span class="pill">${p.state === 'open' ? '응답 중' : p.state === 'approved' ? '확정' : p.state === 'draft' ? '후보 선택' : '취소'}</span></a>`).join('')}</nav></details>`;
   const id = chosen ?? (selectedSource ? undefined : ids[0]?.id);
   if (!id)
     return (
@@ -920,41 +935,40 @@ function render(ctx: PageContext) {
       h(slots[0]?.date.slice(0, 7) ?? '') +
       '">학원 일정에서 보기</a></p>';
   }
-  if (staff(ctx) && (p.state === 'approved' || p.state === 'open'))
-    html += `<form method="post">${hidden}<button class="secondary" name="action" value="cancel">${p.state === 'approved' ? '확정한 보강 취소' : '투표 취소'}</button></form>`;
-  if (p.state === 'open')
+  if (p.state === 'open' && !staff(ctx))
     html +=
-      '<p class="muted">' +
-      (staff(ctx)
-        ? '학생·보호자가 가능한 시간에 응답합니다.'
-        : '가능한 시간을 1~3순위로 골라 주세요. 전부 어려우면 모두 불가를 선택해 주세요.') +
-      '</p>';
+      '<p class="muted">가능한 시간을 1~3순위로 골라 주세요. 전부 어려우면 모두 불가를 선택해 주세요.</p>';
   if (p.state === 'open' && !staff(ctx))
     for (const s of own)
       html += `<form method="post">${hidden}<input type="hidden" name="student" value="${h(s.id)}"><h3>${h(s.name)} 응답${Object.hasOwn(data.votes, s.id) ? ' · 기존 응답 변경' : ''}</h3>${[1, 2, 3].map((rank) => `<label>${rank}순위<select name="rank${rank}"><option value="">선택 안 함</option>${data.options.map((slot, i) => `<option value="${i}"${data.votes[s.id]?.[rank - 1] === i ? ' selected' : ''}>${h(label(slot))}</option>`).join('')}</select></label>`).join('')}<label class="check-label"><input type="checkbox" name="unavailable" value="yes"${Object.hasOwn(data.votes, s.id) && !data.votes[s.id].length ? ' checked' : ''}>모두 불가</label><button name="action" value="vote">가능 시간 응답</button></form>`;
   if (staff(ctx) && p.state === 'open') {
-    const blocked = data.options
-      .map((s, i) => {
-        try {
-          conflicts(ctx, data, s);
-          return '';
-        } catch (e) {
-          return `${i + 1}번 충돌: ${(e as Error).message}`;
-        }
-      })
-      .filter(Boolean);
-    const summary = pollChoices(
-        data,
-        (i) => !blocked.some((b) => b.startsWith(i + 1 + '번')),
-      ),
-      names = new Map(
-        accessibleStudents(ctx.db, ctx.actor).map((s) => [s.id, s.name]),
-      );
-    html += `<p>미응답 ${summary.missing.length}명 · 모두 불가 ${summary.impossible.length}명</p><ul>${data.students.map((id) => `<li>${h(names.get(id))}: ${!Object.hasOwn(data.votes, id) ? '미응답' : !data.votes[id].length ? '모두 불가' : data.votes[id].map((i) => i + 1 + '번').join(' → ')}</li>`).join('')}</ul><p>${h(blocked.join(' / '))}</p>`;
+    const candidates = data.options.map((slot, index) => {
+      let reason = '';
+      try {
+        conflicts(ctx, data, slot);
+      } catch (error) {
+        if (!(error instanceof OperationError)) throw error;
+        reason = error.message;
+      }
+      return {
+        slot,
+        reason,
+        votes: data.students.filter((id) => data.votes[id]?.includes(index))
+          .length,
+      };
+    });
+    const summary = pollChoices(data, (i) => !candidates[i].reason);
+    const names = new Map(own.map((student) => [student.id, student.name]));
+    const responded = data.students.length - summary.missing.length;
+    html += `<div class="poll-response-summary"><strong>응답 ${responded}/${data.students.length}명</strong><span>미응답 ${summary.missing.length}명 · 모두 불가 ${summary.impossible.length}명</span></div>
+      <h3>후보 시간</h3><ul class="poll-candidate-list">${candidates.map(({ slot, votes, reason }) => `<li><div><strong>${h(label(slot))}</strong>${reason ? `<p class="poll-conflict">${h(reason)}</p>` : ''}</div><span>가능 ${votes}명</span></li>`).join('')}</ul>`;
     html += summary.choices.length
-      ? `<form method="post">${hidden}${summary.choices.map((c, i) => `<label><input type="radio" name="choice" value="${i}" required>${c.groups.map((g) => h(label(data.options[g.option])) + ' · ' + g.students.map((id) => h(names.get(id))).join(', ')).join(' / ')}</label>`).join('')}<button name="action" value="approve">교사 최종 승인 · 일정 반영</button></form>`
-      : '<p>확정 가능한 조합이 없습니다. 미응답·불가·충돌을 확인해 주세요.</p>';
+      ? `<form method="post" class="poll-approve">${hidden}<h3>확정 가능한 조합</h3>${summary.choices.map((c, i) => `<label class="check-label"><input type="radio" name="choice" value="${i}" required><span>${c.groups.map((g) => h(label(data.options[g.option])) + ' · ' + g.students.map((id) => h(names.get(id) ?? '이름 확인 불가')).join(', ')).join(' / ')}</span></label>`).join('')}<button name="action" value="approve">교사 최종 승인 · 일정 반영</button></form>`
+      : `<p class="poll-waiting">${summary.missing.length ? '아직 응답하지 않은 학생이 있습니다. 응답이 모이면 확정 가능한 시간을 확인할 수 있습니다.' : summary.impossible.length ? '모두 불가로 응답한 학생이 있어 보강을 확정할 수 없습니다.' : '모두 참석할 수 있는 시간이나 두 그룹의 조합이 없습니다. 후보 시간과 충돌 사유를 확인해 주세요.'}</p>`;
+    html += `<details class="poll-people"><summary>학생별 응답 보기</summary><ul>${data.students.map((id) => `<li>${h(names.get(id) ?? '이름 확인 불가')}: ${!Object.hasOwn(data.votes, id) ? '미응답' : !data.votes[id].length ? '모두 불가' : data.votes[id].map((i) => h(label(data.options[i]))).join(' → ')}</li>`).join('')}</ul></details>`;
   }
+  if (staff(ctx) && (p.state === 'approved' || p.state === 'open'))
+    html += `<details class="poll-cancel"><summary>취소 옵션</summary><form method="post">${hidden}<button class="secondary" name="action" value="cancel">${p.state === 'approved' ? '확정한 보강 취소' : '투표 취소'}</button></form></details>`;
   return html + '</section></div>';
 }
 export function pollCalendarEntries(

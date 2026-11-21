@@ -613,7 +613,7 @@ function renderStudentForm(ctx: PageContext, id: string): string {
     <form method="post" action="/homework" data-wrong-form><input type="hidden" name="action" value="report"><input type="hidden" name="assignmentId" value="${escapeHtml(id)}">
     <h3>틀린 문항을 선택해 주세요</h3>${pages.size > 1 ? `<label hidden data-page-picker>쪽수<select>${[...pages.keys()].map((page, i) => `<option value="${i}">${escapeHtml(page)}</option>`).join('')}</select></label>` : ''}
     ${[...pages].map(([page, qs], i) => `<fieldset data-question-page="${i}"><legend>${escapeHtml(page)}</legend><div class="question-tiles">${qs.map((q) => `<label><input type="checkbox" name="wrong" value="${escapeHtml(q.id)}" data-answer-label="${escapeHtml(page + ' ' + q.label)}"><span>${escapeHtml(q.label)}</span></label>`).join('')}</div></fieldset>`).join('')}
-    <p class="selection-summary" aria-live="polite" hidden></p><label class="all-correct"><input type="checkbox" name="allCorrect" value="yes"> 모두 맞았어요</label><p class="form-hint">제출 후 선생님이 확인해요.</p><button type="submit">결과 제출</button></form></section>`;
+    <p class="selection-summary" aria-live="polite" hidden></p><label class="all-correct"><input type="checkbox" name="allCorrect" value="yes"> 모두 맞았어요</label><div class="submission-actions"><button type="submit">결과 제출</button></div><p class="form-hint">제출 후 선생님이 확인해요.</p></form></section>`;
   }
   return `<section class="panel">
     <h2>${escapeHtml(assignment.title)}</h2>${renderPhoto(ctx, id)}
