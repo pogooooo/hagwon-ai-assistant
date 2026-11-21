@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync } from 'node:fs';
+import { appendFileSync, cpSync, mkdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
@@ -33,6 +33,15 @@ cpSync(
   join(root, 'src/features/makeup-schedule/academies/AC_TEST_A'),
   join(modules, 'academies/AC_TEST_A'),
   { recursive: true },
+);
+const supplement = join(root, 'deploy/cloudflare/demo-consultation');
+const demoAcademy = join(modules, 'academies/AC_TEST_A');
+cpSync(join(supplement, 'documents'), join(demoAcademy, 'documents'), {
+  recursive: true,
+});
+appendFileSync(
+  join(demoAcademy, 'facts.jsonl'),
+  '\n' + readFileSync(join(supplement, 'facts.jsonl'), 'utf8'),
 );
 for (const name of ['cmaps', 'standard_fonts']) {
   cpSync(join(root, 'node_modules/pdfjs-dist', name), join(modules, name), {
