@@ -715,7 +715,7 @@ function render(ctx: PageContext) {
             ' · 문항별 근거 확인</a></li>',
         )
         .join('') +
-      '</ul><a href="/consultation">상담으로 돌아가기</a></section>'
+      '</ul>'+ (ctx.actor.role==='student' ? '<a href="/learning">학습 기록으로</a>' : '<a href="/consultation">상담으로 돌아가기</a>')+'</section>'
     );
   }
 
