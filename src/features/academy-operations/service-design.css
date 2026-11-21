@@ -4030,3 +4030,43 @@ a.assessment-entry.button-link {
   color: var(--muted);
   font-size: 0.85em;
 }
+
+.makeup-events {
+  display: grid;
+  gap: 12px;
+}
+
+.makeup-event-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.makeup-event-summary > div {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  padding: 10px 12px;
+}
+
+.makeup-event-summary dt {
+  font-weight: 700;
+}
+
+.makeup-event-summary dd {
+  margin: 3px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.makeup-event > details,
+.makeup-registration form > details {
+  margin-top: 12px;
+}
+
+@media (max-width: 600px) {
+  .makeup-event-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

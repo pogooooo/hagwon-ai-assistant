@@ -56,9 +56,14 @@ export function createExternalServices(
       const response = await fetchImpl(url, {
         ...init,
         signal: AbortSignal.timeout(25000),
-        redirect: 'error',
+        // Workers supports manual redirects. The response check below rejects them.
+        redirect: 'manual',
       });
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        if (url.endsWith('/recognizer/upload'))
+          console.warn('CLOVA Speech request rejected', response.status);
+        throw new Error();
+      }
       return response;
     } catch {
       throw new OperationError(
@@ -89,7 +94,7 @@ export function createExternalServices(
           '음성 인식 연결 전입니다. 글로 입력해 주세요.',
           503,
         );
-      if (file.size > 2_000_000 || file.size < 44 || file.type !== 'audio/wav')
+      if (file.size > 2_000_000 || file.size < 44)
         throw new OperationError('60초 이내 WAV 녹음을 사용해 주세요.', 413);
       const bytes = new Uint8Array(await file.arrayBuffer());
       const header = new DataView(bytes.buffer);
@@ -112,7 +117,11 @@ export function createExternalServices(
         throw new OperationError('16kHz 모노 PCM WAV 녹음이 필요합니다.');
       budget('speech', maximum);
       const body = new FormData();
-      body.set('media', file, 'question.wav');
+      body.set(
+        'media',
+        new Blob([bytes], { type: 'audio/wav' }),
+        'question.wav',
+      );
       body.set(
         'params',
         JSON.stringify({

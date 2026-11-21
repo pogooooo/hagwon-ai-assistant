@@ -9,6 +9,7 @@ import type {
   AcademyConfig,
   ScheduleState,
   MakeupSlot,
+  ScheduleEvent,
 } from '../makeup-schedule/model/types.ts';
 import {
   accessibleClasses,
@@ -815,6 +816,56 @@ export function pendingMakeupNotices(ctx: PageContext): string {
     ? `<section class="panel"><h2>응답할 보강 투표</h2><ul class="makeup-notice-list">${notices.join('')}</ul></section>`
     : '';
 }
+
+function approvedSlots(ctx: PageContext, data: Payload, own: { id: string }[]) {
+  return (data.groups ?? [])
+    .filter(
+      (group) =>
+        staff(ctx) ||
+        group.students.some((id) => own.some((student) => student.id === id)),
+    )
+    .map((group) => data.options[group.option])
+    .filter(Boolean);
+}
+
+export function teamMakeupPoll(ctx: PageContext, event: ScheduleEvent) {
+  if (
+    event.scope !== 'class' ||
+    event.status !== 'confirmed' ||
+    event.makeup ||
+    !exists(ctx.db, 'op_makeup_polls')
+  )
+    return;
+  const row = one<{ id: string }>(
+    ctx.db,
+    "SELECT id FROM op_makeup_polls WHERE academy_id=? AND source_key=? AND state IN ('draft','open','approved')",
+    ctx.actor.academyId,
+    'team:' + event.eventId,
+  );
+  if (!row) return;
+  try {
+    const { p, data, own } = load(ctx, row.id);
+    if (
+      (!staff(ctx) && p.state === 'draft') ||
+      data.closure.stamp !== JSON.stringify(event)
+    )
+      return;
+    return {
+      state: p.state,
+      href: '/makeup-votes?id=' + encodeURIComponent(p.id),
+      slots: p.state === 'approved' ? approvedSlots(ctx, data, own) : [],
+      responded:
+        own.length > 0 && own.every((s) => Object.hasOwn(data.votes, s.id)),
+    };
+  } catch (error) {
+    if (
+      !(error instanceof OperationError) ||
+      ![403, 404].includes(error.status)
+    )
+      throw error;
+  }
+}
+
 function render(ctx: PageContext) {
   const ids = rows<Poll>(
     ctx.db,
@@ -835,29 +886,49 @@ function render(ctx: PageContext) {
     '<div class="workspace-heading"><h1>보강 시간 투표</h1><a class="button-link subtle-link" href="/schedule' +
     (staff(ctx) ? '?view=makeup">휴강 관리' : '">학원 일정') +
     '</a></div><div class="poll-workspace">';
-  if (staff(ctx))
-    html += `<section class="panel"><h2>보강 후보 추천</h2><form method="post"><label>확정 휴강<select name="source">${closures(
-      ctx,
-    )
-      .map((c) => `<option value="${h(c.key)}">${h(c.label)}</option>`)
-      .join(
-        '',
-      )}</select></label><button name="action" value="create">충돌 없는 후보 찾기</button></form></section>`;
+  const source = ctx.url.searchParams.get('source');
+  const selectable = staff(ctx)
+    ? closures(ctx).filter((c) => !ids.some((p) => p.source_key === c.key))
+    : [];
+  const selectedSource = selectable.find((c) => c.key === source);
+  if (selectable.length)
+    html += `<section class="panel"><h2>보강 투표 준비</h2><p>휴강한 반을 고르면 시간표에 겹치지 않는 후보를 찾습니다.</p><form class="inline-form" method="post"><label>휴강한 반<select name="source" required>${selectable.map((c) => `<option value="${h(c.key)}"${selectedSource?.key === c.key ? ' selected' : ''}>${h(c.label)}</option>`).join('')}</select></label><button name="action" value="create">보강 후보 찾기</button></form></section>`;
   if (ids.length)
     html += `<nav class="report-library" aria-label="보강 투표 목록">${ids.map((p) => `<a class="grade-report-row" href="/makeup-votes?id=${h(p.id)}"${p.id === (chosen ?? ids[0].id) ? ' aria-current="page"' : ''}><strong>${h((JSON.parse(p.payload) as Payload).closure.label)}</strong><span class="pill">${p.state === 'open' ? '응답 중' : p.state === 'approved' ? '확정' : p.state === 'draft' ? '후보 선택' : '취소'}</span></a>`).join('')}</nav>`;
-  const id = chosen ?? ids[0]?.id;
-  if (!id) return html + '<p>등록된 보강 투표가 없습니다.</p></div>';
+  const id = chosen ?? (selectedSource ? undefined : ids[0]?.id);
+  if (!id)
+    return (
+      html +
+      (selectedSource
+        ? '</div>'
+        : '<p>진행 중인 보강 투표가 없습니다.</p></div>')
+    );
   const { p, data, own } = load(ctx, id),
     hidden = `<input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="version" value="${p.version}">`;
-  html += `<section class="panel"><h2>${h(data.closure.label)}</h2><p>${p.state === 'draft' ? '교사 후보 선택' : p.state === 'approved' ? '교사 승인 완료 · 앱 일정 반영' : p.state === 'cancelled' ? '취소됨' : '학생·보호자 응답 중'}</p>`;
+  html += `<section class="panel"><h2>${h(data.closure.label)}</h2><p>${p.state === 'draft' ? '교사 후보 선택' : p.state === 'approved' ? '보강 확정 · 학원 일정에 표시됨' : p.state === 'cancelled' ? '취소됨' : '학생·보호자 응답 중'}</p>`;
   if (p.state === 'draft')
     return (
       html +
-      `<form method="post">${hidden}${data.options.map((s, i) => `<label class="check-label"><input type="checkbox" name="options" value="${i}"${i < 5 ? ' checked' : ''}>${h(label(s))}</label>`).join('')}<button name="action" value="publish">선택 후보 공지 · 투표 시작</button></form></section></div>`
+      `<form method="post">${hidden}${data.options.map((s, i) => `<label class="check-label"><input type="checkbox" name="options" value="${i}"${i < 5 ? ' checked' : ''}>${h(label(s))}</label>`).join('')}<button name="action" value="publish">선택한 시간으로 투표 열기</button></form></section></div>`
     );
-  if (staff(ctx))
-    html += `<form method="post">${hidden}<button name="action" value="cancel">투표·승인 일정 취소</button></form>`;
-  html += `<p class="muted">선택하지 않은 시간은 불가로 표시됩니다.</p><ol>${data.options.map((s) => `<li>${h(label(s))}</li>`).join('')}</ol>`;
+  if (p.state === 'approved') {
+    const slots = approvedSlots(ctx, data, own);
+    html +=
+      '<ul class="item-list">' +
+      slots.map((slot) => '<li>' + h(label(slot)) + '</li>').join('') +
+      '</ul><p><a class="workspace-link" href="/schedule?month=' +
+      h(slots[0]?.date.slice(0, 7) ?? '') +
+      '">학원 일정에서 보기</a></p>';
+  }
+  if (staff(ctx) && (p.state === 'approved' || p.state === 'open'))
+    html += `<form method="post">${hidden}<button class="secondary" name="action" value="cancel">${p.state === 'approved' ? '확정한 보강 취소' : '투표 취소'}</button></form>`;
+  if (p.state === 'open')
+    html +=
+      '<p class="muted">' +
+      (staff(ctx)
+        ? '학생·보호자가 가능한 시간에 응답합니다.'
+        : '가능한 시간을 1~3순위로 골라 주세요. 전부 어려우면 모두 불가를 선택해 주세요.') +
+      '</p>';
   if (p.state === 'open' && !staff(ctx))
     for (const s of own)
       html += `<form method="post">${hidden}<input type="hidden" name="student" value="${h(s.id)}"><h3>${h(s.name)} 응답${Object.hasOwn(data.votes, s.id) ? ' · 기존 응답 변경' : ''}</h3>${[1, 2, 3].map((rank) => `<label>${rank}순위<select name="rank${rank}"><option value="">선택 안 함</option>${data.options.map((slot, i) => `<option value="${i}"${data.votes[s.id]?.[rank - 1] === i ? ' selected' : ''}>${h(label(slot))}</option>`).join('')}</select></label>`).join('')}<label class="check-label"><input type="checkbox" name="unavailable" value="yes"${Object.hasOwn(data.votes, s.id) && !data.votes[s.id].length ? ' checked' : ''}>모두 불가</label><button name="action" value="vote">가능 시간 응답</button></form>`;

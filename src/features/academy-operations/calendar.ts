@@ -120,9 +120,23 @@ export const calendarModule: OperationModule = {
       (bookingEditFields.some((field) => search.has(field))
         ? 'bookings'
         : 'calendar');
+    const saved = search.get('saved');
+    const makeupMessages: Record<string, string> = {
+      create: '초안을 저장했습니다. 원장 승인 후 학원 일정에 표시됩니다.',
+      confirm:
+        '휴강·결석이 확정되어 학원 일정에 표시됩니다. 보강이 미정이면 해당 일정에서 투표를 준비할 수 있습니다.',
+      change: '보강 시간과 교실을 저장했습니다.',
+      clear:
+        '보강이 취소됐습니다. 휴강·결석 상태는 각 일정에서 확인할 수 있습니다.',
+      withdraw: '휴강·결석 일정을 취소했습니다.',
+    };
+    const confirmation =
+      view === 'makeup' && saved
+        ? (makeupMessages[saved] ?? '저장했습니다.')
+        : '저장했습니다.';
     return `<div class="page-heading schedule-heading"><h1>일정·예약</h1><a class="workspace-link" href="/makeup-votes">${ctx.actor.role === 'admin' || ctx.actor.role === 'teacher' ? '보강 일정·투표 관리' : '보강 일정 투표'} <span aria-hidden="true">›</span></a></div>
       ${ctx.formError ? `<p class="notice" role="alert">${h(ctx.formError)}</p><div hidden data-restore-schedule="${h(JSON.stringify([...ctx.submittedForm!.entries()].filter(([, v]) => typeof v === 'string')))}"></div>` : ''}
-      ${search.get('saved') ? '<p class="notice" role="status">저장했습니다.</p>' : ''}
+      ${saved && !ctx.formError ? '<p class="notice" role="status">' + h(confirmation) + '</p>' : ''}
       <nav class="view-tabs page-tabs" aria-label="일정 보기">
         <a href="/schedule"${view !== 'makeup' && view !== 'bookings' ? ' aria-current="page"' : ''}>월간 달력</a>
         <a href="/schedule?view=makeup"${view === 'makeup' ? ' aria-current="page"' : ''}>휴·보강</a>
@@ -141,7 +155,13 @@ export const calendarModule: OperationModule = {
     else await scheduleModule.submit(ctx, form);
     const target = new URL(ctx.url);
     target.searchParams.set('view', makeup ? 'makeup' : 'bookings');
-    target.searchParams.set('saved', field(form, 'action'));
+    const action = field(form, 'action');
+    target.searchParams.set(
+      'saved',
+      action === 'create' && field(form, 'confirm') === 'yes'
+        ? 'confirm'
+        : action,
+    );
     return '/schedule' + target.search;
   },
 };

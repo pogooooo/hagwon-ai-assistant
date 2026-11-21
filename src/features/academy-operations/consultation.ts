@@ -312,6 +312,159 @@ function addMessage(
   ).run(id, kind, text, response ? JSON.stringify(response) : null, at);
 }
 
+/** The hosted trial inbox has actionable synthetic cases. Staff changes survive a restart. */
+export function seedDemoConsultationInbox(db: OperationsDatabase) {
+  const academies = [
+    {
+      id: 'AC_TEST_A',
+      name: '[가상] 테스트 교습소',
+      guardian: 'TA_GUARDIAN_E_MATH',
+      teacher: 'TA_TEACHER',
+      student: 'TA_STU_001',
+      classroom: 'TA_E_MATH',
+      questions: [
+        '분수 뺄셈에서 통분하는 순서를 자주 헷갈려요. 어떤 문제부터 다시 풀면 좋을까요?',
+        '수업을 마치고 10분 정도 면담할 수 있는 날이 있을까요?',
+      ],
+      ids: [
+        '5b476a4f-e8a7-4531-9e5f-74caf26e6a6c',
+        'b0d1473b-d8a9-460d-99c2-8aa97753aa51',
+      ],
+      trialId: '679ed154-e98b-4c93-a869-4c957b061c44',
+      trialQuestion:
+        '분수 계산에서 같은 유형을 계속 틀려요. 어떤 유형부터 복습하면 좋을까요?',
+    },
+    {
+      id: 'AC_ONDAP_LANGUAGE_DEMO',
+      name: '[가상] 온답 어학원',
+      guardian: 'ONDAP_LANGUAGE_TA_GUARDIAN_E_MATH',
+      teacher: 'ONDAP_LANGUAGE_TA_TEACHER',
+      student: 'ONDAP_DEMO_LEARNER',
+      classroom: 'ONDAP_DEMO_ENGLISH',
+      questions: [
+        '아이가 시간을 말할 때 at과 on을 자주 바꿔 써요. 집에서는 어떤 문장으로 연습하면 좋을까요?',
+        '다음 주에 영어 회화반 수업에 관해 방문 상담을 예약할 수 있을까요?',
+      ],
+      ids: [
+        'c5f940d3-b1db-4c0a-a9d7-0561159d1b61',
+        '8dc3013b-28f9-4233-b6d4-5221e3067635',
+      ],
+      trialId: '7633856f-15de-4e2d-8f2d-85aadc4511d3',
+      trialQuestion:
+        '영어 문장을 소리 내어 읽는 연습은 어떤 문장부터 시작하면 좋을까요?',
+    },
+  ];
+  for (const academy of academies) {
+    if (
+      !one(
+        db,
+        'SELECT 1 FROM academies WHERE id=? AND name=?',
+        academy.id,
+        academy.name,
+      )
+    )
+      continue;
+    const cases = [
+      {
+        id: academy.ids[0],
+        question: academy.questions[0],
+        guardian: getActor(db, academy.guardian),
+        teacher: getActor(db, academy.teacher),
+        assigned: true,
+        studentId: academy.student,
+      },
+      {
+        id: academy.ids[1],
+        question: academy.questions[1],
+        guardian: getActor(db, academy.guardian),
+        teacher: getActor(db, academy.teacher),
+        assigned: false,
+        studentId: academy.student,
+      },
+    ];
+    const trialActor = (slot: 'parent' | 'teacher') => {
+      const row = one<{ id: string }>(
+        db,
+        `SELECT a.id FROM op_demo_logins_v1 d JOIN accounts a ON a.academy_id=?
+        WHERE d.slot=? AND (
+          a.id=d.account_id OR (a.id='ONDAP_LANGUAGE_'||d.account_id AND EXISTS (
+            SELECT 1 FROM op_academy_memberships m
+            WHERE m.login_id=d.account_id AND m.profile_id=a.id
+          ))
+        )`,
+        academy.id,
+        slot,
+      );
+      return row ? getActor(db, row.id) : undefined;
+    };
+    const trialGuardian = trialActor('parent');
+    const trialTeacher = trialActor('teacher');
+    if (
+      trialGuardian &&
+      trialTeacher &&
+      trialGuardian.id !== academy.guardian &&
+      trialTeacher.id !== academy.teacher
+    ) {
+      const learnerIds = new Set(
+        accessibleStudents(db, trialTeacher)
+          .filter((student) => student.classIds.includes(academy.classroom))
+          .map((student) => student.id),
+      );
+      const learner = accessibleStudents(db, trialGuardian).find(
+        (student) =>
+          learnerIds.has(student.id) &&
+          student.classIds.includes(academy.classroom),
+      );
+      if (learner)
+        cases.push({
+          id: academy.trialId,
+          question: academy.trialQuestion,
+          guardian: trialGuardian,
+          teacher: trialTeacher,
+          assigned: true,
+          studentId: learner.id,
+        });
+    }
+    transaction(db, () => {
+      const now = new Date().toISOString();
+      for (const entry of cases) {
+        const { guardian, teacher } = entry;
+        if (
+          guardian?.role !== 'guardian' ||
+          guardian.academyId !== academy.id ||
+          teacher?.role !== 'teacher' ||
+          teacher.academyId !== academy.id ||
+          ![guardian, teacher].every((actor) =>
+            accessibleStudents(db, actor).some(
+              (student) =>
+                student.id === entry.studentId &&
+                student.classIds.includes(academy.classroom),
+            ),
+          )
+        )
+          continue;
+        const inserted = db
+          .prepare(
+            'INSERT OR IGNORE INTO op_consultation_threads(id,academy_id,owner_id,assignee_id,title,status,student_scope,class_scope,staff_scope,updated_at) VALUES(?,?,?,?,?,?,?,?,0,?)',
+          )
+          .run(
+            entry.id,
+            academy.id,
+            guardian.id,
+            entry.assigned ? teacher.id : null,
+            entry.question,
+            entry.assigned ? 'assigned' : 'requested',
+            JSON.stringify([entry.studentId]),
+            JSON.stringify([academy.classroom]),
+            now,
+          );
+        if (inserted.changes)
+          addMessage(db, entry.id, 'question', entry.question, now);
+      }
+    });
+  }
+}
+
 function currentCatalog({ db, actor }: PageContext): AcademyCatalog {
   const name =
     one<{ name: string }>(
