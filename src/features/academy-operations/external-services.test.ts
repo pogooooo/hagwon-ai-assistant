@@ -131,16 +131,13 @@ test('CLOVA Voice는 전달한 검증 문장만 인코딩하고 인증키를 서
 });
 test('외부 리디렉션·오류·타임아웃 및 잘못된 음성 응답을 실패로 처리한다', async () => {
   for (const status of [302, 401, 429, 500]) {
-    const api = createExternalServices(
-      env,
-      async (_url, init) => {
-        assert.equal(init?.redirect, 'manual');
-        return new Response('', {
-          status,
-          headers: status === 302 ? { location: 'https://example.com' } : {},
-        });
-      },
-    );
+    const api = createExternalServices(env, async (_url, init) => {
+      assert.equal(init?.redirect, 'manual');
+      return new Response('', {
+        status,
+        headers: status === 302 ? { location: 'https://example.com' } : {},
+      });
+    });
     await assert.rejects(api.transcribe(wav(), []), /외부 서비스/);
     await assert.rejects(api.synthesize('테스트'), /외부 서비스/);
   }
