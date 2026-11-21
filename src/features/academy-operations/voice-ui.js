@@ -137,6 +137,7 @@
       let playbackUrl;
       try {
         const body = new FormData();
+        body.set('_academyAccount', document.body.dataset.account);
         body.set('action', 'audio');
         body.set('turnId', button.dataset.speak);
         const response = await fetch('/voice', { method: 'POST', body });
