@@ -31,6 +31,8 @@ const naturalAudience =
   /^(?:(?:여기|(?:이)?학원)(?:에서는|에서|은|는)?)?(?:어떤|몇)학년(?:을|부터|까지)?(?:받아요|받나요|받으세요|가르치나요|가르쳐요|다닐수있나요)[?!.]*$/;
 const schoolLevel = /^([초중고])(?:등(?:학생|부|학교)?|학생|학교)$/;
 const unavailableCourse = /^(?:미개설|없음|운영안함|개설예정|[-—]+)$/;
+const unavailableAudience =
+  /^(?:현재)?((?:초등학생|중학생|고등학생|[초중고][1-6](?:학년)?))(?:은|는|도|대상)?(?:정규)?(?:수업|반|과정)(?:은|는|을|를|이|가)?(?:(?:운영|개설)하지않습니다|(?:운영|개설)하지않아요|없습니다|없어요)[.!]?$/;
 const contentColumn = /^(?:주요내용|수업방식|수업내용|학습내용|과정소개)$/;
 const scopeSection =
   /^(?:\d+\.?)?(?:교육|수강)대상(?:및|과|·)개설(?:과목|과정|반)$/;
@@ -149,10 +151,20 @@ function schoolOfferingAnswer(
   ctx: AnswerContext,
   summary: string,
   evidence: EvidenceExcerpt[],
+  unavailable = false,
 ): AnswerDraft {
-  ctx.trace.intent = 'public_course_overview';
+  ctx.trace.intent = unavailable
+    ? 'public_course_unavailable'
+    : 'public_course_overview';
   const draft = fromPublicExcerpts(evidence);
-  return { ...draft, text: summary + '\n' + draft.text };
+  return {
+    ...draft,
+    text:
+      summary +
+      (unavailable ? ' 담당자에게 문의해 볼까요?' : '') +
+      '\n' +
+      draft.text,
+  };
 }
 
 function letterPlacementProof(
@@ -405,16 +417,44 @@ export async function answerCourseOverview(
           ? '중학생'
           : '고등학생');
     const matches = courseEvidence.filter(({ band }) => admits(band));
-    if (simpleOffering && matches.length)
-      return schoolOfferingAnswer(
-        ctx,
-        '현재 ' + schoolLabel + ' 대상 수업을 운영합니다.',
-        matches.slice(0, 4).map(({ excerpt }) => excerpt),
-      );
     const offered =
       ctx.catalog.classes.some(({ grade }) =>
         admits(courseGrades(grade ?? '')),
       ) || matches.length > 0;
+    if (simpleOffering) {
+      const exclusions = paragraphs.filter(({ chunk, line }) => {
+        const target = unavailableAudience.exec(compactText(line))?.[1];
+        if (
+          !target ||
+          chunk.classId !== null ||
+          chunk.documentType !== 'academy_info' ||
+          /예전|이전|과거|작년|지난|예정|특강/.test(
+            chunk.location.section ?? '',
+          )
+        )
+          return false;
+        const excludedGrades = courseGrades(target);
+        return schoolGrades.every((grade) => excludedGrades.includes(grade));
+      });
+      if (exclusions.length)
+        return offered
+          ? abstain(
+              '수업 운영에 관한 승인 자료가 서로 달라 확인이 필요합니다.',
+              'CONFLICTING_EVIDENCE',
+            )
+          : schoolOfferingAnswer(
+              ctx,
+              '현재 ' + schoolLabel + ' 대상 수업을 운영하지 않습니다.',
+              exclusions.slice(0, 4),
+              true,
+            );
+      if (matches.length)
+        return schoolOfferingAnswer(
+          ctx,
+          '현재 ' + schoolLabel + ' 대상 수업을 운영합니다.',
+          matches.slice(0, 4).map(({ excerpt }) => excerpt),
+        );
+    }
     if (!offered) {
       evidence = paragraphs.filter(({ chunk, line }) => {
         const declared = declaredGradeRange.exec(line);
@@ -432,6 +472,20 @@ export async function answerCourseOverview(
         );
         return band.length > 0 && !admits(band);
       });
+      if (simpleOffering && evidence.length) {
+        evidence = evidence.filter(
+          ({ line }) =>
+            audienceFromParagraph(line).length > 0 &&
+            /까지\s*만|(?:전체|정규)\s*(?:수강|수업|교육)\s*대상/.test(line),
+        );
+        if (evidence.length)
+          return schoolOfferingAnswer(
+            ctx,
+            '현재 ' + schoolLabel + ' 대상 정규 수업을 운영하지 않습니다.',
+            evidence.slice(0, 4),
+            true,
+          );
+      }
       if (!evidence.length && simpleOffering && hits.length < searchLimit) {
         const scope = declaredRegularCourses(
           hits.map(({ chunk }) => chunk),
@@ -440,10 +494,9 @@ export async function answerCourseOverview(
         if (scope.length)
           return schoolOfferingAnswer(
             ctx,
-            '현재 승인된 정규 과정 안내에는 ' +
-              schoolLabel +
-              ' 대상 수업이 없습니다.',
+            '현재 ' + schoolLabel + ' 대상 정규 수업을 운영하지 않습니다.',
             scope,
+            true,
           );
       }
       if (!evidence.length)
