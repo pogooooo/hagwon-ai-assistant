@@ -46,6 +46,19 @@ export function gradingService(db: OperationsDatabase) {
   if (!service) {
     service = new GradingService(db, {
       provider: createNaverGrader(process.env, db),
+      practiceProvider:
+        process.env.AXR_GRADING_DEMO_PRACTICE_POLICY ===
+        'self-practice-deidentified-v1'
+          ? createNaverGrader(
+              {
+                ...process.env,
+                AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
+                AXR_GRADING_INPUT_POLICY_REF:
+                  process.env.AXR_GRADING_DEMO_PRACTICE_POLICY,
+              },
+              db,
+            )
+          : undefined,
       rawTtlMs: Number(process.env.AXR_GRADING_RAW_TTL_MS ?? 3600000),
       inputPolicyRef: process.env.AXR_GRADING_INPUT_POLICY_REF,
       restoredBackup: process.env.AXR_GRADING_RESTORED_BACKUP === 'true',
@@ -63,6 +76,8 @@ export function configureGrading(
 }
 const errorNames: Record<string, string> = {
   VALIDATION_FAILED: '입력값을 확인해 주세요.',
+  PRACTICE_SCOPE:
+    '본인 연습 사진 테스트는 가상학생A의 AI 풀이 과제에서 이용할 수 있습니다.',
   INVALID_SCORE: '점수와 배점을 확인해 주세요.',
   INVALID_RUBRIC: '요소별 배점·허용 점수와 문항 만점을 확인해 주세요.',
   EMPTY_KEY: '채점할 정답을 등록해 주세요.',
@@ -355,6 +370,9 @@ async function submit(ctx: PageContext, form: FormData) {
           assignment_id: field(form, 'assignment'),
           assignment_version: 1,
           student_ref: field(form, 'student'),
+          ...(field(form, 'practice') === 'yes'
+            ? { practice_consent: true }
+            : {}),
           expected_page_count: number(
             form,
             'pages',
@@ -569,6 +587,11 @@ async function submit(ctx: PageContext, form: FormData) {
     gradingError(error);
   }
 }
+function gradingAvailability(service: GradingService) {
+  return service.provider.inputAllowed
+    ? ''
+    : '<p>일반 학생 사진의 외부 AI 채점은 현재 꺼져 있습니다.</p>';
+}
 function photoRegisterForm(ctx: PageContext) {
   const classes = accessibleClasses(ctx.db, ctx.actor);
   return `<h2>AI 풀이로 채점할 과제</h2><p>학생이 올린 사진에서 문제를 읽고 풀어 채점 초안을 만듭니다. 교사가 결과를 검수한 뒤 공개합니다.</p>${startForm('register')}${hidden('mode', 'photo_solution')}${input('title', '과제 이름', '', 'text', 'required maxlength="200"')}${choice(
@@ -760,7 +783,11 @@ async function render(ctx: PageContext) {
     if (detail) return intro + detail;
     if (view === 'register')
       return (
-        intro + '<section class="panel">' + registerForm(ctx) + '</section>'
+        intro +
+        '<section class="panel">' +
+        gradingAvailability(service) +
+        registerForm(ctx) +
+        '</section>'
       );
     const assignmentId = params.get('assignment');
     const requestedAssignment = assignments.find(
@@ -791,9 +818,16 @@ async function render(ctx: PageContext) {
             )}<button>과제 선택</button></form>`
           : '';
       const mediaLimits = gradingMediaLimits(ctx.maxDocumentBytes);
+      const practiceChoice =
+        !target &&
+        service.allowsPersonalPractice(ctx) &&
+        selected?.items.every((i) => i.grading_mode === 'photo_solution') &&
+        eligible.some((s) => s.id === 'TA_STU_001')
+          ? '<label><input type="checkbox" name="practice" value="yes">본인 연습 사진으로 AI 채점 테스트 (가상학생A). 이름·학교·얼굴 등 개인정보를 가렸고, 이 사진을 네이버 CLOVA에 보내 채점하는 데 동의합니다.</label>'
+          : '';
       return (
         intro +
-        `<section class="panel grade-upload"><h2>숙제 사진 제출</h2>${picker}${
+        `<section class="panel grade-upload"><h2>숙제 사진 제출</h2>${gradingAvailability(service)}${picker}${
           selected && eligible.length
             ? `<form method="post" action="/grading" enctype="multipart/form-data">${hidden('action', 'upload')}${hidden('request_key', newId('request'))}${hidden('assignment', selected.assignment_id)}<p><strong>${h(selected.title)}</strong> · ${selected.items.length}문항</p>${choice(
                 'student',
@@ -801,7 +835,7 @@ async function render(ctx: PageContext) {
                 eligible.map((s) => s.id),
                 target?.student ?? '',
                 Object.fromEntries(eligible.map((s) => [s.id, s.name])),
-              )}${input('pages', '총 페이지 수', '1', 'number', `min="1" max="${mediaLimits.pages}" required`)}<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label class="grade-picker"><strong>사진 또는 PDF 첨부</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><div class="grade-previews" data-previews aria-live="polite"></div>${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
+              )}${input('pages', '총 페이지 수', '1', 'number', `min="1" max="${mediaLimits.pages}" required`)}<p>최대 ${mediaLimits.pages}쪽, 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MiB, 사진 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 제출할 수 있습니다.</p><label class="grade-picker"><strong>사진 또는 PDF 첨부</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><input type="file" name="photos" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><div class="grade-previews" data-previews aria-live="polite"></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<p>검수 전 사진은 최대 ${Math.round(service.ttl / 60000)}분 임시 보관합니다. 검수·삭제 확인 전 점수는 학생·보호자에게 공개되지 않습니다.</p><button>사진 제출·판독</button></form>`
             : '<p>제출할 수 있는 사진 채점 과제가 없습니다.</p>'
         }</section>`
       );

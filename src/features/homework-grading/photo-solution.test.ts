@@ -14,6 +14,84 @@ const reference: PhotoSolution = {
   explanation: '양변에서 2를 빼고 3으로 나눈다.',
   comparison: 'number',
 };
+test('scoped practice provider runs only for opted-in practice uploads by the seeded demo actors', async (t) => {
+  let calls = 0;
+  const f = fixture(t, {
+    provider: {
+      inputAllowed: false,
+      modelId: 'off',
+      read: async () => {
+        throw Error('disabled');
+      },
+    },
+    practiceProvider: {
+      inputAllowed: true,
+      modelId: 'synthetic-practice',
+      read: async (_p, a) => {
+        calls++;
+        return a.items.map((i) => reading(i, '4'));
+      },
+      solvePage: async (_p, items) => new Map([[items[0].item_ref, reference]]),
+    },
+  });
+  const assignment = f.register([
+    item('MATH', { key: null, grading_mode: 'photo_solution' }),
+  ]);
+  const ctx = f.ctx('TA_STUDENT_001');
+  const payload = {
+    ...assignment,
+    expected_page_count: 1,
+    student_ref: 'TA_STU_001',
+  };
+  const practiceId = f.service.create(
+    ctx,
+    { ...payload, practice_consent: true },
+    newId('request'),
+  ).submission_id;
+  assert.throws(
+    () =>
+      f.service.create(
+        f.ctx('TA_GUARDIAN_E_MATH'),
+        { ...payload, practice_consent: true },
+        newId('request'),
+      ),
+    /PRACTICE_SCOPE/,
+  );
+  assert.throws(
+    () =>
+      f.service.create(
+        ctx,
+        { ...payload, ...f.register(), practice_consent: true },
+        newId('request'),
+      ),
+    /PRACTICE_SCOPE/,
+  );
+  assert.equal(
+    f.service.allowsPersonalPractice({
+      ...ctx,
+      actor: { ...ctx.actor, academyId: 'other_academy' },
+    }),
+    false,
+  );
+  const regular = f.service.create(
+    ctx,
+    payload,
+    newId('request'),
+  ).submission_id;
+  for (const id of [regular, practiceId]) {
+    await f.service.upload(ctx, id, [photo()]);
+    await f.service.process(ctx, id);
+  }
+  assert.equal(calls, 1);
+  assert.equal(
+    (await f.service.draft(f.ctx(), regular)).items[0].proposed.score,
+    null,
+  );
+  assert.equal(
+    (await f.service.draft(f.ctx(), practiceId)).items[0].proposed.outcome,
+    'correct',
+  );
+});
 test('independent solver sees only printed questions and rejects incomplete, duplicate or mismatched items', async () => {
   const defs = Array.from({ length: 5 }, (_, i) =>
     item('MATH', {
@@ -44,6 +122,11 @@ test('independent solver sees only printed questions and rejects incomplete, dup
         }));
       } else {
         assert.match(String(url), /HCX-007$/);
+        const config = JSON.parse(String(init?.body)).responseFormat;
+        assert.deepEqual(
+          config.schema.properties.items.items.properties.ref.enum,
+          ['q1', 'q4', 'q5'],
+        );
         assert.equal(typeof msg, 'string');
         assert.deepEqual(
           JSON.parse(msg).questions.map((q: { no: string }) => q.no),
@@ -64,7 +147,13 @@ test('independent solver sees only printed questions and rejects incomplete, dup
         }));
       }
       return Response.json({
-        result: { message: { content: JSON.stringify({ items: entries }) } },
+        result: {
+          message: {
+            content: JSON.stringify(
+              requests === 1 ? entries : { items: entries },
+            ),
+          },
+        },
       });
     },
   );

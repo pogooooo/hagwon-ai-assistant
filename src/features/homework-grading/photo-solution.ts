@@ -15,6 +15,7 @@ type Chat = (
   instruction: string,
   data: unknown,
   image?: ImagePage,
+  responseSchema?: Record<string, unknown>,
 ) => Promise<unknown>;
 const envelope = z.object({ items: z.array(z.unknown()).max(50) }).strict();
 const printedNumber = z
@@ -38,7 +39,10 @@ function uniqueEntries<T extends { ref: string; no: string }>(
   raw: unknown,
   schema: z.ZodType<T>,
 ) {
-  const entries = envelope.parse(raw).items;
+  // CLOVA Vision also emits the list directly, especially on multi-item sheets.
+  const entries = envelope.parse(
+    Array.isArray(raw) ? { items: raw } : raw,
+  ).items;
   const ids = entries.map(
     (entry) => z.object({ ref: z.string() }).safeParse(entry).data?.ref,
   );
@@ -82,6 +86,32 @@ export async function solvePrintedItems(
         no,
         problem,
       })),
+    },
+    undefined,
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['items'],
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['ref', 'no', 'answer', 'explanation', 'comparison'],
+            properties: {
+              ref: { type: 'string', enum: questions.map((q) => q.ref) },
+              no: { type: 'string', enum: questions.map((q) => q.no) },
+              answer: { type: 'string' },
+              explanation: { type: 'string' },
+              comparison: {
+                type: 'string',
+                enum: ['number', 'choice', 'rubric'],
+              },
+            },
+          },
+        },
+      },
     },
   );
   for (const solution of uniqueEntries(answers, solved)) {

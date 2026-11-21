@@ -101,6 +101,7 @@ export function fixture(
   t: TestContext,
   options: {
     provider?: GradeProvider;
+    practiceProvider?: GradeProvider;
     raw?: RawStore;
     ttl?: number;
     detail?: 'none' | 'criteria' | 'criteria_and_codes';
@@ -124,6 +125,7 @@ export function fixture(
   const raw = options.raw ?? new MemoryRawStore();
   const service = new GradingService(db, {
     provider,
+    practiceProvider: options.practiceProvider,
     rawStore: raw,
     now: () => now,
     rawTtlMs: options.ttl,
