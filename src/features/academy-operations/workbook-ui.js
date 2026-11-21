@@ -10,6 +10,7 @@
     tags = JSON.parse(section.dataset.tags);
   const states = new Map();
   async function request(action, data) {
+    data.set('_academyAccount', document.body.dataset.account);
     const res = await fetch('/homework?' + action + '=1', {
       method: 'POST',
       body: data,
