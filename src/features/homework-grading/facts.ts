@@ -6,11 +6,13 @@ import {
   subjects,
   subjectNames,
   type Result,
+  type Assignment,
   type Subject,
 } from './contracts.ts';
 import { decimalString, points, rate } from './arithmetic.ts';
 import {
   assignmentFor,
+  submissionAssignment,
   digest,
   newId,
   requireStaff,
@@ -155,23 +157,42 @@ export function computeFacts(
       : []),
   ];
   for (const p of periods) {
-    const chosen = new Map<string, Submission>();
+    // Different book pages can arrive in separate uploads. Replace only an overlapping
+    // page on a later attempt; an unidentified upload cannot safely reuse older scores.
+    type Attempt = { submission: Submission; items: Assignment['items'] };
+    const groups = new Map<string, Map<number, Attempt>>();
     for (const s of submissions) {
-      if (
-        allowedClasses &&
-        !allowedClasses.has(
-          assignmentFor(db, tenant, s.assignment, s.assignment_version)
-            .class_id,
-        )
-      )
-        continue;
       const inWindow =
         p.from_date <= s.assessment_date &&
         s.assessment_date < p.to_date_exclusive;
       if (q.attempt_policy === 'latest_in_window' && !inWindow) continue;
-      const key = `${s.assignment}:${s.assignment_version}`;
-      if (!chosen.has(key) || q.attempt_policy === 'latest_in_window')
-        chosen.set(key, s);
+      const a = submissionAssignment(db, s);
+      if (allowedClasses && !allowedClasses.has(a.class_id)) continue;
+      const key = s.assignment + ':' + s.assignment_version;
+      const pages = groups.get(key) ?? new Map<number, Attempt>();
+      groups.set(key, pages);
+      const first = q.attempt_policy === 'first_ever';
+      if (first && pages.has(0)) continue;
+      if (a.scope?.kind === 'workbook' && a.photoPages.length) {
+        for (const [i, page] of a.photoPages.entries()) {
+          if (!first || !pages.has(page.printedPage!))
+            pages.set(page.printedPage!, {
+              submission: s,
+              items: a.items.filter((item) => item.expected_page_no === i + 1),
+            });
+        }
+      } else if (!first || !pages.size) {
+        pages.clear();
+        pages.set(0, { submission: s, items: a.items });
+      }
+    }
+    const chosen = new Map<string, Attempt>();
+    for (const pages of groups.values()) {
+      for (const { submission, items } of pages.values()) {
+        const previous = chosen.get(submission.id);
+        if (previous) previous.items.push(...items);
+        else chosen.set(submission.id, { submission, items: [...items] });
+      }
     }
     for (const subject of q.subjects) {
       const totals = new Map<string, Fact>();
@@ -216,14 +237,13 @@ export function computeFacts(
         n_pending_items: 0,
         n_unavailable_items: 0,
       };
-      for (const s of chosen.values()) {
+      for (const { submission: s, items } of chosen.values()) {
         if (!(
           p.from_date <= s.assessment_date &&
           s.assessment_date < p.to_date_exclusive
         ))
           continue;
-        const a = assignmentFor(db, tenant, s.assignment, s.assignment_version);
-        const expected = a.items.filter((i) => i.subject_id === subject);
+        const expected = items.filter((i) => i.subject_id === subject);
         if (!expected.length) continue;
         let result: Result | undefined;
         if (

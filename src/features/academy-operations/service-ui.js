@@ -306,3 +306,33 @@ for (const form of document.querySelectorAll('[data-wrong-form]')) {
   form.addEventListener('change', update);
   update();
 }
+
+const sectionJump = document.querySelector('[data-section-jump]');
+if (sectionJump) {
+  const workspace = document.querySelector('.workspace');
+  const targets = [
+    workspace,
+    ...workspace.querySelectorAll('h2, [data-jump-label]'),
+  ].filter(
+    (el) => !el.closest('details:not([open])') && !el.closest('[hidden]'),
+  );
+  targets.forEach((el, i) => {
+    const label =
+      i === 0 ? '맨 위' : (el.dataset.jumpLabel || el.textContent).trim();
+    if (label) sectionJump.add(new Option(label, String(i)));
+  });
+  function updateJump() {
+    sectionJump.hidden = workspace.offsetHeight < window.innerHeight;
+  }
+  updateJump();
+  new ResizeObserver(updateJump).observe(workspace);
+  window.addEventListener('resize', updateJump);
+  sectionJump.addEventListener('change', () => {
+    if (!sectionJump.value) return;
+    const target = targets[Number(sectionJump.value)];
+    sectionJump.selectedIndex = 0;
+    if (!target.hasAttribute('tabindex')) target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: 'start' });
+  });
+}

@@ -798,24 +798,24 @@ function renderConsultation(ctx: PageContext) {
             ? `<ul class="item-list">${threads
                 .map((row) => {
                   const detail = threadDetail(ctx, row);
-                  return `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.status === 'open' ? row.title : detail.question)}</span><small>${h(threadLabels[row.status])} · ${h(detail.owner)} · ${h(detail.target)}</small>${queue ? `<small>${h(detail.summary)}</small>` : ''}</a></li>`;
+                  return `<li><a href="/consultation?id=${encodeURIComponent(row.id)}${filter}#conversation"${row.id === id ? ' aria-current="page"' : ''}><span>${h(row.status === 'open' ? row.title : detail.question)}</span><small>${h(threadLabels[row.status])} · ${h(detail.owner)} · ${h(detail.target)}</small>${queue ? `<small>${h(detail.summary)}</small>` : ''}</a></li>`;
                 })
                 .join('')}</ul>`
             : `<p class="muted">${inbox ? '처리할 상담이 없습니다.' : archive ? '완료된 상담이 없습니다.' : '저장된 상담이 없습니다.'}</p>`
         }
       </aside>
-      <section class="panel consultation-main">
+      <section class="panel consultation-main" id="conversation" tabindex="-1">
         ${
           thread
             ? `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
             : inbox || archive
               ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : ''}`
-              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="질문 예시">${['학원 위치와 주차 안내가 궁금해요.', '상담 가능한 시간과 신청 방법은?', '자습실 위치와 이용 시간 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
+              : `<div class="consultation-welcome"><img src="/assets/${selectedCharacter(ctx)}.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><details class="suggestion-list"><summary>질문 예시 보기</summary><div class="question-suggestions" aria-label="질문 예시">${['학원 위치와 주차 안내가 궁금해요.', '상담 가능한 시간과 신청 방법은?', '자습실 위치와 이용 시간 알려주세요.'].map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div></details>`
         }
         <div class="conversation-messages">${messages.map((message) => renderMessage(message, currentRevisions)).join('')}</div>
         ${
           own && thread?.status !== 'closed' && (thread || !queue)
-            ? `<form class="chat-composer" method="post" action="${h(link)}">
+            ? `<form data-jump-label="질문 쓰기" class="chat-composer" method="post" action="${h(link)}">
           ${hiddenThread}<input type="hidden" name="conversationId" value="${thread?.id ?? randomUUID()}">
           ${students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}
           <label>질문 <textarea name="question" rows="3" maxlength="500" required placeholder="궁금한 내용을 입력해 주세요.">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>

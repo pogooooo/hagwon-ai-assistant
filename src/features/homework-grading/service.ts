@@ -1,3 +1,4 @@
+import { itemsFromPhotos, type PrintedPage } from './assigned-work.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   accessibleClasses,
@@ -46,6 +47,8 @@ export function digest(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 export const gradingProviderErrors: Record<string, string> = {
+  PHOTO_SCOPE_UNCLEAR:
+    '사진의 쪽수 또는 문항 범위를 확인할 수 없습니다. 원본을 보고 범위를 확인해 주세요.',
   PROVIDER_AUTHENTICATION_FAILED:
     '네이버가 이 배포의 API 키 또는 접근 권한을 거부했습니다.',
   PROVIDER_RATE_LIMIT:
@@ -132,6 +135,7 @@ export function setupGrading(db: OperationsDatabase) {
       FOREIGN KEY(tenant,assignment,assignment_version) REFERENCES grading_v3_assignments(tenant,id,version));
     CREATE TABLE IF NOT EXISTS grading_v3_results(tenant TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,submission TEXT NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(tenant,id,revision),FOREIGN KEY(submission) REFERENCES grading_v3_submissions(id));
     CREATE TABLE IF NOT EXISTS grading_v3_jobs(id TEXT PRIMARY KEY,submission TEXT NOT NULL UNIQUE,status TEXT NOT NULL,tries INTEGER NOT NULL DEFAULT 0,last_error TEXT);
+    CREATE TABLE IF NOT EXISTS grading_v3_photo_maps(submission TEXT PRIMARY KEY REFERENCES grading_v3_submissions(id), pages TEXT NOT NULL, items TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS grading_v3_practice_consent(submission TEXT PRIMARY KEY REFERENCES grading_v3_submissions(id), actor TEXT NOT NULL, policy TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS grading_v3_receipts(tenant TEXT NOT NULL,scope TEXT NOT NULL,generation INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(tenant,scope,generation));
     CREATE TABLE IF NOT EXISTS grading_v3_generations(tenant TEXT NOT NULL,student TEXT NOT NULL,generation INTEGER NOT NULL,PRIMARY KEY(tenant,student));
@@ -176,6 +180,56 @@ export function invalidate(
   db.prepare(
     "UPDATE grading_v3_reports SET status='stale' WHERE tenant=? AND student=?",
   ).run(tenant, student);
+}
+type PhotoMap = { pages: string; items: string };
+function photoMap(db: OperationsDatabase, id: string) {
+  return one<PhotoMap>(
+    db,
+    'SELECT pages,items FROM grading_v3_photo_maps WHERE submission=?',
+    id,
+  );
+}
+export function submissionAssignment(
+  db: OperationsDatabase,
+  s: Pick<Submission, 'id' | 'tenant' | 'assignment' | 'assignment_version'>,
+) {
+  const a = assignmentFor(db, s.tenant, s.assignment, s.assignment_version);
+  const map = a.scope && photoMap(db, s.id);
+  const photoPages: PrintedPage[] = map ? JSON.parse(map.pages) : [];
+  if (map) a.items = JSON.parse(map.items);
+  return { ...a, photoPages };
+}
+function savePhotoMap(
+  db: OperationsDatabase,
+  s: Submission,
+  a: Assignment,
+  pages: PrintedPage[],
+) {
+  if (!a.scope || pages.length !== s.expected_pages)
+    throw new GradingError('PAGE_COUNT_MISMATCH');
+  const clean = pages.map((p) => ({
+    printedPage: a.scope!.kind === 'workbook' ? p.printedPage : null,
+    numbers: [...p.numbers].sort((x, y) => x - y),
+  }));
+  let items = itemsFromPhotos(a.scope, clean);
+  if (s.purpose === 'correction_evidence') {
+    const original = one<{ submission: string }>(
+      db,
+      'SELECT submission FROM grading_v3_results WHERE tenant=? AND id=? AND revision=?',
+      s.tenant,
+      s.target,
+      s.target_revision,
+    );
+    const map = original && photoMap(db, original.submission);
+    if (!map || map.pages !== JSON.stringify(clean))
+      throw new GradingError('PHOTO_SCOPE_UNCLEAR');
+    items = JSON.parse(map.items);
+  }
+  db.prepare(
+    'INSERT INTO grading_v3_photo_maps(submission,pages,items) VALUES(?,?,?) ON CONFLICT(submission) DO UPDATE SET pages=excluded.pages,items=excluded.items',
+  ).run(s.id, JSON.stringify(clean), JSON.stringify(items));
+  if (s.purpose === 'assessment') invalidate(db, s.tenant, s.student);
+  return items;
 }
 export function assignmentFor(
   db: OperationsDatabase,
@@ -627,18 +681,36 @@ export class GradingService {
       throw error;
     }
   }
-  async process(ctx: PageContext, id: string) {
+  async correctPhotoMap(
+    ctx: PageContext,
+    id: string,
+    revision: number,
+    pages: PrintedPage[],
+  ) {
+    requireStaff(ctx);
+    const s = readSubmission(ctx, id, true);
+    this.open(s);
+    const a = submissionAssignment(this.db, s);
+    transaction(this.db, () => {
+      if (
+        !this.db
+          .prepare(
+            "UPDATE grading_v3_submissions SET processing='PROCESSING',draft_revision=draft_revision+1 WHERE id=? AND processing IN ('REVIEW_REQUIRED','READY_TO_CONFIRM') AND inflight=0 AND draft_revision=? AND raw_state='OPEN'",
+          )
+          .run(id, revision).changes
+      )
+        throw new GradingError('STATE_CONFLICT', 409);
+      savePhotoMap(this.db, s, a, pages);
+    });
+    await this.process(ctx, id, true);
+  }
+  async process(ctx: PageContext, id: string, staffRemap = false) {
     const before = readSubmission(ctx, id);
     if (before.processing !== 'PROCESSING' || before.inflight)
       throw new GradingError('STATE_CONFLICT', 409);
     try {
       await this.lease(id, async (s) => {
-        const a = assignmentFor(
-          this.db,
-          s.tenant,
-          s.assignment,
-          s.assignment_version,
-        );
+        const a = submissionAssignment(this.db, s);
         const pages: ImagePage[] = [];
         for (let n = 1; n <= s.expected_pages; n++) {
           const p = await this.raw.get(s.scope, 'page_' + n);
@@ -651,14 +723,38 @@ export class GradingService {
             'SELECT actor FROM grading_v3_practice_consent WHERE submission=? AND policy=?',
           )
           .get(id, 'self-practice-deidentified-v1');
+        if (staffRemap) requireStaff(ctx);
         if (
           practice &&
+          !staffRemap &&
           (practice.actor !== ctx.actor.id || !this.allowsPersonalPractice(ctx))
         )
           throw new GradingError('PRACTICE_SCOPE', 403);
-        const provider = practice ? this.practiceProvider! : this.provider;
+        const provider =
+          practice &&
+          practice.actor === ctx.actor.id &&
+          this.allowsPersonalPractice(ctx)
+            ? this.practiceProvider!
+            : this.provider;
         let unavailable: string | undefined;
         try {
+          if (a.scope && !a.items.length) {
+            if (!provider.inputAllowed)
+              throw new GradingError('PROVIDER_INPUT_NOT_APPROVED');
+            if (!provider.discoverPage)
+              throw new GradingError('PHOTO_SCOPE_UNCLEAR');
+            const found: PrintedPage[] = [];
+            for (const page of pages) {
+              ctx.assertCurrentAccess?.();
+              readSubmission(ctx, id);
+              this.open(this.current(id));
+              found.push(await provider.discoverPage(page));
+            }
+            ctx.assertCurrentAccess?.();
+            readSubmission(ctx, id);
+            this.open(this.current(id));
+            a.items = savePhotoMap(this.db, s, a, found);
+          }
           readings = await provider.read(pages, a);
         } catch (error) {
           unavailable = providerIssue(error);
@@ -956,12 +1052,7 @@ export class GradingService {
     const old = await this.draft(ctx, id);
     if (expected !== old.draft_revision)
       throw new GradingError('REVISION_MISMATCH', 412);
-    const a = assignmentFor(
-      this.db,
-      s.tenant,
-      s.assignment,
-      s.assignment_version,
-    );
+    const a = submissionAssignment(this.db, s);
     if (
       replacements.length !== a.items.length ||
       new Set(replacements.map((i) => i.extraction.item_ref)).size !==
@@ -1109,7 +1200,7 @@ export class GradingService {
     const draft = await this.draft(ctx, id);
     if (expected !== draft.draft_revision)
       throw new GradingError('REVISION_MISMATCH', 412);
-    if (!draft.items.every((i) => i.reviewed))
+    if (!draft.items.length || !draft.items.every((i) => i.reviewed))
       throw new GradingError('TEACHER_REVIEW_REQUIRED');
     return idempotent(ctx, 'confirm:' + id, key, { expected }, () => {
       const live = readSubmission(ctx, id, true);
@@ -1395,7 +1486,7 @@ export class GradingService {
       const draft = await this.draft(ctx, evidence.id);
       if (draft.draft_revision !== input.expected_evidence_draft_revision)
         throw new GradingError('REVISION_MISMATCH', 412);
-      if (!draft.items.every((i) => i.reviewed))
+      if (!draft.items.length || !draft.items.every((i) => i.reviewed))
         throw new GradingError('TEACHER_REVIEW_REQUIRED');
       replacement = this.retained(draft.items);
     }

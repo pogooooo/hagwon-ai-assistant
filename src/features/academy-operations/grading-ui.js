@@ -63,7 +63,11 @@ if (picker) {
   }
   picker.addEventListener('change', () => {
     clear();
-    for (const [i, file] of Array.from(picker.files).entries()) {
+    const files = Array.from(picker.files);
+    const pageCount = picker.form.elements.namedItem('pages');
+    if (files.length && files.every((file) => file.type.startsWith('image/')))
+      pageCount.value = String(files.length);
+    for (const [i, file] of files.entries()) {
       const figure = document.createElement('figure');
       if (['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
         const image = document.createElement('img');

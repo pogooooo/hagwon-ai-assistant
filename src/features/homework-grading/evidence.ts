@@ -5,7 +5,11 @@ import type {
   SourceDocumentInput,
 } from '../rag-consultation/server/index.ts';
 import { computeFacts } from './facts.ts';
-import { assignmentFor, sourceGeneration, type Submission } from './service.ts';
+import {
+  submissionAssignment,
+  sourceGeneration,
+  type Submission,
+} from './service.ts';
 import { subjectNames, type Subject } from './contracts.ts';
 
 /** Build fresh, class-scoped facts. No persistent vector copy of a student's raw work. */
@@ -44,12 +48,7 @@ export function gradingEvidence(
       { student: string; classId: string; month: string; subject: Subject }
     >();
     for (const s of submissions) {
-      const assignment = assignmentFor(
-        db,
-        tenant,
-        s.assignment,
-        s.assignment_version,
-      );
+      const assignment = submissionAssignment(db, s);
       // Only an active roster link may supply consultation material.
       if (
         !db
@@ -112,10 +111,7 @@ export function gradingEvidence(
       ];
       const definitions = submissions
         .filter((s) => s.student === student)
-        .flatMap(
-          (s) =>
-            assignmentFor(db, tenant, s.assignment, s.assignment_version).items,
-        );
+        .flatMap((s) => submissionAssignment(db, s).items);
       for (const f of snapshot.facts.filter(
         (f) => f.period_role === 'primary' && f.n_evaluable > 0,
       )) {
@@ -196,9 +192,12 @@ export function gradingCatalog(db: OperationsDatabase, tenant: string) {
     db,
     'SELECT payload FROM grading_v3_assignments WHERE tenant=?',
     tenant,
-  ).flatMap(
-    (r) => (JSON.parse(r.payload) as import('./contracts.ts').Assignment).items,
-  );
+  ).flatMap((r) => {
+    const a = JSON.parse(r.payload) as import('./contracts.ts').Assignment;
+    return a.scope
+      ? [{ subject_id: a.scope.subject, skill_label: a.scope.skill }]
+      : a.items;
+  });
   return {
     subjects: [...new Set(items.map((i) => subjectNames[i.subject_id]))],
     units: [...new Set(items.map((i) => i.skill_label))],
