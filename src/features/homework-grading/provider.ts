@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Buffer } from 'node:buffer';
 import { repairJsonText } from '../question-classification/read-page.mjs';
 import { createOperationsClovaFetch } from '../academy-operations/runtime-generation.ts';
 import type { OperationsDatabase } from '../academy-operations/database.ts';
@@ -123,7 +124,9 @@ export function createNaverGrader(
       throw new GradingError(
         response.status === 429 || response.status === 402
           ? 'PROVIDER_RATE_LIMIT'
-          : 'PROVIDER_TEMPORARY_FAILURE',
+          : response.status === 400 || response.status === 422
+            ? 'PROVIDER_REQUEST_REJECTED'
+            : 'PROVIDER_TEMPORARY_FAILURE',
         response.status === 429 || response.status === 402 ? 429 : 503,
       );
     const body = (await response.json().catch(() => {

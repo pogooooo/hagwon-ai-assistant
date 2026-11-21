@@ -40,6 +40,26 @@ export const newId = (prefix: string) =>
 export function digest(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
+export const gradingProviderErrors: Record<string, string> = {
+  PROVIDER_AUTHENTICATION_FAILED:
+    '네이버가 이 배포의 API 키 또는 접근 권한을 거부했습니다.',
+  PROVIDER_RATE_LIMIT:
+    '네이버 호출 한도 또는 서비스의 일일 AI 한도에 도달했습니다.',
+  PROVIDER_INPUT_NOT_APPROVED:
+    '이 제출은 네이버 전송 승인이 설정되지 않았습니다.',
+  PROVIDER_REQUEST_REJECTED: '네이버가 사진 채점 요청의 형식을 거부했습니다.',
+  PROVIDER_INVALID_OUTPUT:
+    'AI 응답에서 문항 번호와 판독 결과를 확인할 수 없습니다.',
+  PROVIDER_TEMPORARY_FAILURE:
+    '네이버와의 연결이 중단됐거나 응답을 받을 수 없었습니다.',
+  PROVIDER_UNAVAILABLE: 'AI 호출을 완료하지 못했습니다.',
+};
+function providerIssue(error: unknown) {
+  return error instanceof GradingError &&
+    Object.hasOwn(gradingProviderErrors, error.code)
+    ? error.code
+    : 'PROVIDER_UNAVAILABLE';
+}
 export interface Submission {
   id: string;
   tenant: string;
@@ -632,17 +652,17 @@ export class GradingService {
         )
           throw new GradingError('PRACTICE_SCOPE', 403);
         const provider = practice ? this.practiceProvider! : this.provider;
-        let unavailable = false;
+        let unavailable: string | undefined;
         try {
           readings = await provider.read(pages, a);
-        } catch {
-          unavailable = true;
+        } catch (error) {
+          unavailable = providerIssue(error);
         }
         try {
           readSubmission(ctx, id);
           this.open(this.current(id));
           const verified = new Map<number, Reading[]>();
-          if (provider.verifyPage) {
+          if (!unavailable && provider.verifyPage) {
             for (const page of pages) {
               readSubmission(ctx, id);
               this.open(this.current(id));
@@ -877,11 +897,7 @@ export class GradingService {
             .prepare(
               "UPDATE grading_v3_submissions SET draft_revision=?,processing='REVIEW_REQUIRED',error_code=? WHERE id=? AND raw_state='OPEN'",
             )
-            .run(
-              draft.draft_revision,
-              unavailable ? 'PROVIDER_UNAVAILABLE' : null,
-              id,
-            );
+            .run(draft.draft_revision, unavailable ?? null, id);
         } finally {
           for (const page of pages) page.bytes.fill(0);
         }
