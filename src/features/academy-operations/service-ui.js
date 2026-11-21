@@ -345,3 +345,7 @@ if (
 ) {
   transcript.scrollTop = transcript.scrollHeight;
 }
+
+document
+  .querySelector('[data-print-exam]')
+  ?.addEventListener('click', () => window.print());

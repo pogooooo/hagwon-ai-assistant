@@ -43,6 +43,10 @@ const symbols: Record<string, [string, string]> = {
     'public',
     '<path d="m3 8 9-5 9 5ZM4 21h16M6 10v8m6-8v8m6-8v8"/>',
   ],
+  '/exam-builder': [
+    'documents',
+    '<path d="M6 3h9l3 3v15H6zM9 9h6M9 13h6M9 17h4"/>',
+  ],
   '/knowledge': [
     'documents',
     '<path d="M4 3h16v18H4Z"/><path d="m8 11 3 3 5-5M8 18h8"/>',
@@ -85,7 +89,14 @@ export function serviceNavigation(
   const groups = [
     [
       '오늘의 업무',
-      ['/', '/grading', '/learning', '/briefing', '/student-reports'],
+      [
+        '/',
+        '/grading',
+        '/learning',
+        '/briefing',
+        '/student-reports',
+        '/exam-builder',
+      ],
     ],
     [
       '소통과 일정',

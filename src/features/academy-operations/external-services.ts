@@ -1,9 +1,11 @@
+import { examVariantGenerator } from './exam-variants.ts';
 import { createNeisClient } from './neis.ts';
 import { OperationError } from './shared.ts';
 import type { OperationsDatabase } from './database.ts';
 
 export type ExternalEnv = Record<string, string | undefined>;
 export interface ExternalServices {
+  examVariants?: ReturnType<typeof examVariantGenerator>;
   neis: ReturnType<typeof createNeisClient>;
   speechAvailable: boolean;
   voiceAvailable: boolean;
@@ -77,6 +79,7 @@ export function createExternalServices(
     env.AXR_CLOVA_VOICE_CLIENT_ID && env.AXR_CLOVA_VOICE_CLIENT_SECRET,
   );
   return {
+    examVariants: examVariantGenerator(env, fetchImpl, db),
     neis: createNeisClient(env.AXR_NEIS_API_KEY, fetchImpl),
     speechAvailable,
     voiceAvailable,
