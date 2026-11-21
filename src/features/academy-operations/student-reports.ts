@@ -410,7 +410,7 @@ export function renderStudentReports(
   const students = accessibleStudents(ctx.db, ctx.actor),
     classes = accessibleClasses(ctx.db, ctx.actor);
   let html = family
-    ? tabs + (embedded ? '' : '<h2>월간 리포트</h2>')
+    ? tabs
     : '<div class="workspace-heading"><h1>월간 리포트</h1></div><p>확정된 학습과 출결 기록으로 학생별 리포트를 작성합니다.</p>';
   const options = (list: { id: string; name: string }[]) =>
     list
@@ -461,8 +461,11 @@ export function renderStudentReports(
     samples[Number(ctx.url.searchParams.get('example')) - 1]?.id ??
     entries[0]?.id;
   if (!id) return html + '<p class="muted">아직 열람할 리포트가 없습니다.</p>';
-  if (entries.length)
+  if (entries.length && (!family || entries.length > 1))
     html +=
+      (family
+        ? '<details class="report-periods"><summary>다른 리포트 보기</summary>'
+        : '') +
       '<nav class="report-links report-library" aria-label="월간 리포트 목록">' +
       entries
         .map(
@@ -480,7 +483,8 @@ export function renderStudentReports(
             '</span></a>',
         )
         .join('') +
-      '</nav>';
+      '</nav>' +
+      (family ? '</details>' : '');
   const archived = samples.find((r) => r.id === id);
   if (archived)
     return (
@@ -488,7 +492,11 @@ export function renderStudentReports(
       renderReportDocument(
         archived.title,
         archived.body,
-        archived.studentName + ' · ' + archived.className,
+        archived.studentName +
+          ' · ' +
+          archived.className +
+          ' · ' +
+          archived.unit,
         archived.period + '-학습-리포트',
       )
     );
