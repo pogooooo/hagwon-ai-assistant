@@ -6,6 +6,37 @@ import { approveReport, readReport } from './facts.ts';
 import { newId, readSubmission } from './service.ts';
 import { gradingModule } from './module.ts';
 
+test('report retries never block deletion receipts or duplicate a draft', async (t) => {
+  const f = fixture(t),
+    submission = await f.upload(f.register());
+  const result = await f.confirm(submission, false);
+  f.db.exec(
+    "CREATE TRIGGER fail_test_report BEFORE INSERT ON grading_v3_reports BEGIN SELECT RAISE(FAIL,'injected'); END;",
+  );
+  assert.equal(await f.service.purge(submission), true);
+  assert.equal(
+    f.service.result(f.ctx('TA_STUDENT_001'), result.result_set_id).revision,
+    1,
+  );
+  assert.equal(
+    f.db.prepare('SELECT COUNT(*) AS n FROM grading_v3_report_queue').get()!.n,
+    1,
+  );
+  f.db.exec('DROP TRIGGER fail_test_report');
+  f.advance(61000);
+  await f.service.sweep();
+  await f.service.sweep();
+  assert.equal(
+    f.db.prepare('SELECT COUNT(*) AS n FROM grading_v3_result_reports').get()!
+      .n,
+    1,
+  );
+  assert.equal(
+    f.db.prepare('SELECT COUNT(*) AS n FROM grading_v3_report_queue').get()!.n,
+    0,
+  );
+});
+
 test('consented demo submission with two photos creates one assignment report, visible only after approval', async (t) => {
   let reads = 0;
   const f = fixture(t, {

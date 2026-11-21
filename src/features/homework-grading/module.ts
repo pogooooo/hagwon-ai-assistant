@@ -8,7 +8,6 @@ import {
   one,
   OperationError,
   rows,
-  transaction,
   type OperationModule,
   type PageContext,
 } from '../academy-operations/shared.ts';
@@ -38,7 +37,6 @@ import {
 } from './service.ts';
 import {
   approveReport,
-  ensureResultReport,
   generateReport,
   readReport,
   readSnapshot,
@@ -714,27 +712,13 @@ async function render(ctx: PageContext) {
         s.published_revision
       ) {
         const result = service.result(ctx, s.result_id);
-        const linked = staff
-          ? transaction(ctx.db, () =>
-              ensureResultReport(
-                ctx.db,
-                s.tenant,
-                result.result_set_id,
-                service.now(),
-              ),
-            )
-          : one<{ report: string }>(
-              ctx.db,
-              "SELECT p.report FROM grading_v3_result_reports p JOIN grading_v3_reports r ON r.id=p.report AND r.tenant=p.tenant WHERE p.tenant=? AND p.result=? AND p.revision=? AND r.status='approved'",
-              s.tenant,
-              result.result_set_id,
-              result.revision,
-            )?.report;
+        const linked = service.linkedReport(ctx, result);
         if (linked)
           detail +=
             '<a class="grade-report-row" href="/grading?report=' +
             encodeURIComponent(linked) +
             '"><strong>이 과제의 분석 리포트</strong><span>열기 ›</span></a>';
+        else if (staff) detail += '<p>리포트 초안을 준비하고 있습니다.</p>';
         detail += `<p>확정 ${result.revision}차 · 수행일 ${h(result.assessment_date)} · 원문은 삭제되었습니다.</p><div class="table-wrap"><table><thead><tr><th>문항</th><th>과목·유형</th><th>결과</th><th>점수</th></tr></thead><tbody>${result.items.map((i) => `<tr><td>${h(a.items.find((d) => d.item_ref === i.item_ref)?.item_no)}</td><td>${subjectNames[i.subject_id]} · ${h(a.items.find((d) => d.item_ref === i.item_ref)?.skill_label)}</td><td>${outcomeNames[i.outcome]}</td><td>${h(i.score ?? '집계 제외')} / ${h(i.max_score)}</td></tr>`).join('')}</tbody></table></div>`;
         if (staff)
           detail += `<details><summary>수행일 정정</summary>${startForm('date')}${hidden('result', s.result_id)}${hidden('revision', result.revision)}${input('date', '확인한 수행일', result.assessment_date, 'date', 'required')}<button>새 정정 이력으로 저장</button></form></details><p>점수 정정이 필요하면 <a href="/grading?view=upload&amp;submission=${encodeURIComponent(s.id)}">같은 답안의 정정 사진 제출</a>을 이용해 주세요. 다시 푼 숙제는 새 풀이로 제출합니다.</p>`;

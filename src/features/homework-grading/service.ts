@@ -146,6 +146,7 @@ export function setupGrading(db: OperationsDatabase) {
     CREATE TABLE IF NOT EXISTS grading_v3_snapshots(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,student TEXT NOT NULL,generation INTEGER NOT NULL,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS grading_v3_reports(id TEXT PRIMARY KEY,tenant TEXT NOT NULL,student TEXT NOT NULL,revision INTEGER NOT NULL,generation INTEGER NOT NULL,status TEXT NOT NULL,payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS grading_v3_result_reports(tenant TEXT NOT NULL,result TEXT NOT NULL,revision INTEGER NOT NULL,snapshot TEXT NOT NULL UNIQUE,report TEXT NOT NULL UNIQUE,PRIMARY KEY(tenant,result,revision));
+    CREATE TABLE IF NOT EXISTS grading_v3_report_queue(tenant TEXT NOT NULL,result TEXT NOT NULL,next_try INTEGER NOT NULL,PRIMARY KEY(tenant,result));
     CREATE TABLE IF NOT EXISTS grading_v3_idempotency(tenant TEXT NOT NULL,actor TEXT NOT NULL,endpoint TEXT NOT NULL,key TEXT NOT NULL,digest TEXT NOT NULL,response TEXT NOT NULL,PRIMARY KEY(tenant,actor,endpoint,key));
     CREATE INDEX IF NOT EXISTS grading_v3_attempts ON grading_v3_submissions(tenant,student,assignment,assignment_version,attempt_no);
   `);
@@ -1293,6 +1294,62 @@ export class GradingService {
     });
     await this.purge(id);
   }
+  private queueReport(tenant: string, result: string) {
+    this.db
+      .prepare(
+        'INSERT INTO grading_v3_report_queue VALUES(?,?,0) ON CONFLICT(tenant,result) DO UPDATE SET next_try=0',
+      )
+      .run(tenant, result);
+  }
+  linkedReport(ctx: PageContext, result: Result) {
+    const submission = readSubmission(ctx, result.submission_id);
+    if (
+      submission.result_id !== result.result_set_id ||
+      submission.published_revision !== result.revision
+    )
+      return;
+    const staff = ctx.actor.role === 'teacher' || ctx.actor.role === 'admin';
+    const lookup = () =>
+      one<{ report: string }>(
+        this.db,
+        "SELECT p.report FROM grading_v3_result_reports p JOIN grading_v3_reports r ON r.id=p.report AND r.tenant=p.tenant WHERE p.tenant=? AND p.result=? AND p.revision=? AND (r.status='approved' OR (?=1 AND r.status='draft'))",
+        ctx.actor.academyId,
+        result.result_set_id,
+        result.revision,
+      )?.report;
+    const found = lookup();
+    if (found || !staff) return found;
+    // Create a draft on first staff visit to a result published before automatic reports.
+    this.db
+      .prepare('INSERT OR IGNORE INTO grading_v3_report_queue VALUES(?,?,0)')
+      .run(ctx.actor.academyId, result.result_set_id);
+    this.createQueuedReports();
+    return lookup();
+  }
+  private createQueuedReports() {
+    for (const job of rows<{ tenant: string; result: string }>(
+      this.db,
+      'SELECT tenant,result FROM grading_v3_report_queue WHERE next_try<=? ORDER BY next_try,rowid LIMIT 5',
+      this.now(),
+    )) {
+      try {
+        transaction(this.db, () => {
+          ensureResultReport(this.db, job.tenant, job.result, this.now());
+          this.db
+            .prepare(
+              'DELETE FROM grading_v3_report_queue WHERE tenant=? AND result=?',
+            )
+            .run(job.tenant, job.result);
+        });
+      } catch {
+        this.db
+          .prepare(
+            'UPDATE grading_v3_report_queue SET next_try=? WHERE tenant=? AND result=?',
+          )
+          .run(this.now() + 60000, job.tenant, job.result);
+      }
+    }
+  }
   async purge(id: string) {
     let s = this.current(id);
     if (s.raw_state === 'VERIFIED') return true;
@@ -1362,11 +1419,9 @@ export class GradingService {
         invalidate(this.db, s.tenant, s.student);
         if (s.processing === 'CONFIRMED') {
           const resultId = s.purpose === 'assessment' ? s.result_id : s.target;
-          if (resultId)
-            ensureResultReport(this.db, s.tenant, resultId, this.now());
+          if (resultId) this.queueReport(s.tenant, resultId);
         }
       });
-      return true;
     } catch {
       this.db
         .prepare(
@@ -1380,6 +1435,8 @@ export class GradingService {
         .run(id);
       return false;
     }
+    this.createQueuedReports();
+    return true;
   }
   async sweep() {
     transaction(this.db, () => {
@@ -1402,6 +1459,7 @@ export class GradingService {
       "SELECT id FROM grading_v3_submissions WHERE raw_state NOT IN ('OPEN','VERIFIED') ORDER BY expires_at LIMIT 100",
     ))
       await this.purge(s.id);
+    this.createQueuedReports();
   }
   result(ctx: PageContext, id: string, revision?: number): Result {
     const head = one<Submission>(
@@ -1532,7 +1590,7 @@ export class GradingService {
         throw new GradingError('TEACHER_REVIEW_REQUIRED');
       replacement = this.retained(draft.items);
     }
-    return idempotent(ctx, 'revision:' + resultId, key, input, () => {
+    const revised = idempotent(ctx, 'revision:' + resultId, key, input, () => {
       const head = readSubmission(ctx, old.submission_id, true);
       if (head.current_revision !== old.revision)
         throw new GradingError('REVISION_MISMATCH', 412);
@@ -1593,9 +1651,10 @@ export class GradingService {
         this.enqueue(evidence.id);
       }
       invalidate(this.db, old.tenant_id, old.student_ref);
-      if (!evidence)
-        ensureResultReport(this.db, old.tenant_id, resultId, this.now());
+      if (!evidence) this.queueReport(old.tenant_id, resultId);
       return { result_set_id: resultId, revision: result.revision };
     });
+    this.createQueuedReports();
+    return revised;
   }
 }

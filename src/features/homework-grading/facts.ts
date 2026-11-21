@@ -641,7 +641,7 @@ function subjectObservations(s: Snapshot): Observation[] {
     }));
 }
 
-/** Called within the transaction that publishes a confirmed result and its deletion receipt. */
+/** Build the draft in a transaction after the deletion receipt and result are committed. */
 export function ensureResultReport(
   db: OperationsDatabase,
   tenant: string,
