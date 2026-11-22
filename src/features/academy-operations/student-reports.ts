@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { demoReports } from './demo-reports.ts';
-import { renderReportDocument } from './report-document.ts';
+import {
+  renderReportDocument,
+  reportTeacherComment,
+  withTeacherComment,
+} from './report-document.ts';
 import { accessibleClasses, accessibleStudents } from './directory.ts';
 import { parseClassification, tagById } from './classification.ts';
 import { readWorkbookAnalysis } from './workbook-analysis.ts';
@@ -187,6 +191,7 @@ export function studentReportEvidence(
     total,
     correct,
     unknown,
+    types: [...types.values()],
     repeated,
     suggestions,
     attendance,
@@ -235,6 +240,26 @@ function draft(
       (e.unknown
         ? ' 미확인 ' + e.unknown + '문항은 정답률에서 제외했습니다.'
         : ''),
+    ...(e.types.some((type) => type.total > 0)
+      ? [
+          [
+            '| 학습 유형 | 정답 | 전체 |',
+            '| --- | ---: | ---: |',
+            ...e.types
+              .filter((type) => type.total > 0)
+              .map(
+                (type) =>
+                  '| ' +
+                  type.name.replaceAll('|', '｜').replace(/\s+/gu, ' ') +
+                  ' | ' +
+                  (type.total - type.wrong) +
+                  ' | ' +
+                  type.total +
+                  ' |',
+              ),
+          ].join('\n'),
+        ]
+      : []),
     '## 오답 유형',
     repeat,
     '## 다음 학습',
@@ -286,6 +311,22 @@ function recordHistory(
       new Date().toISOString(),
     );
 }
+function reportEnrollment(form: FormData) {
+  if (form.has('enrollment')) {
+    const raw = required(form, 'enrollment', '학생과 수강 반');
+    const match = /^([^:]+):([^:]+)$/u.exec(raw);
+    if (match) {
+      try {
+        return [decodeURIComponent(match[1]), decodeURIComponent(match[2])];
+      } catch {
+        // Malformed form input is handled as a selection error.
+      }
+    }
+    throw new OperationError('학생과 수강 반을 다시 선택해 주세요.');
+  }
+  return [required(form, 'student', '학생'), required(form, 'class', '반')];
+}
+
 function submit(ctx: PageContext, form: FormData) {
   if (!staff(ctx))
     throw new OperationError('담당 교사만 분석·편집·승인할 수 있습니다.', 403);
@@ -293,9 +334,8 @@ function submit(ctx: PageContext, form: FormData) {
     ctx.assertCurrentAccess?.();
     const action = required(form, 'action', '작업');
     if (action === 'attendance') {
-      const student = required(form, 'student', '학생'),
-        klass = required(form, 'class', '반'),
-        date = required(form, 'date', '날짜'),
+      const [student, klass] = reportEnrollment(form);
+      const date = required(form, 'date', '날짜'),
         status = required(form, 'status', '출결');
       scope(ctx, student, klass);
       if (
@@ -324,10 +364,9 @@ function submit(ctx: PageContext, form: FormData) {
     }
     let r: Report;
     if (action === 'analyze') {
-      const student = required(form, 'student', '학생'),
-        klass = required(form, 'class', '반'),
-        period = required(form, 'period', '분석 월');
-      const result = draft(ctx, student, klass, period);
+      const [student, klass] = reportEnrollment(form);
+      const period = required(form, 'period', '분석 월');
+      scope(ctx, student, klass);
       const old = one<Report>(
         ctx.db,
         'SELECT * FROM op_student_reports WHERE academy_id=? AND student_id=? AND class_id=? AND period=?',
@@ -336,13 +375,14 @@ function submit(ctx: PageContext, form: FormData) {
         klass,
         period,
       );
-      if (old) {
-        if (field(form, 'version') !== String(old.version))
-          throw new OperationError(
-            '기존 리포트를 열고 현재 버전에서 다시 분석해 주세요.',
-            409,
-          );
-      }
+      const version = field(form, 'version');
+      if (old && !version) return '/student-reports?id=' + old.id;
+      if (version && (!old || version !== String(old.version)))
+        throw new OperationError(
+          '리포트가 변경되었습니다. 아래 최신 내용을 확인해 주세요.',
+          409,
+        );
+      const result = draft(ctx, student, klass, period);
       r = {
         id: old?.id ?? randomUUID(),
         academy_id: ctx.actor.academyId,
@@ -351,7 +391,12 @@ function submit(ctx: PageContext, form: FormData) {
         period,
         version: (old?.version ?? 0) + 1,
         state: 'draft',
-        body: result.body,
+        body: old
+          ? withTeacherComment(
+              result.body,
+              reportTeacherComment(old.body).comment,
+            )
+          : result.body,
         counsel: result.counsel,
         fingerprint: result.e.fingerprint,
         approved_by: null,
@@ -392,7 +437,13 @@ function submit(ctx: PageContext, form: FormData) {
           409,
         );
       if (action === 'save') {
-        r.body = required(form, 'body', '리포트', 10000);
+        const body = required(form, 'body', '리포트', 10000);
+        r.body = form.has('comment')
+          ? withTeacherComment(
+              reportTeacherComment(body).body,
+              field(form, 'comment', 1500),
+            )
+          : body;
         r.counsel = required(form, 'counsel', '상담 자료', 10000);
         r.state = 'draft';
         r.approved_by = null;
@@ -431,6 +482,34 @@ interface AssignmentResult {
   date: string;
 }
 
+function monthLabel(period: string) {
+  return period.replace(/^(\d{4})-0?(\d{1,2})$/u, '$1년 $2월');
+}
+
+function groupedReports<T>(
+  entries: T[],
+  periodFor: (item: T) => string,
+  render: (item: T) => string,
+) {
+  const groups = new Map<string, T[]>();
+  for (const entry of entries) {
+    const period = periodFor(entry);
+    const group = groups.get(period) ?? [];
+    group.push(entry);
+    groups.set(period, group);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(
+      ([period, group]) =>
+        `<section class="report-month"><h3>${h(monthLabel(period))}</h3><ul>${group
+          .map(render)
+          .map((row) => '<li>' + row + '</li>')
+          .join('')}</ul></section>`,
+    )
+    .join('');
+}
+
 export function renderStudentReports(
   ctx: PageContext,
   readAssignments: () => AssignmentResult[] = () => [],
@@ -438,82 +517,68 @@ export function renderStudentReports(
 ) {
   const family = ctx.actor.role === 'guardian';
   const embedded = ['/grading', '/homework'].includes(ctx.url.pathname);
-  const reportLink = (id: string) =>
-    (embedded
-      ? ctx.url.pathname + '?view=reports&id='
-      : '/student-reports?id=') + encodeURIComponent(id);
-  const assignments =
+  const assignmentView =
     family && ctx.url.searchParams.get('view') === 'assignments';
-  const tabs =
-    family && !embedded
-      ? `<div class="workspace-heading"><h1>학습 리포트</h1></div><nav class="page-tabs view-tabs" aria-label="리포트 종류"><a href="/student-reports?view=assignments"${assignments ? ' aria-current="page"' : ''}>과제별 결과</a><a href="/student-reports"${!assignments ? ' aria-current="page"' : ''}>월간 리포트</a></nav>`
+  const filterParam = ctx.url.searchParams.get('status');
+  const filter =
+    !family && (filterParam === 'draft' || filterParam === 'published')
+      ? filterParam
       : '';
-  if (assignments) {
+  const reportLink = (id?: string, status = filter) => {
+    const query = new URLSearchParams();
+    if (embedded) query.set('view', 'reports');
+    if (status) query.set('status', status);
+    if (id) query.set('id', id);
+    return (
+      (embedded ? ctx.url.pathname : '/student-reports') +
+      (query.size ? '?' + query.toString() : '')
+    );
+  };
+  const categories = embedded
+    ? ''
+    : `<div class="workspace-heading"><h1>학습 리포트</h1></div>
+    <nav class="page-tabs view-tabs" aria-label="리포트 종류">
+      <a href="/student-reports"${!assignmentView ? ' aria-current="page"' : ''}>월간 리포트</a>
+      <a href="${family ? '/student-reports?view=assignments' : '/learning'}"${assignmentView ? ' aria-current="page"' : ''}>${family ? '과제별 결과' : '학습 기록'}</a>
+    </nav>`;
+  if (assignmentView) {
     const entries = readAssignments();
     return (
-      tabs +
-      `<section class="panel"><h2>과제별 결과</h2>${
-        entries.length
-          ? `<ul class="grade-queue-list">${entries.map((result) => `<li><a class="grade-queue-entry" href="${h(result.href)}"><strong>${h(result.title)}</strong><span class="grade-student">${h(result.studentName)}</span><time class="pill">${h(result.date)}</time></a></li>`).join('')}</ul>`
-          : '<p class="muted">선생님이 확인한 과제 결과가 등록되면 여기에 표시됩니다.</p>'
-      }</section>`
+      categories +
+      '<section class="panel report-assignment-index"><h2>과제별 결과</h2>' +
+      (entries.length
+        ? groupedReports(
+            entries,
+            (entry) => entry.date.slice(0, 7),
+            (entry) =>
+              `<a class="grade-report-row" href="${h(entry.href)}"><span><strong>${h(entry.title)}</strong><small>${h(entry.studentName)}</small></span><time datetime="${h(entry.date)}">${h(entry.date.slice(5))}</time></a>`,
+          )
+        : '<p class="muted">선생님이 공개한 과제별 리포트가 여기에 표시됩니다.</p>') +
+      '</section>'
     );
   }
-  const students = accessibleStudents(ctx.db, ctx.actor),
-    classes = accessibleClasses(ctx.db, ctx.actor);
-  let html = family
-    ? tabs
-    : '<div class="workspace-heading"><h1>월간 리포트</h1></div><p>확정된 학습과 출결 기록으로 학생별 리포트를 작성합니다.</p>';
-  const options = (list: { id: string; name: string }[]) =>
-    list
-      .map((s) => `<option value="${h(s.id)}">${h(s.name)}</option>`)
-      .join('');
-  if (staff(ctx))
-    html += `<section class="panel"><h2>학생별 분석</h2><form method="post"><label>학생<select name="student">${options(students)}</select></label><label>반<select name="class">${options(classes)}</select></label><label>분석 월<input type="month" name="period" value="${new Date(Date.now() + 32400000).toISOString().slice(0, 7)}" required></label><button name="action" value="analyze">분석 · 상담 자료 초안 만들기</button></form><details><summary>실제 출결 기록 입력</summary><form method="post"><label>학생<select name="student">${options(students)}</select></label><label>반<select name="class">${options(classes)}</select></label><label>날짜<input type="date" name="date" required></label><label>출결<select name="status"><option value="present">출석</option><option value="late">지각</option><option value="absent">결석</option></select></label><button name="action" value="attendance">출결 기록 저장</button></form></details></section>`;
-  const list = rows<Report>(
-    ctx.db,
-    'SELECT * FROM op_student_reports WHERE academy_id=? ORDER BY period DESC,student_id',
-    ctx.actor.academyId,
-  ).filter((r) => {
-    try {
-      load(ctx, r.id);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-  const samples = demoReports(ctx).filter(
-    (sample) =>
-      !list.some(
-        (r) =>
-          r.period === sample.period &&
-          sample.studentId === r.student_id &&
-          sample.classId === r.class_id,
-      ),
+
+  const students = accessibleStudents(ctx.db, ctx.actor);
+  const classes = new Map(
+    accessibleClasses(ctx.db, ctx.actor).map((klass) => [klass.id, klass]),
   );
-  const entries = [
-    ...list.map((r) => ({
-      id: r.id,
-      period: r.period,
-      title:
-        students.find((s) => s.id === r.student_id)?.name + ' · ' + r.period,
-      description: classes.find((c) => c.id === r.class_id)?.name ?? '',
-      status: r.state === 'approved' ? '공개' : '초안',
-    })),
-    ...samples.map((r) => ({
-      id: r.id,
-      period: r.period,
-      title: r.title,
-      description: r.unit,
-      status: '공개',
-    })),
-  ].sort((a, b) => b.period.localeCompare(a.period));
-  const selected = ctx.url.searchParams.get('id');
+  const studentNames = new Map(
+    students.map((student) => [student.id, student.name]),
+  );
+  const reportClass = (classId: string) => classes.get(classId)?.name ?? '';
+  const submitted = ctx.submittedForm;
+  let html =
+    categories +
+    (ctx.formError
+      ? `<p class="panel report-alert" role="alert">${h(ctx.formError)}</p>`
+      : '');
   const previous =
-    family && !selected && !embedded ? readPublishedLearning() : [];
+    family && !embedded && !ctx.url.searchParams.has('id')
+      ? readPublishedLearning()
+      : [];
   if (previous.length)
     html +=
-      '<section class="panel"><h2>공개 학습 기록</h2><nav class="report-links">' +
+      '<section class="panel report-assignment-index"><h2>공개 학습 기록</h2><nav class="report-links">' +
       previous
         .map(
           (record) =>
@@ -525,35 +590,139 @@ export function renderStudentReports(
         )
         .join('') +
       '</nav></section>';
+  if (staff(ctx)) {
+    const today = new Date(Date.now() + 32400000).toISOString().slice(0, 10);
+    const enrollments = students.flatMap((student) =>
+      student.classIds
+        .filter((id) => classes.has(id))
+        .map((id) => ({
+          value: encodeURIComponent(student.id) + ':' + encodeURIComponent(id),
+          label: student.name + ' · ' + reportClass(id),
+        })),
+    );
+    const selected = submitted?.get('enrollment');
+    const enrollSelect = `<label>학생 · 수강 반<select name="enrollment" required>${enrollments
+      .map(
+        (entry) =>
+          `<option value="${h(entry.value)}"${entry.value === selected ? ' selected' : ''}>${h(entry.label)}</option>`,
+      )
+      .join('')}</select></label>`;
+    const period = submitted?.get('period') ?? today.slice(0, 7);
+    html += `<section class="panel report-create"><h2>월간 리포트 작성</h2>${
+      enrollments.length
+        ? `<form method="post" action="/student-reports" class="report-create-fields">${enrollSelect}<label>분석 월<input type="month" name="period" value="${h(period)}" required></label><button type="submit" name="action" value="analyze">월간 리포트 초안 만들기</button></form>
+          <details class="report-attendance-editor"${submitted?.get('action') === 'attendance' ? ' open' : ''}><summary>출결 기록 입력</summary><form method="post" action="/student-reports" class="report-create-fields">${enrollSelect}<label>날짜<input type="date" name="date" value="${h(submitted?.get('date') ?? today)}" max="${today}" required></label><label>출결<select name="status"><option value="present">출석</option><option value="late"${submitted?.get('status') === 'late' ? ' selected' : ''}>지각</option><option value="absent"${submitted?.get('status') === 'absent' ? ' selected' : ''}>결석</option></select></label><button type="submit" name="action" value="attendance">출결 저장</button></form></details>`
+        : '<p class="muted">담당 학생이 수강 반에 등록되면 리포트를 만들 수 있습니다.</p>'
+    }</section>`;
+  }
+
+  const reports = rows<Report>(
+    ctx.db,
+    'SELECT * FROM op_student_reports WHERE academy_id=? ORDER BY period DESC,student_id',
+    ctx.actor.academyId,
+  ).filter((r) => {
+    try {
+      load(ctx, r.id);
+      return true;
+    } catch (error) {
+      if (error instanceof OperationError && error.status === 403) return false;
+      throw error;
+    }
+  });
+  const samples = demoReports(ctx).filter(
+    (sample) =>
+      !reports.some(
+        (r) =>
+          r.period === sample.period &&
+          r.student_id === sample.studentId &&
+          r.class_id === sample.classId,
+      ),
+  );
+  const entries = [
+    ...reports.map((r) => {
+      const changed =
+        r.state === 'approved' &&
+        !family &&
+        r.fingerprint !==
+          studentReportEvidence(ctx, r.student_id, r.class_id, r.period)
+            .fingerprint;
+      return {
+        id: r.id,
+        period: r.period,
+        title: studentNames.get(r.student_id) ?? '',
+        description: reportClass(r.class_id),
+        category: r.state === 'approved' && !changed ? 'published' : 'draft',
+        status: changed
+          ? '갱신 필요'
+          : r.state === 'approved'
+            ? '공개'
+            : '초안',
+      };
+    }),
+    ...samples.map((r) => ({
+      id: r.id,
+      period: r.period,
+      title: r.studentName,
+      description: r.unit,
+      category: 'published',
+      status: '공개',
+    })),
+  ].sort((a, b) => b.period.localeCompare(a.period));
+  const visible = filter
+    ? entries.filter((entry) => entry.category === filter)
+    : entries;
   const id =
-    selected ??
+    ctx.url.searchParams.get('id') ??
     samples[Number(ctx.url.searchParams.get('example')) - 1]?.id ??
-    entries[0]?.id;
-  if (!id) return html + '<p class="muted">아직 열람할 리포트가 없습니다.</p>';
-  if (entries.length && (!family || entries.length > 1))
-    html +=
-      (family
-        ? '<details class="report-periods"><summary>다른 리포트 보기</summary>'
-        : '') +
-      '<nav class="report-links report-library" aria-label="월간 리포트 목록">' +
-      entries
+    visible[0]?.id;
+  const filters = family
+    ? ''
+    : '<nav class="report-filters" aria-label="리포트 공개 상태">' +
+      [
+        ['', '전체'],
+        ['draft', '초안'],
+        ['published', '공개'],
+      ]
         .map(
-          (r) =>
-            '<a class="grade-report-row" href="' +
-            h(reportLink(r.id)) +
-            '"' +
-            (id === r.id ? ' aria-current="page"' : '') +
-            '><span><strong>' +
-            h(r.title) +
-            '</strong><small>' +
-            h(r.description) +
-            '</small></span><span class="pill">' +
-            h(r.status) +
-            '</span></a>',
+          ([key, title]) =>
+            `<a href="${h(reportLink(undefined, key))}"${filter === key ? ' aria-current="page"' : ''}>${title}</a>`,
         )
         .join('') +
-      '</nav>' +
-      (family ? '</details>' : '');
+      '</nav>';
+  const mobilePicker =
+    visible.length > 1
+      ? `<form class="report-mobile-picker" method="get" action="${h(embedded ? ctx.url.pathname : '/student-reports')}">
+      ${embedded ? '<input type="hidden" name="view" value="reports">' : ''}
+      ${filter ? `<input type="hidden" name="status" value="${h(filter)}">` : ''}
+      <label class="visually-hidden" for="mobile-report-id">열람할 월간 리포트</label>
+      <select id="mobile-report-id" name="id">${visible
+        .map(
+          (entry) =>
+            `<option value="${h(entry.id)}"${entry.id === id ? ' selected' : ''}>${h(monthLabel(entry.period) + ' · ' + entry.title + ' · ' + entry.description)}</option>`,
+        )
+        .join(
+          '',
+        )}</select><button type="submit" class="secondary">열기</button></form>`
+      : '';
+  const index =
+    '<aside class="report-index panel"><h2>월간 리포트</h2>' +
+    filters +
+    mobilePicker +
+    (visible.length
+      ? '<nav class="report-index-list" aria-label="월간 리포트 목록">' +
+        groupedReports(
+          visible,
+          (entry) => entry.period,
+          (entry) =>
+            `<a class="grade-report-row" href="${h(reportLink(entry.id))}"${id === entry.id ? ' aria-current="page"' : ''}><span><strong>${h(entry.title)}</strong><small>${h(entry.description)}</small></span>${family ? '' : `<span class="pill">${entry.status}</span>`}</a>`,
+        ) +
+        '</nav>'
+      : '<p class="muted">이 분류에 표시할 리포트가 없습니다.</p>') +
+    '</aside>';
+  if (!id) return html + index;
+  html +=
+    '<div class="report-workspace">' + index + '<div class="report-preview">';
+
   const archived = samples.find((r) => r.id === id);
   if (archived)
     return (
@@ -567,26 +736,55 @@ export function renderStudentReports(
           ' · ' +
           archived.unit,
         archived.period + '-학습-리포트',
-      )
+      ) +
+      '</div></div>'
     );
+
   const r = load(ctx, id);
-  const name = students.find((s) => s.id === r.student_id)?.name ?? '';
+  const name = studentNames.get(r.student_id) ?? '';
   html += renderReportDocument(
-    r.period + ' 월간 학습 리포트',
+    monthLabel(r.period) + ' 학습 리포트',
     r.body,
-    name + ' · ' + (classes.find((c) => c.id === r.class_id)?.name ?? ''),
+    name + ' · ' + reportClass(r.class_id),
     r.period + '-학습-리포트',
   );
-  if (!staff(ctx)) return html;
-  const e = studentReportEvidence(ctx, r.student_id, r.class_id, r.period),
-    hidden = `<input type="hidden" name="id" value="${h(r.id)}"><input type="hidden" name="version" value="${r.version}">`;
-  const publication =
-    r.fingerprint !== e.fingerprint
-      ? '보호자 비공개 · 근거가 변경되어 다시 분석해야 합니다.'
-      : r.state === 'approved'
-        ? '보호자 공개 중'
-        : '교사 검토 초안 · 보호자 비공개';
-  html += `<section class="panel"><p>${publication}</p><form method="post">${hidden}<label>월간 리포트<textarea name="body" rows="12" maxlength="10000">${h(r.body)}</textarea></label><label>교사용 상담 자료 초안<textarea name="counsel" rows="12" maxlength="10000">${h(r.counsel)}</textarea></label><button name="action" value="save">수정 저장 · 비공개 초안</button></form><form method="post">${hidden}<label><input type="checkbox" name="reviewed" value="yes" required>저장된 내용을 검토했습니다</label><button name="action" value="approve">교사 승인 · 해당 보호자에게 공개</button></form><form method="post">${hidden}<button name="action" value="withdraw">공개 철회</button></form><form method="post">${hidden}<input type="hidden" name="student" value="${h(r.student_id)}"><input type="hidden" name="class" value="${h(r.class_id)}"><input type="hidden" name="period" value="${h(r.period)}"><button name="action" value="analyze">최신 근거로 다시 분석 · 승인 해제</button></form></section>`;
+  if (!staff(ctx)) return html + '</div></div>';
+  const e = studentReportEvidence(ctx, r.student_id, r.class_id, r.period);
+  const hidden = `<input type="hidden" name="id" value="${h(r.id)}"><input type="hidden" name="version" value="${r.version}">`;
+  const changed = r.fingerprint !== e.fingerprint;
+  const publication = changed
+    ? '보호자 비공개 · 근거가 변경되어 갱신이 필요합니다.'
+    : r.state === 'approved'
+      ? '보호자 공개 중'
+      : '초안 · 보호자 비공개';
+  const saved = reportTeacherComment(r.body);
+  const restoring =
+    submitted?.get('action') === 'save' && submitted.get('id') === r.id;
+  const editable = {
+    comment: restoring
+      ? (submitted.get('comment') ?? saved.comment)
+      : saved.comment,
+    body: restoring ? (submitted.get('body') ?? saved.body) : saved.body,
+    counsel: restoring ? (submitted.get('counsel') ?? r.counsel) : r.counsel,
+  };
+  html += `<section class="panel report-manage"><header><h2>검토와 공개</h2><p role="status">${publication}</p></header>
+    <form method="post" action="${h(reportLink(r.id))}" class="report-comment-editor">${hidden}<label for="report-comment">보호자에게 남길 교사 코멘트 <span>선택</span></label>
+    <p id="report-comment-help">수업에서 관찰한 변화나 다음 연습을 적어 주세요. 초안에 저장하고 리포트를 승인하면 보호자에게 표시됩니다.</p>
+    <textarea id="report-comment" name="comment" rows="4" maxlength="1500" aria-describedby="report-comment-help" placeholder="예: 통분은 익숙해졌어요. 이번 주에는 분수의 뺄셈을 한 번 더 연습해 주세요.">${h(editable.comment)}</textarea>
+    <details${restoring ? ' open' : ''}><summary>리포트 본문 및 교사용 상담 자료</summary><label>보호자에게 공개될 본문<textarea name="body" rows="9" maxlength="10000" required>${h(editable.body)}</textarea></label><label>교사용 상담 자료 <span>교사만 열람</span><textarea name="counsel" rows="6" maxlength="10000" required>${h(editable.counsel)}</textarea></label></details>
+    <button type="submit" name="action" value="save"${changed ? ' disabled' : ''}>초안 저장</button>
+    ${r.state === 'approved' && !changed ? '<small>수정해 저장하면 다시 승인할 때까지 비공개로 전환됩니다.</small>' : ''}</form>
+    <div class="report-review-actions">
+    ${
+      !changed && r.state === 'draft'
+        ? e.sourceCount || e.attendance.length
+          ? `<form method="post" action="${h(reportLink(r.id))}">${hidden}<label class="report-review-check"><input type="checkbox" name="reviewed" value="yes" required>저장된 공개 내용을 확인했습니다</label><button type="submit" name="action" value="approve">보호자에게 공개</button></form>`
+          : '<p class="muted">확정 학습 또는 출결 기록이 생기면 공개할 수 있습니다.</p>'
+        : ''
+    }
+    ${r.state === 'approved' ? `<form method="post" action="${h(reportLink(r.id))}">${hidden}<button class="secondary" type="submit" name="action" value="withdraw">공개 철회</button></form>` : ''}
+    <form method="post" action="${h(reportLink(r.id))}">${hidden}<input type="hidden" name="student" value="${h(r.student_id)}"><input type="hidden" name="class" value="${h(r.class_id)}"><input type="hidden" name="period" value="${h(r.period)}"><button class="secondary" type="submit" name="action" value="analyze">최신 기록으로 갱신</button><small>학습·출결 요약을 갱신합니다. 저장한 코멘트는 유지되며 다시 승인해야 공개됩니다.</small></form>
+    </div></section></div></div>`;
   return html;
 }
 export const studentReportsModule: OperationModule = {

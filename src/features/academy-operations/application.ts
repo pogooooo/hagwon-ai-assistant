@@ -824,9 +824,12 @@ export function createOperationsServer({
           redirect(response, target ?? url.pathname + url.search);
         } catch (error) {
           if (
-            ![calendarModule, parentMessagesModule, examBuilderModule].includes(
-              operation,
-            ) ||
+            (![
+              calendarModule,
+              parentMessagesModule,
+              examBuilderModule,
+            ].includes(operation) &&
+              operation.path !== studentReportsModule.path) ||
             !(error instanceof OperationError) ||
             ![400, 409, 422, 502, 503].includes(error.status)
           )
