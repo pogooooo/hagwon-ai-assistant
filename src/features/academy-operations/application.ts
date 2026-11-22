@@ -200,12 +200,10 @@ export function createOperationsServer({
       'voice-worklet.js',
       'assets/ondap-exam-example.txt',
       ...demoHomeworkMaterials.map(({ file }) => file),
-      'assets/walnut.png',
-      'assets/water.png',
       'assets/owl.png',
       'assets/ondap-logo.png',
       'assets/ondap-review.png',
-      'assets/ondap-report.png',
+      'assets/ondap-report-mascot.png',
       'assets/app-192.png',
       'assets/app-512.png',
       'assets/study-room.webp',
@@ -375,7 +373,7 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=academy-setup"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-mascot"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +

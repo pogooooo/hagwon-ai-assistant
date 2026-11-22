@@ -884,7 +884,7 @@ test(
   },
 );
 
-test('통합 일정 경로와 캐릭터 설정은 로그인·동일 출처와 계정 범위를 지킨다', async (t) => {
+test('통합 일정 경로와 관리자 설정은 로그인·동일 출처와 계정 범위를 지킨다', async (t) => {
   const s = await startOperations(t);
   const parent = await s.login('TA_GUARDIAN_E_MATH');
   for (const old of [
@@ -898,24 +898,31 @@ test('통합 일정 경로와 캐릭터 설정은 로그인·동일 출처와 �
   const calendar = await s.send('/schedule?month=2026-11', parent);
   assert.equal(calendar.status, 200);
   assert.match(calendar.text, /calendar-grid/);
-  const save = await s.send('/settings', parent, {
-    action: 'character',
-    character: 'water',
-  });
-  assert.equal(save.status, 303);
-  const own = await s.send('/', parent);
-  assert.ok(own.text.includes('/assets/water.png'));
+  const home = await s.send('/', parent);
+  assert.match(home.text, /\/assets\/owl\.png/);
+  assert.match(home.text, /\/assets\/ondap-report-mascot\.png/);
+  assert.doesNotMatch(home.text, /\/assets\/(?:walnut|water)\.png/);
+  const consultation = await s.send('/consultation', parent);
+  assert.match(consultation.text, /\/assets\/owl\.png/);
+  assert.doesNotMatch(consultation.text, /\/assets\/(?:walnut|water)\.png/);
   const admin = await s.login('TA_DIRECTOR');
   const other = await s.send('/', admin);
   assert.doesNotMatch(other.text, /class="profile-link"/);
-  assert.match((await s.send('/settings', admin)).text, /assets\/walnut.png/);
-  const image = await fetch(s.origin + '/assets/water.png');
+  const settings = await s.send('/settings', admin);
+  assert.match(settings.text, /상담 AI 연결/);
+  assert.doesNotMatch(settings.text, /상담 캐릭터|name="character"/);
+  assert.equal((await s.send('/settings', parent)).status, 403);
+  for (const name of ['walnut', 'water']) {
+    const oldAsset = await s.send('/assets/' + name + '.png', admin);
+    assert.equal(oldAsset.status, 404);
+  }
+  const image = await fetch(s.origin + '/assets/ondap-report-mascot.png');
   assert.equal(image.status, 200);
   assert.equal(image.headers.get('content-type'), 'image/png');
   const blocked = await fetch(s.origin + '/settings', {
     method: 'POST',
-    headers: { cookie: parent, origin: 'https://unrelated.invalid' },
-    body: new URLSearchParams({ action: 'character', character: 'owl' }),
+    headers: { cookie: admin, origin: 'https://unrelated.invalid' },
+    body: new URLSearchParams({ action: 'probe' }),
     redirect: 'manual',
   });
   assert.equal(blocked.status, 403);
