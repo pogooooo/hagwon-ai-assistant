@@ -121,6 +121,8 @@ export const itemSchema = z
     grading_mode: z.literal('photo_solution').optional(),
     item_ref: id,
     item_no: z.string().min(1).max(40),
+    /** 교재 과제의 책 쪽수. 사진 번호(expected_page_no)와 다르다. */
+    book_page: z.number().int().min(1).max(100000).optional(),
     subject_id: z.enum(subjects),
     answer_type: z.enum(answerTypes),
     primary_skill_id: id,

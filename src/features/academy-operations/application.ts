@@ -57,6 +57,10 @@ import {
   maxDocumentBytes as defaultMaxDocumentBytes,
 } from './documents.ts';
 import { homeworkModule } from './homework.ts';
+import {
+  analyzeHomeworkPhoto,
+  reviewHomeworkReading,
+} from './homework-classifier.ts';
 import { renderWorkbookSource } from './workbook-publication.ts';
 import {
   gradingLearning,
@@ -874,6 +878,24 @@ export function createOperationsServer({
         assertCurrentAccess();
         response.writeHead(200, { 'Content-Type': 'audio/mpeg' });
         response.end(bytes);
+        return;
+      }
+      // 과제 등록 탭의 교재 사진 분석(쪽수·번호·유형)과 원문 확인 후 재분류.
+      if (
+        form &&
+        operation === gradingModule &&
+        (url.searchParams.get('analyze') === '1' ||
+          url.searchParams.get('review') === '1')
+      ) {
+        const result =
+          url.searchParams.get('review') === '1'
+            ? await reviewHomeworkReading(ctx, form)
+            : await analyzeHomeworkPhoto(ctx, form);
+        assertCurrentAccess();
+        response.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+        });
+        response.end(JSON.stringify(result));
         return;
       }
       if (form) {

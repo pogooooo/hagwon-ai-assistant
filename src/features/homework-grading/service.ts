@@ -32,13 +32,16 @@ import {
   validateRetained,
 } from './scoring.ts';
 import { MemoryRawStore, type RawStore } from './raw-store.ts';
+import { setupWorkbookCatalog } from '../academy-operations/workbook-catalog.ts';
 import {
   cropAnswer,
   decodeUploads,
   maskStudentAnswers,
+  detectMarkedChoice,
   type ImagePage,
 } from './media.ts';
 import type { GradeProvider } from './provider.ts';
+import type { OcrLayout } from './ocr.ts';
 import {
   comparePhotoAnswer,
   solveVerifiedCalculation,
@@ -129,6 +132,8 @@ type Options = {
 };
 const activeStores = new WeakMap<OperationsDatabase, RawStore>();
 export function setupGrading(db: OperationsDatabase) {
+  // 과제 등록 탭이 학원 공용 교재 목록(쪽·번호·유형·정답)을 쓴다.
+  setupWorkbookCatalog(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS grading_v3_assignments(tenant TEXT NOT NULL,id TEXT NOT NULL,version INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(tenant,id,version));
     CREATE TABLE IF NOT EXISTS grading_v3_submissions(
@@ -783,6 +788,9 @@ export class GradingService {
           number,
           Awaited<ReturnType<NonNullable<GradeProvider['readWorksheetPrint']>>>
         >();
+        // CLOVA OCR로 문항 영역을 찾은 쪽. 이 쪽은 문항마다 잘라 읽고 푼다.
+        const layouts = new Map<number, OcrLayout>();
+        const itemVerified = new Map<number, Reading[]>();
         const useWorksheetReader =
           !staffRemap &&
           !a.items.length &&
@@ -802,6 +810,23 @@ export class GradingService {
               ctx.assertCurrentAccess?.();
               readSubmission(ctx, id);
               this.open(this.current(id));
+              if (!staffRemap && provider.locateItems) {
+                const layout = await provider
+                  .locateItems(page)
+                  .catch(() => null);
+                if (
+                  layout &&
+                  (a.scope.kind !== 'workbook' || layout.printedPage !== null)
+                ) {
+                  found.push({
+                    printedPage:
+                      a.scope.kind === 'workbook' ? layout.printedPage : null,
+                    numbers: layout.numbers,
+                  });
+                  layouts.set(page.page_no, layout);
+                  continue;
+                }
+              }
               if (useWorksheetReader) {
                 try {
                   const printed = await provider.readWorksheetPrint!(page);
@@ -862,6 +887,24 @@ export class GradingService {
                 throw error;
             }
           }
+          // OCR 쪽의 객관식: 펜 표시가 덮은 보기를 픽셀과 OCR 두 신호로 찾는다. 두 신호가 같은
+          // 보기를 가리킬 때만 답으로 쓰고, 나머지 문항은 아래 쪽 전체 판독으로 넘어간다.
+          for (const page of pages) {
+            const layout = layouts.get(page.page_no);
+            if (!layout) continue;
+            const detected: Reading[] = [];
+            for (const item of a.items) {
+              if (item.expected_page_no !== page.page_no) continue;
+              const grid = layout.choices.get(Number(item.item_no));
+              const mark = grid && (await detectMarkedChoice(page, grid));
+              if (!mark) continue;
+              const reading = { ...mark, item_ref: item.item_ref };
+              readings.push(reading);
+              detected.push(reading);
+            }
+            // 두 신호가 이미 서로 독립된 확인이므로 같은 판독을 검증 결과로도 둔다.
+            itemVerified.set(page.page_no, detected);
+          }
           const recognized = new Set(readings.map((r) => r.item_ref));
           const remaining = a.items.filter((i) => !recognized.has(i.item_ref));
           if (remaining.length) {
@@ -883,7 +926,7 @@ export class GradingService {
         try {
           readSubmission(ctx, id);
           this.open(this.current(id));
-          const verified = new Map<number, Reading[]>();
+          const verified = new Map<number, Reading[]>(itemVerified);
           if (!unavailable && provider.verifyPage) {
             const eligible = new Set(
               readings
@@ -897,23 +940,27 @@ export class GradingService {
                 .map((reading) => reading.item_ref),
             );
             for (const page of pages) {
+              const itemChecked = new Set(
+                (itemVerified.get(page.page_no) ?? []).map((r) => r.item_ref),
+              );
               const candidates = a.items.filter(
                 (item) =>
                   item.expected_page_no === page.page_no &&
-                  eligible.has(item.item_ref),
+                  eligible.has(item.item_ref) &&
+                  !itemChecked.has(item.item_ref),
               );
               if (!candidates.length) continue;
               readSubmission(ctx, id);
               this.open(this.current(id));
               try {
-                verified.set(
-                  page.page_no,
-                  await provider.verifyPage(
+                verified.set(page.page_no, [
+                  ...(itemVerified.get(page.page_no) ?? []),
+                  ...(await provider.verifyPage(
                     page,
                     { ...a, items: candidates },
                     worksheetPrint.has(page.page_no),
-                  ),
-                );
+                  )),
+                ]);
               } catch (error) {
                 partialIssue ??= providerIssue(error);
               }

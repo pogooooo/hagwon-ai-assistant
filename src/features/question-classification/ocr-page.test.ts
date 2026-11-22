@@ -110,6 +110,25 @@ test('본문 속 숫자나 거꾸로 가는 번호는 문항 번호로 받지 �
   );
 });
 
+test('네 자리 번호가 발문과 다른 줄에 있어도 문항으로 나누고, 숫자만 있는 쪽 번호는 받지 않는다', () => {
+  const lines = [
+    ...line('II. 함수와 미분 | 01 유형 연습', 100, 40),
+    ...line('0001', 100, 100, 60),
+    ...line('f(x) = x2 - 9일 때 f(4)를 구하시오.', 100, 140),
+    ...line('0002', 100, 200, 60),
+    ...line('극한값을 구하시오.', 100, 240),
+    ...line('24', 100, 900, 30),
+  ];
+  const items = segmentItems(readingOrder(fieldsToLines(lines)));
+  assert.deepEqual(
+    items.map((i) => [i.displayNumber, i.text]),
+    [
+      ['0001', 'f(x) = x2 - 9일 때 f(4)를 구하시오.'],
+      ['0002', '극한값을 구하시오.\n24'],
+    ],
+  );
+});
+
 test('OCR 판독은 readSheet과 같은 모양으로 문항과 쪽수를 돌려준다', async (t) => {
   process.env.CLOVA_OCR_INVOKE_URL = 'https://ocr.example.test/general';
   process.env.CLOVA_OCR_SECRET = 'test-secret';

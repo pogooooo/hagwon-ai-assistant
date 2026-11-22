@@ -184,7 +184,7 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
       ...i,
       text: i.holdReason ? '' : i.text,
     }));
-    if (!items.length) throw Error('empty');
+    if (!items.length) throw Error('사진에서 문항 번호를 찾지 못했습니다.');
     for (const i of items) {
       const candidates = [
         ...new Set<string>(
@@ -227,7 +227,12 @@ export async function analyzeHomeworkPhoto(ctx: PageContext, form: FormData) {
       subject,
       new Map(items.map((i) => [i.itemId, i.text])),
     );
-  } catch {
+  } catch (error) {
+    // 화면에는 일반 안내만 보이므로 실제 원인(OCR HTTP 오류, 문항 0개 등)은 서버 로그에 남긴다.
+    console.error(
+      '[homework-photo] 분석 실패:',
+      error instanceof Error ? error.message : error,
+    );
     throw new OperationError(
       '사진을 분석하지 못했습니다. 사진과 CLOVA 연결을 확인한 뒤 다시 시도해 주세요.',
       502,
