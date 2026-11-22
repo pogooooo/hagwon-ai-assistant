@@ -8,6 +8,7 @@ import {
 } from 'node:http';
 import {
   academyChoices,
+  academyCreatingOwner,
   renderAcademies,
   selectAcademy,
   sessionProfile,
@@ -551,14 +552,8 @@ export function createOperationsServer({
         const active = actor;
         const digest = active ? hashSession(getToken(request)!) : undefined;
         const owner =
-          digest && active?.role === 'admin'
-            ? one<{ id: string; name: string }>(
-                db,
-                `SELECT a.id,a.name FROM op_sessions s JOIN accounts a ON a.id=s.account_id
-                WHERE s.digest=? AND s.expires_at>? AND a.role='admin'`,
-                digest,
-                Date.now(),
-              )
+          active && digest
+            ? academyCreatingOwner(db, digest, active)
             : undefined;
         if (active && !owner)
           throw new OperationError(

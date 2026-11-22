@@ -102,7 +102,6 @@ test('academy onboarding finds, reviews and creates isolated spaces for first an
     })
   ).cookie;
   assert.equal((await request(onboardingPath, unauthorized)).status, 403);
-
   const query = {
     action: 'search',
     name: '합성회화학원',
@@ -197,6 +196,18 @@ test('academy onboarding finds, reviews and creates isolated spaces for first an
     '서울 가상구 솔길 31 2층',
   );
   assert.equal((await request(onboardingPath, anon, fields)).status, 409);
+  const connected = await request('/academies', unauthorized, {
+    action: 'connect',
+    username: credentials.username,
+    password: credentials.password,
+  });
+  assert.equal(connected.status, 303);
+  assert.doesNotMatch(
+    (await request('/academies', unauthorized)).body,
+    /새 학원 등록/,
+  );
+  assert.equal((await request(onboardingPath, unauthorized)).status, 403);
+
   await request('/logout', done.cookie, {});
   const relogin = await request('/login', '', {
     username: credentials.username,
