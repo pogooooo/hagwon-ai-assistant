@@ -49,38 +49,129 @@ const FormControls = createGlobalStyle`
     cursor: pointer;
   }
 
-  @supports (appearance: base-select) and selector(::picker(select)) {
-    body[data-page] select:where(:not([multiple], [size])),
-    body[data-page] select:where(:not([multiple], [size]))::picker(select) {
-      appearance: base-select;
-    }
-    body[data-page] select:where(:not([multiple], [size])) {
-      align-items: center;
-      padding-inline-end: 12px;
-      background-image: none;
-    }
-    body[data-page] select::picker-icon {
-      color: var(--field-focus);
-      margin-inline-start: auto;
-    }
-    body[data-page] select::picker(select) {
-      max-height: min(22rem, 65svh);
-      margin-block: 4px;
-      padding: 4px;
-      border: 1px solid var(--field-border);
-      border-radius: 12px;
-      background: var(--field-bg);
-      box-shadow: 0 8px 22px #36492a25;
-    }
-    body[data-page] select option {
-      min-height: 38px;
-      padding: 7px 10px;
-      border-radius: 8px;
-      color: var(--field-ink);
-    }
-    body[data-page] select option:is(:checked, :hover, :focus-visible) {
-      background: var(--field-soft);
-    }
+  body[data-page] select.control-select-source {
+    position: absolute;
+    width: 1px !important;
+    height: 1px !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    margin: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .control-select {
+    min-width: 0;
+    width: 100%;
+  }
+  .control-combobox {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-sizing: border-box;
+    min-height: 44px;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--field-border);
+    border-radius: var(--field-radius);
+    background: var(--field-bg);
+    color: var(--field-ink);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .control-combobox:not([aria-disabled='true']):hover,
+  .control-combobox[aria-expanded='true'] {
+    border-color: var(--field-focus);
+    background: #f9fbf5;
+  }
+  .control-combobox:focus-visible {
+    outline: 2px solid var(--field-focus);
+    outline-offset: 2px;
+  }
+  .control-combobox[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.68;
+  }
+  .control-combobox[aria-invalid='true'] {
+    border-color: #a44531;
+  }
+  .control-combobox::after {
+    content: '';
+    flex: none;
+    width: 7px;
+    height: 7px;
+    margin: -4px 3px 0 0;
+    border: solid var(--field-focus);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .control-combobox[aria-expanded='true']::after {
+    margin-top: 4px;
+    transform: rotate(225deg);
+  }
+  .control-select-value {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .control-select-error {
+    margin: 4px 0 0;
+    color: #9e3827;
+    font-size: 12px;
+  }
+  .control-select-options {
+    position: fixed;
+    z-index: 1000;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--field-border);
+    border-radius: 12px;
+    background: var(--field-bg);
+    color: var(--field-ink);
+    box-shadow: 0 8px 24px #36492a30;
+    scrollbar-width: thin;
+  }
+  .control-select-options[hidden] {
+    display: none;
+  }
+  .control-select-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 42px;
+    padding: 7px 10px;
+    gap: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  .control-select-option[aria-selected='true'] {
+    font-weight: 700;
+    color: #405333;
+  }
+  .control-select-option[aria-selected='true']::after {
+    content: '';
+    flex: none;
+    width: 9px;
+    height: 5px;
+    border: solid var(--field-focus);
+    border-width: 0 0 2px 2px;
+    transform: rotate(-45deg);
+  }
+  .control-select-option:not([aria-disabled='true']):is([data-highlighted], :hover) {
+    background: var(--field-soft);
+  }
+  .control-select-option[aria-disabled='true'] {
+    color: #6f7869;
+    cursor: not-allowed;
   }
 
   body[data-page] input:is([type='checkbox'], [type='radio']) {
