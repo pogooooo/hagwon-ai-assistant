@@ -340,3 +340,60 @@ test('점 없이 인쇄한 01식 번호도 같은 위치에 늘어선 번호로 
   const regions = itemRegions(items, readingOrder(fieldsToLines(lines)));
   assert.equal(regions.size, 4);
 });
+
+test('발문과 한 줄로 읽힌 0을 붙인 번호와 O로 읽힌 번호도 문항으로 받는다', () => {
+  // 두 단 문제지(1500px 폭): 오른쪽 단 첫 문항 04가 발문과 한 줄로, 05는 O5로 읽혔다.
+  const lines = [
+    ...line('01', 171, 291, 32),
+    ...line('lim 의 값은?', 210, 276, 240),
+    ...line('① 3', 174, 356, 40),
+    ...line('02', 171, 794, 34),
+    ...line('03', 171, 1296, 34),
+    ...line('04 lim x2+ax+b = 5일 때, 상수 a, b에 대하여', 806, 290, 500),
+    ...line('O5', 807, 791, 34),
+    ...line('06', 807, 1302, 34),
+    ...line('시연용 예시 문제지', 171, 1860, 300),
+  ];
+  const items = segmentItems(readingOrder(fieldsToLines(lines)));
+  assert.deepEqual(
+    items.map((i) => i.displayNumber),
+    ['01', '02', '03', '04', '05', '06'],
+  );
+  assert.match(items[3].text, /^lim x2\+ax\+b = 5일 때/);
+});
+
+test('숙제 등록 판독은 쪽 위 여백의 문항 번호(10)를 쪽 번호로 잡지 않는다', async (t) => {
+  process.env.CLOVA_OCR_INVOKE_URL = 'https://ocr.example.test/general';
+  process.env.CLOVA_OCR_SECRET = 'test-secret';
+  t.after(() => {
+    delete process.env.CLOVA_OCR_INVOKE_URL;
+    delete process.env.CLOVA_OCR_SECRET;
+  });
+  const fields = [
+    ...line('숙제 ① 함수의 연속', 171, 180, 300),
+    ...line('07', 171, 290, 34),
+    ...line('연속일 때, 상수 a의 값은?', 175, 385, 300),
+    ...line('08', 171, 806, 34),
+    ...line('09', 171, 1290, 34),
+    ...line('10', 806, 288, 34),
+    ...line('다음 중 모든 실수에서 연속인 함수는?', 850, 288, 400),
+    ...line('11', 806, 791, 34),
+    ...line('12', 806, 1290, 34),
+    ...line('시연용 예시 문제지', 171, 1860, 300),
+    ...line('2', 1316, 1866, 10),
+  ];
+  t.mock.method(globalThis, 'fetch', async () =>
+    Response.json({ images: [{ inferResult: 'SUCCESS', fields }] }),
+  );
+  const result = await readSheetService(
+    { bytes: Buffer.from('x'), mime: 'image/png' },
+    'E',
+  );
+  assert.deepEqual(
+    result.detected.map((d: { displayNumber: string }) => d.displayNumber),
+    ['07', '08', '09', '10', '11', '12'],
+  );
+  assert.ok(
+    result.detected.every((d: { printedPage?: number }) => d.printedPage === 2),
+  );
+});
