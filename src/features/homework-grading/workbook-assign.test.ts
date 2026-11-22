@@ -13,6 +13,11 @@ import { keyFromAnswer } from './workbook-assign.ts';
 import type { GradeProvider } from './provider.ts';
 
 test('teacher answers become deterministic keys', () => {
+  assert.deepEqual(keyFromAnswer('3', true).key.accepted_choice_sets, [['3']]);
+  assert.equal(keyFromAnswer('3', false).answer_type, 'numeric');
+  assert.equal(keyFromAnswer('3번', false).answer_type, 'numeric');
+  assert.throws(() => keyFromAnswer('10', true));
+  assert.throws(() => keyFromAnswer('3|', true));
   assert.deepEqual(keyFromAnswer('③').key.accepted_choice_sets, [['3']]);
   assert.equal(keyFromAnswer('③').answer_type, 'choice_single');
   assert.deepEqual(keyFromAnswer('② | ④').key.accepted_choice_sets, [
@@ -85,7 +90,13 @@ test('a workbook assignment keeps page, representative type and answer, and grad
   assert.match(register, /data-answer/);
   const items = [
     { page: 43, number: '3', tagIds: [], answer: 'x+3' },
-    { page: 42, number: '1', tagIds: ['math-03', 'math-01'], answer: '③' },
+    {
+      page: 42,
+      number: '1',
+      tagIds: ['math-03', 'math-01'],
+      answer: '3',
+      isChoice: true,
+    },
     { page: 43, number: '2', tagIds: ['math-02'], answer: '5/6 L' },
   ];
   const assigned = String(
@@ -127,14 +138,14 @@ test('a workbook assignment keeps page, representative type and answer, and grad
   assert.deepEqual(
     f.db
       .prepare(
-        'SELECT page,number,answer FROM book_questions WHERE book_id=? ORDER BY page,number',
+        'SELECT page,number,answer,is_choice FROM book_questions WHERE book_id=? ORDER BY page,number',
       )
       .all(bookId)
-      .map((r) => [r.page, r.number, r.answer]),
+      .map((r) => [r.page, r.number, r.answer, r.is_choice]),
     [
-      [42, '1', '③'],
-      [43, '2', '5/6 L'],
-      [43, '3', 'x+3'],
+      [42, '1', '3', 1],
+      [43, '2', '5/6 L', null],
+      [43, '3', 'x+3', null],
     ],
   );
   const input = f.service.create(

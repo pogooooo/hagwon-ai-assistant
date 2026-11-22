@@ -45,7 +45,30 @@
     find('[data-number]').value = item.number || '';
     find('[data-select]').checked = !!item.selected;
     const answer = find('[data-answer]');
-    if (answer) answer.value = item.answer || '';
+    if (answer) {
+      const choice = find('[data-is-choice]');
+      const options = (item.answer || '').split('|').map((s) => s.trim());
+      const legacyChoice = options.every((s) => /^[①-⑨]$|^[1-9]번$/u.test(s));
+      choice.checked =
+        item.is_choice == null
+          ? !item.answer || legacyChoice
+          : !!item.is_choice;
+      answer.value =
+        choice.checked && legacyChoice
+          ? options
+              .map((s) => String('①②③④⑤⑥⑦⑧⑨'.indexOf(s) + 1 || parseInt(s, 10)))
+              .join(' | ')
+          : item.answer || '';
+      const updateAnswer = () => {
+        find('[data-answer-label]').textContent = choice.checked
+          ? '정답 보기 번호'
+          : '주관식 정답';
+        answer.placeholder = choice.checked ? '예: 3' : '예: 5/6 L';
+        answer.inputMode = choice.checked ? 'numeric' : 'text';
+      };
+      choice.onchange = updateAnswer;
+      updateAnswer();
+    }
     const area = find('[data-area]'),
       minor = find('[data-minor]'),
       chosen = find('[data-chosen]');
@@ -173,6 +196,19 @@
           page + '쪽 ' + number + '번의 정답을 입력해 주세요.';
         return;
       }
+      const isChoice = !!row.querySelector('[data-is-choice]')?.checked;
+      if (
+        isChoice &&
+        !answer.split('|').every((s) => /^[1-9]$/.test(s.trim()))
+      ) {
+        status.textContent =
+          page +
+          '쪽 ' +
+          number +
+          '번의 정답 보기 번호를 1~9 사이 숫자로 입력해 주세요.';
+        row.querySelector('[data-answer]').focus();
+        return;
+      }
       const key = JSON.stringify([page, number]);
       if (seen.has(key)) {
         status.textContent = '같은 쪽수와 번호의 문항이 중복되었습니다.';
@@ -187,7 +223,7 @@
         number,
         tagIds: [...tags],
         version: master?.version ?? null,
-        ...(requireAnswer ? { answer } : {}),
+        ...(requireAnswer ? { answer, isChoice } : {}),
       });
     }
     if (!items.length || items.length > 300) {

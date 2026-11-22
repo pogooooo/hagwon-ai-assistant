@@ -16,7 +16,11 @@ import {
 } from './academy-switcher.ts';
 import { accountDisplayName } from './demo-presentation.ts';
 import { seedDemoLibrary } from './demo-library.ts';
-import { listedDemoLogins, setupDemoLogins } from './demo-logins.ts';
+import {
+  listedDemoLogins,
+  localDemoPassword,
+  setupDemoLogins,
+} from './demo-logins.ts';
 import {
   seedAcademyChoices,
   seedDemoConsultationGuides,
@@ -192,6 +196,7 @@ export interface OperationsServerOptions {
   showDefaultPassword?: boolean;
   showDemoAccounts?: boolean;
   trialPasswordHashes?: string;
+  localDemoLogins?: boolean;
   assetsRoot?: URL | null;
   formControlStyles?: string;
   fixturesRoot?: URL;
@@ -209,6 +214,7 @@ export function createOperationsServer({
   showDefaultPassword = false,
   showDemoAccounts = showDefaultPassword,
   trialPasswordHashes,
+  localDemoLogins = false,
   assetsRoot = new URL('./', import.meta.url),
   formControlStyles,
   fixturesRoot,
@@ -300,7 +306,7 @@ export function createOperationsServer({
     seedAcademyChoices(db);
     seedDemoConsultationGuides(db);
     seedDemoLibrary(db);
-    setupDemoLogins(db, trialPasswordHashes);
+    setupDemoLogins(db, trialPasswordHashes, localDemoLogins && !publicOrigin);
     seedDemoMakeupPolls(db);
     seedDemoHomework(db);
     seedDemoConsultationInbox(db);
@@ -485,7 +491,7 @@ export function createOperationsServer({
     showDemoAccounts
       ? `<details class="sign-in-accounts">
     <summary>체험 계정 보기</summary>
-    ${showDefaultPassword ? '<p>초기 비밀번호 <code>axr-demo</code></p>' : ''}
+    ${showDefaultPassword ? '<p>초기 비밀번호 <code>' + h(localDemoLogins && !publicOrigin ? localDemoPassword : demoPassword) + '</code></p>' : ''}
     <dl class="demo-accounts">${demoAccounts
       .map(
         ([label, username]) =>

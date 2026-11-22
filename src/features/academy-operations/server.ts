@@ -35,7 +35,8 @@ const server = createOperationsServer({
     ? new URL(process.env.AXR_OPERATIONS_PUBLIC_ORIGIN)
     : undefined,
   demoPassword: process.env.AXR_OPERATIONS_DEMO_PASSWORD ?? 'axr-demo',
-  showDefaultPassword: process.env.AXR_OPERATIONS_DEMO_PASSWORD === undefined,
+  localDemoLogins: !process.env.AXR_OPERATIONS_PUBLIC_ORIGIN,
+  showDefaultPassword: !process.env.AXR_OPERATIONS_PUBLIC_ORIGIN,
 });
 server.listen(port, '127.0.0.1', () => {
   const address = server.address();
