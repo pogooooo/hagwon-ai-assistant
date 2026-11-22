@@ -231,6 +231,7 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
         3,
       );
       assert.match(monthly, /길 묻고 설명하기/);
+      assert.doesNotMatch(monthly, /mobile-report-id|report-mobile-picker/);
       assert.match(monthly, /<table>/);
       assert.match(monthly, /data:text\/markdown/);
       assert.doesNotMatch(monthly, /리포트 예시|분수의 덧셈과 뺄셈/);

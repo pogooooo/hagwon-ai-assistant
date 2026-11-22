@@ -687,25 +687,9 @@ export function renderStudentReports(
         )
         .join('') +
       '</nav>';
-  const mobilePicker =
-    visible.length > 1
-      ? `<form class="report-mobile-picker" method="get" action="${h(embedded ? ctx.url.pathname : '/student-reports')}">
-      ${embedded ? '<input type="hidden" name="view" value="reports">' : ''}
-      ${filter ? `<input type="hidden" name="status" value="${h(filter)}">` : ''}
-      <label class="visually-hidden" for="mobile-report-id">열람할 월간 리포트</label>
-      <select id="mobile-report-id" name="id">${visible
-        .map(
-          (entry) =>
-            `<option value="${h(entry.id)}"${entry.id === id ? ' selected' : ''}>${h(monthLabel(entry.period) + ' · ' + entry.title + ' · ' + entry.description)}</option>`,
-        )
-        .join(
-          '',
-        )}</select><button type="submit" class="secondary">열기</button></form>`
-      : '';
   const index =
     '<aside class="report-index panel"><h2>월간 리포트</h2>' +
     filters +
-    mobilePicker +
     (visible.length
       ? '<nav class="report-index-list" aria-label="월간 리포트 목록">' +
         groupedReports(
