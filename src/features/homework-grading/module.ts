@@ -194,28 +194,28 @@ const hidden = (name: string, value: unknown) =>
   `<input type="hidden" name="${h(name)}" value="${h(value)}">`;
 const startForm = (action: string) =>
   `<form method="post" action="/grading">${hidden('action', action)}${hidden('request_key', newId('request'))}`;
-/** 정답을 등록한 문항으로만 된 과제는 사진 없이 답을 직접 입력해 제출할 수 있다. */
-const typedAnswersAllowed = (a: Assignment) =>
+/** 교재 과제: 정답이 등록된 문항만 있고 문항마다 책 쪽수가 있다. 사진에서 읽은 답을 학생이 확인해 제출한다. */
+const workbookAnswersAllowed = (a: Assignment) =>
   !a.scope &&
   a.items.length > 0 &&
-  a.items.every((i) => i.grading_mode !== 'photo_solution' && !!i.key);
-function typedAnswerForm(
+  a.items.every(
+    (i) => i.grading_mode !== 'photo_solution' && !!i.key && !!i.book_page,
+  );
+/** 사진에서 읽은 답을 미리 채운 제출 전 확인 화면. */
+function confirmAnswerForm(
   a: Assignment,
-  students: { id: string; name: string }[],
-  confirm?: { submission: string; prefill: PhotoPrefill },
+  submission: string,
+  prefill: PhotoPrefill,
 ) {
-  if (!typedAnswersAllowed(a) || (!confirm && !students.length)) return '';
   const rows = a.items
     .map((item) => {
       const label =
         (item.book_page ? item.book_page + '쪽 ' : '') + item.item_no + '번';
       const name = 'ans_' + item.item_ref;
-      const read = confirm?.prefill.items[item.item_ref]?.answer;
-      const hint = !confirm
-        ? ''
-        : read
-          ? `<p class="grade-read">사진에서 ${h(read)}(으)로 읽었습니다. 맞는지 확인해 주세요.</p>`
-          : '<p class="grade-read grade-unread">사진에서 읽지 못했습니다. 직접 입력해 주세요.</p>';
+      const read = prefill.items[item.item_ref]?.answer;
+      const hint = read
+        ? `<p class="grade-read">사진에서 ${h(read)}(으)로 읽었습니다. 맞는지 확인해 주세요.</p>`
+        : '<p class="grade-read grade-unread">사진에서 읽지 못했습니다. 직접 입력해 주세요.</p>';
       return item.answer_type === 'choice_single'
         ? `<fieldset class="grade-choices"><legend>${h(label)}</legend>${hint}${['①', '②', '③', '④', '⑤'].map((c) => `<label><input type="radio" name="${h(name)}" value="${c}"${read === c ? ' checked' : ''}>${c}</label>`).join('')}</fieldset>`
         : hint +
@@ -228,19 +228,7 @@ function typedAnswerForm(
             );
     })
     .join('');
-  if (confirm)
-    return `<form method="post" action="/grading">${hidden('action', 'answer')}${hidden('request_key', newId('request'))}${hidden('submission', confirm.submission)}<h2>${h(a.title)} · 읽은 답 확인</h2><p>사진에서 고른 보기를 읽어 미리 채웠습니다. 책과 비교해 틀린 곳을 고치고, 읽지 못한 문항은 직접 고른 뒤 제출하세요. 비워 둔 문항은 답을 쓰지 않은 것으로 처리합니다.</p>${rows}<button>확인하고 제출</button></form>`;
-  return `<details class="grade-details"><summary>사진 없이 답 입력하기</summary><form method="post" action="/grading">${hidden('action', 'answer')}${hidden('request_key', newId('request'))}${hidden('assignment', a.assignment_id)}${
-    students.length === 1
-      ? hidden('student', students[0].id)
-      : choice(
-          'student',
-          '학생',
-          students.map((s) => s.id),
-          '',
-          Object.fromEntries(students.map((s) => [s.id, s.name])),
-        )
-  }<p>문항마다 고른 보기나 답을 입력하세요. 등록된 정답과 비교해 채점하고 선생님이 확인합니다. 비워 둔 문항은 답을 쓰지 않은 것으로 처리합니다.</p>${rows}<button>답 제출</button></form></details>`;
+  return `<form method="post" action="/grading">${hidden('action', 'answer')}${hidden('request_key', newId('request'))}${hidden('submission', submission)}<h2>${h(a.title)} · 읽은 답 확인</h2><p>사진에서 고른 보기를 읽어 미리 채웠습니다. 책과 비교해 틀린 곳을 고치고, 읽지 못한 문항은 직접 고른 뒤 제출하세요. 비워 둔 문항은 답을 쓰지 않은 것으로 처리합니다.</p>${rows}<button>확인하고 제출</button></form>`;
 }
 function number(form: FormData, key: string, min = 0, max = 10000) {
   const value = Number(field(form, key));
@@ -482,11 +470,11 @@ async function submit(ctx: PageContext, form: FormData) {
       );
       return '/grading?submission=' + encodeURIComponent(s.id);
     }
-    if (action === 'answer' && field(form, 'submission')) {
-      // 사진에서 읽은 답을 학생이 확인·수정해 제출한다.
+    if (action === 'answer') {
+      // 사진에서 읽은 답을 학생이 확인·수정해 제출한다. 사진 없이 답만 내는 제출은 받지 않는다.
       const id = field(form, 'submission');
       const a = submissionAssignment(ctx.db, readSubmission(ctx, id));
-      if (!typedAnswersAllowed(a))
+      if (!workbookAnswersAllowed(a))
         throw new GradingError('RESOURCE_NOT_FOUND', 404);
       await service.submitAnswers(
         ctx,
@@ -499,37 +487,6 @@ async function submit(ctx: PageContext, form: FormData) {
         ),
       );
       return '/grading?submission=' + encodeURIComponent(id);
-    }
-    if (action === 'answer') {
-      const assignmentId = field(form, 'assignment');
-      const selected = listAssignments(ctx).find(
-        (a) => a.assignment_id === assignmentId,
-      );
-      if (!selected || !typedAnswersAllowed(selected))
-        throw new GradingError('RESOURCE_NOT_FOUND', 404);
-      const answers = Object.fromEntries(
-        selected.items.map((i) => [
-          i.item_ref,
-          field(form, 'ans_' + i.item_ref, 200),
-        ]),
-      );
-      const submission = service.create(
-        ctx,
-        {
-          assignment_id: assignmentId,
-          assignment_version: 1,
-          student_ref: field(form, 'student'),
-          expected_page_count: Math.max(
-            1,
-            ...selected.items.map((i) => i.expected_page_no),
-          ),
-        },
-        field(form, 'request_key'),
-      );
-      await service.submitAnswers(ctx, submission.submission_id, answers);
-      return (
-        '/grading?submission=' + encodeURIComponent(submission.submission_id)
-      );
     }
     if (action === 'upload') {
       const assignmentId = field(form, 'assignment');
@@ -576,11 +533,7 @@ async function submit(ctx: PageContext, form: FormData) {
           autoPages,
         );
         // 교재 과제는 사진에서 고른 보기를 읽어 학생이 확인한 뒤 제출한다(AI 판독 없음).
-        if (
-          typedAnswersAllowed(selected) &&
-          selected.items.every((i) => i.book_page) &&
-          !field(form, 'target')
-        ) {
+        if (workbookAnswersAllowed(selected) && !field(form, 'target')) {
           await service.readWorkbookPhotos(ctx, submission.submission_id);
           return (
             '/grading?view=confirm&submission=' +
@@ -915,13 +868,9 @@ async function render(ctx: PageContext) {
         }
         if (draft.items.length)
           detail += `<div class="grade-review" data-review data-initial="${firstPending}"><header class="grade-overview"><div><p>사진 채점 / 제출 검수</p><h2>${h(a.title)} · ${h(students.find((student) => student.id === s.student)?.name)}</h2></div><span class="grade-status">검수 전 점수 비공개</span></header><ol class="grade-steps"><li>제출</li><li>AI 초안</li><li aria-current="step">교사 검수</li><li>결과 공개</li></ol>
-        <div class="grade-spread">${
-          s.expected_pages
-            ? `<section class="grade-paper" data-jump-label="제출 사진"><header><h3>제출 답안</h3><label>쪽 <select data-page-select>${Array.from({ length: s.expected_pages }, (_, n) => `<option value="${n + 1}">${n + 1} / ${s.expected_pages}</option>`).join('')}</select></label></header>
+        <div class="grade-spread"><section class="grade-paper" data-jump-label="제출 사진"><header><h3>제출 답안</h3><label>쪽 <select data-page-select>${Array.from({ length: s.expected_pages }, (_, n) => `<option value="${n + 1}">${n + 1} / ${s.expected_pages}</option>`).join('')}</select></label></header>
         <div class="grade-tools" data-enhance hidden><button type="button" data-turn>회전</button><button type="button" data-zoom>확대</button><button type="button" data-fit>맞춤</button></div>
-        ${Array.from({ length: s.expected_pages }, (_, n) => `<figure data-page="${n + 1}"><div class="grade-image"><img src="${pageUrl(n + 1)}" alt="${n + 1}쪽 전체 사진" loading="lazy"></div><figcaption><a href="${pageUrl(n + 1)}" target="_blank" rel="noopener">${n + 1}쪽 원본 크기로 열기</a></figcaption></figure>`).join('')}</section>`
-            : '<section class="grade-paper"><header><h3>제출 답안</h3></header><p>사진 없이 학생이 직접 입력한 답입니다.</p></section>'
-        }
+        ${Array.from({ length: s.expected_pages }, (_, n) => `<figure data-page="${n + 1}"><div class="grade-image"><img src="${pageUrl(n + 1)}" alt="${n + 1}쪽 전체 사진" loading="lazy"></div><figcaption><a href="${pageUrl(n + 1)}" target="_blank" rel="noopener">${n + 1}쪽 원본 크기로 열기</a></figcaption></figure>`).join('')}</section>
         <section class="grade-decisions" data-jump-label="문항 검수">${startForm('review')}${hidden('submission', s.id)}${hidden('revision', draft.draft_revision)}${draft.items
           .map((d, n) => {
             const def = a.items.find(
@@ -1092,15 +1041,12 @@ async function render(ctx: PageContext) {
       if (
         !s.uploaded ||
         s.processing !== 'PROCESSING' ||
-        !typedAnswersAllowed(a)
+        !workbookAnswersAllowed(a)
       )
         throw new GradingError('STATE_CONFLICT', 409);
       return (
         intro +
-        `<section class="panel grade-upload">${typedAnswerForm(a, [], {
-          submission: id,
-          prefill: await service.photoPrefill(ctx, id),
-        })}</section>`
+        `<section class="panel grade-upload">${confirmAnswerForm(a, id, await service.photoPrefill(ctx, id))}</section>`
       );
     }
     if (detail) return intro + detail;
@@ -1179,8 +1125,7 @@ async function render(ctx: PageContext) {
                       target?.student ?? '',
                       Object.fromEntries(eligible.map((s) => [s.id, s.name])),
                     )
-              }<label class="grade-picker" data-jump-label="사진 첨부"><strong>사진 또는 PDF 추가</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><span class="grade-picker-prompt" aria-hidden="true">파일 선택</span><input type="file" name="photos" data-max-files="${mediaLimits.pages}" data-max-bytes="${mediaLimits.bytes}" data-max-pixels="${mediaLimits.pixels}" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><p class="muted">한 번에 ${mediaLimits.pages}쪽 · 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MB 이하</p><p class="grade-file-status" data-file-status aria-live="polite"></p><div class="grade-previews" data-previews></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<div class="submission-actions"><button type="submit" data-grade-submit>숙제 제출</button></div><details class="grade-details"><summary>사진 보관과 결과 공개</summary>${gradingAvailability(service, canPractice)}<p>원본은 검수 전 최대 ${Math.round(service.ttl / 60000)}분 보관합니다. 선생님이 결과를 확인하고 원본 삭제가 확인되면 결과가 공개됩니다.</p><p>사진은 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 첨부할 수 있습니다.</p></details></form>` +
-              (target ? '' : typedAnswerForm(selected, eligible))
+              }<label class="grade-picker" data-jump-label="사진 첨부"><strong>사진 또는 PDF 추가</strong><span>문제·지문·보기와 내가 쓴 답이 한눈에 보이도록 찍어 주세요.</span><span class="grade-picker-prompt" aria-hidden="true">파일 선택</span><input type="file" name="photos" data-max-files="${mediaLimits.pages}" data-max-bytes="${mediaLimits.bytes}" data-max-pixels="${mediaLimits.pixels}" accept="image/jpeg,image/png,image/webp,application/pdf" multiple required></label><p class="muted">한 번에 ${mediaLimits.pages}쪽 · 전체 ${Math.floor(mediaLimits.bytes / 1024 / 1024)} MB 이하</p><p class="grade-file-status" data-file-status aria-live="polite"></p><div class="grade-previews" data-previews></div>${practiceChoice}${staff && target?.result_id && target.published_revision ? `<label><input type="checkbox" name="target" value="${h(target.result_id)}">다시 푼 답안이 아닌, 위 성적의 같은 답안을 재촬영한 정정 증거입니다.</label>${hidden('target_revision', target.current_revision)}` : ''}<div class="submission-actions"><button type="submit" data-grade-submit>숙제 제출</button></div><details class="grade-details"><summary>사진 보관과 결과 공개</summary>${gradingAvailability(service, canPractice)}<p>원본은 검수 전 최대 ${Math.round(service.ttl / 60000)}분 보관합니다. 선생님이 결과를 확인하고 원본 삭제가 확인되면 결과가 공개됩니다.</p><p>사진은 한 장당 ${mediaLimits.pixels / 10000}만 화소까지 첨부할 수 있습니다.</p></details></form>`
             : '<p>제출할 수 있는 사진 채점 과제가 없습니다.</p>'
         }${material && worksheet ? `<details class="grade-details"><summary>숙제 자료 보기</summary>${materialLink(true, selected?.assignment_id)}</details>` : ''}${ctx.actor.academyId === 'AC_TEST_A' ? '<details class="grade-samples"><summary>연습용 답안 내려받기</summary><p>한 페이지씩 사진을 추가하거나 여러 페이지를 PDF 한 파일로 제출할 수 있습니다.</p><div><a download href="/assets/practice-math-1.png">1쪽 사진</a><a download href="/assets/practice-math-2.png">2쪽 사진</a><a download href="/assets/practice-math.pdf">두 쪽 PDF</a></div></details>' : ''}</section>`
       );

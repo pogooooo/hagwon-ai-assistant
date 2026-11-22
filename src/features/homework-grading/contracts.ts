@@ -190,7 +190,7 @@ export const readingSchema = z
     ambiguity_codes: z.array(z.string().max(60)).max(15).default([]),
     printed_calculation: z.string().trim().min(1).max(120).optional(),
     /**
-     * 답의 출처. typed: 학생이 직접 입력, photo: 사진에서 읽은 답을 학생이 그대로 제출,
+     * 답의 출처. typed: 사진에서 못 읽어 학생이 직접 입력, photo: 사진에서 읽은 답을 학생이 그대로 제출,
      * photo_edited: 사진에서 읽은 답을 학생이 고쳐 제출. 없으면 AI가 사진에서 읽은 답이다.
      */
     source: z.enum(['typed', 'photo', 'photo_edited']).optional(),

@@ -856,8 +856,8 @@ export class GradingService {
     }
   }
   /**
-   * 학생이 문항마다 고른 답으로 제출한다. 사진 없이 직접 입력하거나, 사진에서 읽은 답을 확인·수정해
-   * 제출한다. 등록한 정답과 바로 비교해 초안을 만들고 교사 검수로 넘긴다. AI를 호출하지 않는다.
+   * 사진에서 읽은 답을 학생이 확인·수정해 제출한다(못 읽은 문항은 학생이 직접 고른다). 등록한 정답과
+   * 바로 비교해 초안을 만들고 교사 검수로 넘긴다. AI를 호출하지 않는다. 사진 없는 제출은 받지 않는다.
    */
   async submitAnswers(
     ctx: PageContext,
@@ -865,9 +865,7 @@ export class GradingService {
     answers: Record<string, string>,
   ) {
     const current = readSubmission(ctx, id);
-    const fromPhotos =
-      !!current.uploaded && current.processing === 'PROCESSING';
-    if (!fromPhotos && (current.uploaded || current.processing !== 'RECEIVED'))
+    if (!current.uploaded || current.processing !== 'PROCESSING')
       throw new GradingError('STATE_CONFLICT', 409);
     this.open(current);
     const a = this.workbookAssignment(current);
@@ -877,9 +875,7 @@ export class GradingService {
       )
     )
       throw new GradingError('ITEM_SET_MISMATCH');
-    const prefill: PhotoPrefill = fromPhotos
-      ? await this.photoPrefill(ctx, id)
-      : { reordered: false, items: {} };
+    const prefill = await this.photoPrefill(ctx, id);
     const items: DraftItem[] = a.items.map((item) => {
       const text = (answers[item.item_ref] ?? '').normalize('NFC').trim();
       if (text.length > 12000) throw new GradingError('VALIDATION_FAILED');
@@ -929,38 +925,14 @@ export class GradingService {
       );
       transaction(this.db, () => {
         this.open(this.current(id));
-        if (fromPhotos) {
-          if (
-            !this.db
-              .prepare(
-                "UPDATE grading_v3_submissions SET draft_revision=?,processing='REVIEW_REQUIRED',error_code=NULL WHERE id=? AND uploaded=1 AND processing='PROCESSING' AND raw_state='OPEN' AND fence=?",
-              )
-              .run(draft.draft_revision, id, s.fence).changes
-          )
-            throw new GradingError('STATE_CONFLICT', 409);
-          return;
-        }
-        const attempt =
-          s.purpose === 'assessment'
-            ? (one<{ n: number }>(
-                this.db,
-                'SELECT COALESCE(MAX(attempt_no),0)+1 n FROM grading_v3_submissions WHERE tenant=? AND student=? AND assignment=? AND assignment_version=?',
-                s.tenant,
-                s.student,
-                s.assignment,
-                s.assignment_version,
-              )?.n ?? 1)
-            : null;
         if (
           !this.db
             .prepare(
-              "UPDATE grading_v3_submissions SET uploaded=1,attempt_no=?,expected_pages=0,draft_revision=?,processing='REVIEW_REQUIRED',error_code=NULL WHERE id=? AND uploaded=0 AND processing='RECEIVED' AND raw_state='OPEN' AND fence=?",
+              "UPDATE grading_v3_submissions SET draft_revision=?,processing='REVIEW_REQUIRED',error_code=NULL WHERE id=? AND uploaded=1 AND processing='PROCESSING' AND raw_state='OPEN' AND fence=?",
             )
-            .run(attempt, draft.draft_revision, id, s.fence).changes
+            .run(draft.draft_revision, id, s.fence).changes
         )
           throw new GradingError('STATE_CONFLICT', 409);
-        if (s.purpose === 'assessment')
-          invalidate(this.db, s.tenant, s.student);
       });
     });
   }

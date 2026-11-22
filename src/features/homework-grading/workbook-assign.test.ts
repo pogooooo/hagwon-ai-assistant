@@ -246,80 +246,52 @@ async function workbookAssignment(
   return new URL(assigned, teacher.url).searchParams.get('assignment')!;
 }
 
-test('students can submit typed answers without a photo and they are graded against the key', async (t) => {
-  const provider: GradeProvider = {
-    modelId: 'fixture',
-    inputAllowed: true,
-    async read() {
-      throw new Error('typed answers must not be read from photos');
-    },
-  };
-  const f = fixture(t, { provider });
+test('workbook assignments accept answers only through a photo submission', async (t) => {
+  const f = fixture(t);
   const id = await workbookAssignment(f, [
     { page: 10, number: '1', tagIds: ['math-01'], answer: '③' },
-    { page: 10, number: '2', tagIds: [], answer: '5/6 L' },
-    { page: 11, number: '3', tagIds: [], answer: 'x+3' },
   ]);
   const student = f.ctx('TA_STUDENT_001');
   const upload = await gradingModule.render({
     ...student,
     url: new URL('/grading?view=upload&assignment=' + id, student.url),
   });
-  assert.match(upload, /사진 없이 답 입력하기/);
-  assert.match(upload, /type="radio"/);
-  const a = assignmentFor(f.db, student.actor.academyId, id, 1);
-  const next = String(
-    await gradingModule.submit!(
-      student,
-      form({
-        action: 'answer',
-        request_key: newId('request'),
-        assignment: id,
-        ['ans_' + a.items[0].item_ref]: '③',
-        ['ans_' + a.items[1].item_ref]: '5/6 L',
-        ['ans_' + a.items[2].item_ref]: '',
-      }),
-    ),
+  // 사진 없이 답만 내는 입력 칸은 없다.
+  assert.doesNotMatch(upload, /사진 없이 답 입력하기/);
+  assert.doesNotMatch(upload, /type="radio"/);
+  await assert.rejects(
+    async () =>
+      gradingModule.submit!(
+        student,
+        form({
+          action: 'answer',
+          request_key: newId('request'),
+          assignment: id,
+        }),
+      ),
+    /찾을 수 없|RESOURCE_NOT_FOUND/,
   );
-  const submission = new URL(next, student.url).searchParams.get('submission')!;
-  const teacher = f.ctx('TA_TEACHER');
-  const draft = await f.service.draft(teacher, submission);
-  assert.deepEqual(
-    a.items.map((item) => {
-      const d = draft.items.find(
-        (x) => x.extraction.item_ref === item.item_ref,
-      )!;
-      return [d.extraction.source, d.proposed.outcome];
-    }),
-    [
-      ['typed', 'correct'],
-      ['typed', 'correct'],
-      ['typed', 'blank'],
-    ],
-  );
-  const review = await gradingModule.render({
-    ...teacher,
-    url: new URL('/grading?submission=' + submission, teacher.url),
-  });
-  assert.match(review, /학생이 직접 입력한 답/);
-  assert.doesNotMatch(review, /AI 추정 답안 영역/);
-  // 교사가 확인하면 결과로 확정된다.
-  const reviewed = await f.service.patch(
-    teacher,
-    submission,
-    draft.draft_revision,
-    draft.items.map((i) => ({ ...i, reviewed: true })),
-  );
-  await f.service.confirm(
-    teacher,
-    submission,
-    reviewed.draft_revision,
+  // 사진을 올리지 않은 제출에는 답을 받지 않는다.
+  const input = f.service.create(
+    student,
+    {
+      assignment_id: id,
+      assignment_version: 1,
+      student_ref: 'TA_STU_001',
+      expected_page_count: 1,
+    },
     newId('request'),
   );
-  assert.equal(readSubmission(teacher, submission, true).current_revision, 1);
+  const a = assignmentFor(f.db, student.actor.academyId, id, 1);
+  await assert.rejects(
+    f.service.submitAnswers(student, input.submission_id, {
+      [a.items[0].item_ref]: '③',
+    }),
+    /STATE_CONFLICT/,
+  );
 });
 
-test('typed answers are refused for assignments that still need AI solving', async (t) => {
+test('answer confirmation is refused for assignments that still need AI solving', async (t) => {
   const f = fixture(t);
   const teacher = f.ctx('TA_TEACHER');
   const legacy = String(
