@@ -79,7 +79,7 @@ import {
 } from './student-reports.ts';
 import { previewTeamSchedule } from './team-schedule.ts';
 import { renderHome } from './home.ts';
-import { serviceNavigation } from './service-navigation.ts';
+import { serviceIcon, serviceNavigation } from './service-navigation.ts';
 import { preferencesModule } from './preferences.ts';
 import {
   escapeHtml as h,
@@ -233,6 +233,7 @@ export function createOperationsServer({
       'service-design.css',
       'service-ui.js',
       'select-ui.js',
+      'control-surface-ui.js',
       'grading-ui.js',
       'app.webmanifest',
       '.well-known/assetlinks.json',
@@ -411,6 +412,11 @@ export function createOperationsServer({
     const pages = actor ? serviceMenu(actor) : [];
     const staff = actor?.role === 'admin' || actor?.role === 'teacher';
     const navigation = serviceNavigation(pages, current, staff);
+    const consultationShortcut =
+      current !== '/consultation' &&
+      pages.some(({ path }) => path === '/consultation')
+        ? `<a class="consultation-shortcut" href="${staff ? '/consultation?view=inbox' : '/consultation'}" aria-label="${staff ? '상담함 바로가기' : '챗봇 상담 바로가기'}"><div class="consultation-shortcut-content">${serviceIcon('/consultation')}<span>${staff ? '상담함' : '챗봇 상담'}</span></div></a>`
+        : '';
     const brand = `<a class="brand" href="/"><img src="/assets/ondap-logo.png" alt="온답"></a>`;
     const title =
       pages.find((p) => p.path === current)?.label ??
@@ -424,13 +430,13 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-div-controls"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-shortcuts"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
       '" data-role="' +
       h(actor?.role ?? 'guest') +
-      '"><script src="/service-ui.js?v=ondap-control-library" defer></script><script type="module" src="/select-ui.js?v=ondap-div-controls"></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=ondap-control-library" defer></script><script type="module" src="/select-ui.js?v=ondap-div-controls"></script><script type="module" src="/control-surface-ui.js?v=ondap-shortcuts"></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName
@@ -451,7 +457,7 @@ export function createOperationsServer({
       '</div>' +
       '</header>' +
       (actor
-        ? `<div class="shell signed-in">${navigation.sidebar}<main class="workspace" id="main-content" tabindex="-1">${content}</main></div>${navigation.mobile}`
+        ? `<div class="shell signed-in">${navigation.sidebar}<main class="workspace" id="main-content" tabindex="-1">${content}</main></div>${navigation.mobile}${consultationShortcut}`
         : `<main class="sign-in" id="main-content">${content}</main>`) +
       '</body></html>'
     );

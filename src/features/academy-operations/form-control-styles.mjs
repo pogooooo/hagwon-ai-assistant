@@ -247,6 +247,133 @@ const FormControls = createGlobalStyle`
   .workspace a:where(:not([class])) {
     text-decoration: none;
   }
+  body[data-page] button {
+    appearance: none;
+  }
+  summary.control-disclosure {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 44px;
+    padding: 7px 10px;
+    border: 1px solid var(--field-border);
+    border-radius: 8px;
+    background: #f7f9f2;
+    color: var(--field-ink);
+    list-style: none;
+  }
+  summary.control-disclosure::-webkit-details-marker {
+    display: none;
+  }
+  .control-disclosure:hover,
+  details[open] > .control-disclosure {
+    background: var(--field-soft);
+  }
+  .control-disclosure-icon,
+  .control-inline-icon {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    margin-inline-end: 3px;
+    border: solid var(--field-focus);
+    border-width: 0 2px 2px 0;
+  }
+  .control-disclosure-icon {
+    transform: translateY(-2px) rotate(45deg);
+  }
+  details[open] > .control-disclosure .control-disclosure-icon {
+    transform: translateY(2px) rotate(225deg);
+  }
+  a.control-inline-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    vertical-align: middle;
+    gap: 9px;
+    max-width: 100%;
+    padding: 5px 10px;
+    min-height: 36px;
+    border: 1px solid var(--field-border);
+    border-radius: 8px;
+    background: #f7f9f2;
+    color: #384c2d;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  a.control-inline-link:hover {
+    border-color: var(--field-focus);
+    background: var(--field-soft);
+  }
+  .control-disclosure-label,
+  .control-inline-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .control-inline-icon {
+    transform: rotate(-45deg);
+  }
+
+  a.consultation-shortcut {
+    position: fixed;
+    z-index: 22;
+    inset-inline-end: 24px;
+    inset-block-end: 24px;
+    border: 1px solid #455831;
+    border-radius: 999px;
+    background: #425731;
+    color: #fff;
+    text-decoration: none;
+    box-shadow: 0 8px 22px #26371b38;
+  }
+  a.consultation-shortcut:hover {
+    background: #334627;
+  }
+  .consultation-shortcut-content {
+    display: flex;
+    align-items: center;
+    min-height: 52px;
+    gap: 9px;
+    padding: 0 16px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .consultation-shortcut-content .service-icon {
+    width: 23px;
+    height: 23px;
+    color: #fff;
+    background: none;
+  }
+  .consultation-shortcut-content svg {
+    width: 23px;
+    height: 23px;
+  }
+  @media (max-width: 780px) {
+    a.consultation-shortcut {
+      inset-inline-end: max(14px, env(safe-area-inset-right));
+      inset-block-end: calc(72px + env(safe-area-inset-bottom));
+    }
+    .consultation-shortcut-content {
+      width: 52px;
+      justify-content: center;
+      padding: 0;
+    }
+    .consultation-shortcut-content > span:not(.service-icon) {
+      display: none;
+    }
+    body:has(:is(input:not([type]), input[type='text'], input[type='search'], textarea):focus)
+      .consultation-shortcut {
+      display: none;
+    }
+    a.control-inline-link {
+      min-height: 44px;
+    }
+  }
+  @media print {
+    .consultation-shortcut {
+      display: none;
+    }
+  }
 
   @media (forced-colors: active) {
     body[data-page] select:where(:not([multiple], [size])),

@@ -10,6 +10,8 @@ test('the shared field stylesheet compiles to CSS for both local and hosted asse
   assert.match(css, /--field-radius:10px/);
   assert.match(css, /\.control-select-options/);
   assert.match(css, /\.control-combobox/);
+  assert.match(css, /\.control-disclosure/);
+  assert.match(css, /\.consultation-shortcut/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /::file-selector-button/);
   assert.doesNotMatch(css, /<style/i);

@@ -1000,11 +1000,16 @@ test('통합 일정 경로와 관리자 설정은 로그인·동일 출처와 �
   assert.equal(calendar.status, 200);
   assert.match(calendar.text, /calendar-grid/);
   const home = await s.send('/', parent);
+  assert.match(
+    home.text,
+    /class="consultation-shortcut" href="\/consultation"/,
+  );
   assert.match(home.text, /\/assets\/owl\.png/);
   assert.doesNotMatch(home.text, /data-section-jump/);
   assert.match(home.text, /\/assets\/ondap-report-mascot\.png/);
   assert.doesNotMatch(home.text, /\/assets\/(?:walnut|water)\.png/);
   const consultation = await s.send('/consultation', parent);
+  assert.doesNotMatch(consultation.text, /class="consultation-shortcut"/);
   assert.match(
     consultation.text,
     /class="consultation-welcome"><img src="\/assets\/app-192\.png"/,
@@ -1012,6 +1017,10 @@ test('통합 일정 경로와 관리자 설정은 로그인·동일 출처와 �
   assert.doesNotMatch(consultation.text, /\/assets\/(?:walnut|water)\.png/);
   const admin = await s.login('TA_DIRECTOR');
   const other = await s.send('/', admin);
+  assert.match(
+    other.text,
+    /class="consultation-shortcut" href="\/consultation\?view=inbox"/,
+  );
   assert.doesNotMatch(other.text, /class="profile-link"/);
   const settings = await s.send('/settings', admin);
   assert.match(settings.text, /상담 AI 연결/);

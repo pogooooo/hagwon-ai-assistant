@@ -20,6 +20,7 @@ for (const name of [
   'service-design.css',
   'service-ui.js',
   'select-ui.js',
+  'control-surface-ui.js',
   'grading-ui.js',
   'app.webmanifest',
   '.well-known',
