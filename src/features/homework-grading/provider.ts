@@ -357,7 +357,7 @@ export function createNaverGrader(
             complete: false,
             readings: [
               {
-                number: 0,
+                number: mode ? '실제 인쇄 문항 번호' : 0,
                 answer_observed: '',
                 unit_observed: '',
                 answer_status: 'readable',
