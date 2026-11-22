@@ -178,8 +178,12 @@
   min-inline-size: 0;
   inline-size: 100%;
 }
-.report-builder {
-  max-inline-size: 920px;
+.report-create,
+.report-index,
+.report-assignment-index,
+.report-builder,
+.report-workspace :is(.report-document, .report-manage) {
+  max-inline-size: none;
 }
 .report-kind-actions {
   display: flex;
