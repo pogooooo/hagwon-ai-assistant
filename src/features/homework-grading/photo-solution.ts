@@ -63,8 +63,10 @@ function uniqueEntries<T extends { ref: string; no: string }>(
   });
 }
 
-function simpleCalculation(problem: string): PhotoSolution | undefined {
+function calculationExpression(problem: string) {
   const expression = problem
+    // Preserve superscripts so they cannot turn into adjacent digits.
+    .replace(/[０-９＋－＊／（）．＝]/gu, (char) => char.normalize('NFKC'))
     .trim()
     .replace(/^(?:calculate|compute|evaluate)\s+/iu, '')
     .replace(
@@ -72,14 +74,27 @@ function simpleCalculation(problem: string): PhotoSolution | undefined {
       '',
     )
     .replace(/(?:\s*=\s*[□?]?|\.)$/u, '')
+    .replace(/^\$([^$]+)\$$/u, '$1')
+    .replace(/(?<=\S)\s*[xX]\s+(?=\d)/gu, '*')
+    .replace(/\\(?:times|cdot)/gu, '*')
+    .replace(/\\div/gu, '/')
+    .replaceAll('×', '*')
+    .replaceAll('÷', '/')
+    .replaceAll('−', '-')
     .trim();
   // Only a standalone arithmetic expression. Unit/rounding/form/word problems go to independent solving.
   if (
-    /\d\s+\d/u.test(expression) ||
-    !/^[\d().+\-−×*÷/\s]+$/u.test(expression) ||
-    !/\d\s*[-−+*×÷/]\s*[\d(]/u.test(expression)
+    /\d\s+\d|\d\s+\.\s*\d|\d\.\s+\d/u.test(expression) ||
+    !/^[\d().+\-*/\s]+$/u.test(expression) ||
+    !/[\d)]\s*[-+*/]\s*[\d(]/u.test(expression)
   )
     return;
+  return expression.replace(/\s+/gu, '');
+}
+
+function simpleCalculation(problem: string): PhotoSolution | undefined {
+  const expression = calculationExpression(problem);
+  if (!expression) return;
   try {
     const value = numeric(expression);
     const answer = value.d === 1n ? String(value.n) : value.n + '/' + value.d;
@@ -95,18 +110,10 @@ function simpleCalculation(problem: string): PhotoSolution | undefined {
 }
 
 export function solveVerifiedCalculation(first?: string, second?: string) {
-  if (!first || !second || /\d\s+\d/u.test(first) || /\d\s+\d/u.test(second))
-    return;
-  const comparable = (value: string) =>
-    value
-      .normalize('NFKC')
-      .replaceAll('×', '*')
-      .replaceAll('÷', '/')
-      .replaceAll('−', '-')
-      .replace(/\s+/gu, '')
-      .replace(/=$/u, '');
-  // Matching results are insufficient: both visual reads must identify the same printed equation.
-  if (comparable(first) !== comparable(second)) return;
+  if (!first || !second) return;
+  const expression = calculationExpression(first);
+  // Match every operator and operand. Equal calculated values alone are not evidence of the same problem.
+  if (!expression || expression !== calculationExpression(second)) return;
   return simpleCalculation(first);
 }
 

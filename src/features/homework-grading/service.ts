@@ -779,6 +779,16 @@ export class GradingService {
         const provider = practice ? this.practiceProvider! : this.provider;
         let unavailable: string | undefined;
         let partialIssue: string | undefined;
+        const worksheetPrint = new Map<
+          number,
+          Awaited<ReturnType<NonNullable<GradeProvider['readWorksheetPrint']>>>
+        >();
+        const useWorksheetReader =
+          !staffRemap &&
+          !a.items.length &&
+          a.scope?.kind === 'worksheet' &&
+          a.scope.subject === 'MATH' &&
+          !!provider.readWorksheetPrint;
         try {
           if (a.scope && !a.items.length) {
             if (!provider.inputAllowed)
@@ -792,6 +802,23 @@ export class GradingService {
               ctx.assertCurrentAccess?.();
               readSubmission(ctx, id);
               this.open(this.current(id));
+              if (useWorksheetReader) {
+                try {
+                  const printed = await provider.readWorksheetPrint!(page);
+                  found.push({ printedPage: null, numbers: printed.numbers });
+                  worksheetPrint.set(page.page_no, printed);
+                  continue;
+                } catch (error) {
+                  if (
+                    !(error instanceof GradingError) ||
+                    ![
+                      'PHOTO_SCOPE_UNCLEAR',
+                      'PROVIDER_INVALID_OUTPUT',
+                    ].includes(error.code)
+                  )
+                    throw error;
+                }
+              }
               found.push(await provider.discoverPage(page));
             }
             ctx.assertCurrentAccess?.();
@@ -852,7 +879,11 @@ export class GradingService {
               try {
                 verified.set(
                   page.page_no,
-                  await provider.verifyPage(page, { ...a, items: candidates }),
+                  await provider.verifyPage(
+                    page,
+                    { ...a, items: candidates },
+                    worksheetPrint.has(page.page_no),
+                  ),
                 );
               } catch (error) {
                 partialIssue ??= providerIssue(error);
@@ -873,6 +904,15 @@ export class GradingService {
               )
               .filter((item) => {
                 if (!a.scope || item.subject_id !== 'MATH') return true;
+                const printed = worksheetPrint.get(page.page_no);
+                const number = Number(item.item_no);
+                const proof = printed?.solutions.get(number);
+                if (proof) {
+                  solutions.set(item.item_ref, proof);
+                  return false;
+                }
+                // Printed and handwritten recognition are independent. Never infer a missing key from the answer.
+                if (printed?.arithmetic.has(number)) return false;
                 const first = readings.filter(
                   (entry) => entry.item_ref === item.item_ref,
                 );
