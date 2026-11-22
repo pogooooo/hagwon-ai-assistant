@@ -1178,7 +1178,7 @@ function renderConsultation(ctx: PageContext) {
         <div class="conversation-messages">${messages.map((message) => renderMessage(message, currentRevisions)).join('')}</div>
         ${
           own && thread?.status !== 'closed' && (thread || !queue)
-            ? `<form data-jump-label="질문 쓰기" class="chat-composer" method="post" action="${h(link)}">
+            ? `<form class="chat-composer" method="post" action="${h(link)}">
           ${hiddenThread}<input type="hidden" name="conversationId" value="${thread?.id ?? randomUUID()}">
           <label class="compose-question"><span>질문</span><textarea name="question" rows="2" maxlength="500" required placeholder="${active ? '담당자에게 전할 내용을 입력하세요' : thread ? '이어서 궁금한 점을 입력하세요' : '학원에 궁금한 점을 입력하세요'}">${!thread ? h((url.searchParams.get('q') ?? '').slice(0, 500)) : ''}</textarea></label>
           <div class="compose-actions">${!active && actor.role === 'guardian' && students.length ? `<label>대상 학생 <select name="studentId"><option value="">선택 사항</option>${students.map(({ id, name }) => `<option value="${h(id)}">${h(name)}</option>`).join('')}</select></label>` : ''}

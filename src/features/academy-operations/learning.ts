@@ -697,11 +697,11 @@ export function renderLearningPublication(
     h(payload.documents[0].text) +
     '</p><p>분석 버전 ' +
     publication.revision +
-    '</p>' +
+    '</p><p class="learning-record-actions">' +
     (ctx.actor.role === 'student'
-      ? '<a href="/learning">학습 기록으로</a>'
-      : '<a href="/consultation">상담으로 돌아가기</a>') +
-    '</section>'
+      ? '<a class="workspace-link" href="/learning">학습 기록으로</a>'
+      : '<a class="workspace-link" href="/consultation">상담으로 돌아가기</a>') +
+    '</p></section>'
   );
 }
 
@@ -755,7 +755,7 @@ function render(ctx: PageContext) {
     : '';
   return `<div class="page-heading"><h1>학습 기록</h1></div>
     ${staff(ctx) ? `<details class="panel" ${assignments.length ? '' : 'open'}><summary>팀 분류 JSON 등록${assignment ? ' · 선택 숙제 갱신' : ''}</summary><form method="post" enctype="multipart/form-data"><input type="hidden" name="action" value="import"><input type="hidden" name="revision" value="${assignment?.revision ?? 0}"><div class="fields"><label>반<select name="classId" required>${classes.map((c) => `<option value="${h(c.id)}"${assignment?.class_id === c.id ? ' selected' : ''}>${h(c.name)}</option>`).join('')}</select></label><label>숙제 제목<input name="title" required maxlength="120" value="${h(assignment?.title)}"></label><label>분석 월<input type="month" name="period" required value="${h(assignment?.period)}"></label></div><label>분류 파일<input type="file" name="classificationFile" accept=".json,application/json"></label><label>또는 JSON 붙여넣기<textarea name="classification" rows="4" maxlength="2097152"></textarea></label><p class="muted">같은 숙제는 파일 전체를 교체합니다. 재분류 후에는 학생 결과를 다시 검수해야 상담에 반영됩니다.</p><button>분류 등록</button></form></details>` : ''}
-    <div class="split learning-layout"><section class="panel"><h2>숙제 목록</h2><ul class="item-list">${assignments.map((a) => `<li><a href="/learning?assignment=${encodeURIComponent(a.assignment_id)}">${h(a.title)}</a><small>${h(a.period)} · 분류 v${a.revision} · ${h(a.assignment_id)}</small></li>`).join('') || '<li>등록된 분류 숙제가 없습니다.</li>'}</ul></section>
+    <div class="split learning-layout"><section class="panel learning-records"><h2>숙제 목록</h2><ul class="record-card-list">${assignments.map((a) => `<li><a class="record-card-link" href="/learning?assignment=${encodeURIComponent(a.assignment_id)}"${a.assignment_id === id ? ' aria-current="page"' : ''}><span><strong>${h(a.title)}</strong><small>${h(a.period)} · 분류 v${a.revision}</small></span><span aria-hidden="true">›</span></a></li>`).join('') || '<li class="muted">등록된 분류 숙제가 없습니다.</li>'}</ul></section>
     <section class="panel">${
       assignment && data
         ? `<div class="panel-heading"><h2>${h(assignment.title)}</h2><span class="pill">분류 v${assignment.revision}</span></div><form method="get"><input type="hidden" name="assignment" value="${h(assignment.assignment_id)}"><label>대상 학생<select name="student" required><option value="">학생 선택</option>${students.map((s) => `<option value="${h(s.id)}"${selected === s.id ? ' selected' : ''}>${h(s.name)}</option>`).join('')}</select></label><button class="secondary">조회</button></form>

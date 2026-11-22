@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createOperationsServer } from './application.ts';
+import { renderFormControlStyles } from './form-control-styles.mjs';
 import { startParentMessageScheduler } from './parent-message-scheduler.ts';
 import {
   configureOperationsGeneration,
@@ -28,6 +29,7 @@ db.exec(`
 `);
 const server = createOperationsServer({
   db,
+  formControlStyles: renderFormControlStyles(),
   scanVision: createOperationsScanVision(process.env, fetch, db),
   publicOrigin: process.env.AXR_OPERATIONS_PUBLIC_ORIGIN
     ? new URL(process.env.AXR_OPERATIONS_PUBLIC_ORIGIN)

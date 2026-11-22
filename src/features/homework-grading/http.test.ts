@@ -221,7 +221,7 @@ test('HTTP photo upload → teacher review → purge → approved report with li
   assert.equal(briefing.status, 200);
   const classBriefing = await briefing.text();
   assert.ok(classBriefing.includes(location));
-  assert.match(classBriefing, /class="briefing-record-link"/);
+  assert.match(classBriefing, /class="record-card-link"/);
   assert.match(classBriefing, /<select name="student">/);
   const filteredBriefing = await send(
     '/briefing?class=TA_E_MATH&month=2026-11&student=TA_STU_001',
