@@ -23,6 +23,13 @@ import {
 } from './academy-switcher-demo.ts';
 import type { OperationsDatabase } from './database.ts';
 import {
+  createAcademyFromOnboarding,
+  onboardingPath,
+  renderAcademyOnboarding,
+  searchForAcademy,
+  setupAcademyOnboarding,
+} from './academy-onboarding.ts';
+import {
   createExternalServices,
   type ExternalServices,
 } from './external-services.ts';
@@ -231,6 +238,7 @@ export function createOperationsServer({
   }
   initializeIdentity(db, demoPassword, fixturesRoot);
   setupAcademySelection(db);
+  setupAcademyOnboarding(db);
   for (const operation of modules) operation.setup(db, documentsRoot);
   if (showDemoAccounts) {
     seedAcademyChoices(db);
@@ -245,12 +253,12 @@ export function createOperationsServer({
     return createHash('sha256').update(token).digest('hex');
   }
 
-  function getToken(request: IncomingMessage) {
+  function getToken(request: IncomingMessage, cookie = sessionCookie) {
     return request.headers.cookie
       ?.split(';')
       .map((cookie) => cookie.trim())
-      .find((cookie) => cookie.startsWith(sessionCookie + '='))
-      ?.slice(sessionCookie.length + 1);
+      .find((value) => value.startsWith(cookie + '='))
+      ?.slice(cookie.length + 1);
   }
 
   function findSession(request: IncomingMessage) {
@@ -356,11 +364,17 @@ export function createOperationsServer({
     const brand = `<a class="brand" href="/"><img src="/assets/ondap-logo.png" alt="온답"></a>`;
     const title =
       pages.find((p) => p.path === current)?.label ??
-      (current === '/academies' ? '내 학원' : actor ? '홈' : '로그인');
+      (current === '/academies'
+        ? '내 학원'
+        : current === onboardingPath
+          ? '새 학원 등록'
+          : actor
+            ? '홈'
+            : '로그인');
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=task-flows"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=academy-setup"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
@@ -403,6 +417,7 @@ export function createOperationsServer({
       <label>비밀번호 <input name="password" type="password" autocomplete="current-password" required maxlength="200"></label>
       <button type="submit">로그인</button>
     </form>
+    <a class="workspace-link academy-register-entry" href="${onboardingPath}">새 학원 등록</a>
   </section>
   ${
     showDemoAccounts
@@ -450,7 +465,11 @@ export function createOperationsServer({
   }
 
   const maxFormBytes = maxDocumentBytes + 512 * 1024;
-  async function readForm(request: IncomingMessage, url: URL) {
+  async function readForm(
+    request: IncomingMessage,
+    url: URL,
+    maxBytes = maxFormBytes,
+  ) {
     const contentType = request.headers['content-type'] ?? '';
     if (
       !/^(?:application\/x-www-form-urlencoded|multipart\/form-data)(?:;|$)/i.test(
@@ -459,15 +478,14 @@ export function createOperationsServer({
     ) {
       throw new OperationError('폼으로 요청해 주세요.', 415);
     }
-    if (Number(request.headers['content-length'] ?? 0) > maxFormBytes) {
+    if (Number(request.headers['content-length'] ?? 0) > maxBytes) {
       throw new OperationError('파일 크기가 업로드 제한을 넘었습니다.', 413);
     }
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const chunk of request as AsyncIterable<Buffer>) {
       size += chunk.length;
-      if (size > maxFormBytes)
-        throw new OperationError('요청이 너무 큽니다.', 413);
+      if (size > maxBytes) throw new OperationError('요청이 너무 큽니다.', 413);
       chunks.push(chunk);
     }
     try {
@@ -529,6 +547,105 @@ export function createOperationsServer({
       }
       if (request.method === 'POST') verifyOrigin(request, url);
       actor = findSession(request);
+      if (url.pathname === onboardingPath) {
+        const active = actor;
+        const digest = active ? hashSession(getToken(request)!) : undefined;
+        const owner =
+          digest && active?.role === 'admin'
+            ? one<{ id: string; name: string }>(
+                db,
+                `SELECT a.id,a.name FROM op_sessions s JOIN accounts a ON a.id=s.account_id
+                WHERE s.digest=? AND s.expires_at>? AND a.role='admin'`,
+                digest,
+                Date.now(),
+              )
+            : undefined;
+        if (active && !owner)
+          throw new OperationError(
+            '새 학원은 원장 계정으로 등록할 수 있습니다.',
+            403,
+          );
+        const cookie = 'axr_academy_registration';
+        let browserToken = getToken(request, cookie);
+        if (!owner && (!browserToken || !/^[a-f0-9]{64}$/.test(browserToken))) {
+          if (request.method === 'POST')
+            throw new OperationError('등록 화면을 다시 열어 주세요.', 409);
+          browserToken = randomBytes(32).toString('hex');
+          response.setHeader(
+            'Set-Cookie',
+            `${cookie}=${browserToken}; Path=${onboardingPath}; HttpOnly; SameSite=Strict; Max-Age=3600${url.protocol === 'https:' ? '; Secure' : ''}`,
+          );
+        }
+        const scope = {
+          key: owner
+            ? 'owner:' + digest!
+            : 'browser:' + hashSession(browserToken!),
+          owner,
+        };
+        if (request.method === 'GET') {
+          sendPage(
+            response,
+            200,
+            renderAcademyOnboarding(db, scope, url),
+            active,
+            onboardingPath,
+          );
+          return;
+        }
+        const form = await readForm(request, url, 16 * 1024);
+        const authorize = () => {
+          if (!active) return;
+          assertCurrentSession(request, active);
+          if (field(form, '_academyAccount', 128) !== active.id)
+            throw new OperationError(
+              '이용 중인 학원이 바뀌었습니다. 등록 화면을 다시 열어 주세요.',
+              409,
+            );
+        };
+        authorize();
+        try {
+          const action = field(form, 'action');
+          if (action === 'search') {
+            const key = await searchForAcademy(
+              db,
+              services!.neis,
+              scope,
+              form,
+              authorize,
+            );
+            redirect(
+              response,
+              onboardingPath + '?search=' + encodeURIComponent(key),
+            );
+            return;
+          }
+          if (action !== 'register')
+            throw new OperationError('학원 검색이나 등록을 선택해 주세요.');
+          const token = transaction(db, () => {
+            authorize();
+            const profile = createAcademyFromOnboarding(db, scope, form);
+            if (!active) return createSession(getActor(db, profile)!);
+            const selection = new FormData();
+            selection.set('action', 'switch');
+            selection.set('profile', profile);
+            selectAcademy(db, digest!, active, selection);
+          });
+          if (token)
+            setSessionCookie(response, url.protocol === 'https:', token);
+          redirect(response, '/academies');
+        } catch (error) {
+          if (!(error instanceof OperationError)) throw error;
+          authorize();
+          sendPage(
+            response,
+            error.status,
+            renderAcademyOnboarding(db, scope, url, form, error.message),
+            active,
+            onboardingPath,
+          );
+        }
+        return;
+      }
       if (url.pathname === '/login') {
         if (request.method === 'GET') {
           if (actor) redirect(response, '/');
