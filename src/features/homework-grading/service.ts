@@ -775,13 +775,16 @@ export class GradingService {
           throw new GradingError('PRACTICE_SCOPE', 403);
         const provider = practice ? this.practiceProvider! : this.provider;
         let unavailable: string | undefined;
+        let partialIssue: string | undefined;
         try {
           if (a.scope && !a.items.length) {
             if (!provider.inputAllowed)
               throw new GradingError('PROVIDER_INPUT_NOT_APPROVED');
             if (!provider.discoverPage)
               throw new GradingError('PHOTO_SCOPE_UNCLEAR');
-            const found: PrintedPage[] = [];
+            const found: Awaited<
+              ReturnType<NonNullable<GradeProvider['discoverPage']>>
+            >[] = [];
             for (const page of pages) {
               ctx.assertCurrentAccess?.();
               readSubmission(ctx, id);
@@ -792,23 +795,64 @@ export class GradingService {
             readSubmission(ctx, id);
             this.open(this.current(id));
             a.items = savePhotoMap(this.db, s, a, found);
+            readings = a.items.flatMap((item) => {
+              const reading = found[item.expected_page_no - 1]?.readings?.find(
+                (entry) => String(entry.number) === item.item_no,
+              );
+              if (!reading) return [];
+              return [{ ...reading.answer, item_ref: item.item_ref }];
+            });
           }
-          readings = await provider.read(pages, a);
+          const recognized = new Set(readings.map((r) => r.item_ref));
+          const remaining = a.items.filter((i) => !recognized.has(i.item_ref));
+          if (remaining.length) {
+            const requested = new Set(remaining.map((i) => i.expected_page_no));
+            const recovered = await provider.read(
+              pages.filter((p) => requested.has(p.page_no)),
+              { ...a, items: remaining },
+            );
+            readings.push(...recovered);
+            partialIssue = recovered
+              .flatMap((entry) => entry.ambiguity_codes)
+              .find((code) => Object.hasOwn(gradingProviderErrors, code));
+          }
         } catch (error) {
-          unavailable = providerIssue(error);
+          const issue = providerIssue(error);
+          if (readings.length) partialIssue = issue;
+          else unavailable = issue;
         }
         try {
           readSubmission(ctx, id);
           this.open(this.current(id));
           const verified = new Map<number, Reading[]>();
           if (!unavailable && provider.verifyPage) {
+            const eligible = new Set(
+              readings
+                .filter(
+                  (reading) =>
+                    reading.association_status === 'matched' &&
+                    !reading.ambiguity_codes.length &&
+                    reading.regions.length &&
+                    ['readable', 'blank'].includes(reading.answer_status),
+                )
+                .map((reading) => reading.item_ref),
+            );
             for (const page of pages) {
+              const candidates = a.items.filter(
+                (item) =>
+                  item.expected_page_no === page.page_no &&
+                  eligible.has(item.item_ref),
+              );
+              if (!candidates.length) continue;
               readSubmission(ctx, id);
               this.open(this.current(id));
               try {
-                verified.set(page.page_no, await provider.verifyPage(page, a));
-              } catch {
-                verified.set(page.page_no, []);
+                verified.set(
+                  page.page_no,
+                  await provider.verifyPage(page, { ...a, items: candidates }),
+                );
+              } catch (error) {
+                partialIssue ??= providerIssue(error);
               }
             }
           }
@@ -844,7 +888,8 @@ export class GradingService {
                     if (group.some((d) => d.item_ref === ref))
                       solutions.set(ref, solution);
                   }
-                } catch {
+                } catch (error) {
+                  partialIssue ??= providerIssue(error);
                   for (const def of group) failedSolves.add(def.item_ref);
                 }
               }
@@ -1045,7 +1090,7 @@ export class GradingService {
             .prepare(
               "UPDATE grading_v3_submissions SET draft_revision=?,processing='REVIEW_REQUIRED',error_code=? WHERE id=? AND raw_state='OPEN'",
             )
-            .run(draft.draft_revision, unavailable ?? null, id);
+            .run(draft.draft_revision, unavailable ?? partialIssue ?? null, id);
         } finally {
           for (const page of pages) page.bytes.fill(0);
         }
@@ -1301,7 +1346,8 @@ export class GradingService {
       )
       .run(tenant, result);
   }
-  linkedReport(ctx: PageContext, result: Result) {
+  linkedReport(ctx: PageContext, result: Result, retry = false) {
+    if (retry) requireStaff(ctx);
     const submission = readSubmission(ctx, result.submission_id);
     if (
       submission.result_id !== result.result_set_id ||
@@ -1320,18 +1366,26 @@ export class GradingService {
       )?.report;
     const found = lookup();
     if (found || !staff) return found;
-    // Create a draft on first staff visit to a result published before automatic reports.
-    this.db
-      .prepare('INSERT OR IGNORE INTO grading_v3_report_queue VALUES(?,?,0)')
-      .run(ctx.actor.academyId, result.result_set_id);
-    this.createQueuedReports();
+    if (retry) this.queueReport(ctx.actor.academyId, result.result_set_id);
+    else
+      this.db
+        .prepare('INSERT OR IGNORE INTO grading_v3_report_queue VALUES(?,?,0)')
+        .run(ctx.actor.academyId, result.result_set_id);
+    // A staff visit processes this specific result, even when other jobs fill the background batch.
+    this.createQueuedReports({
+      tenant: ctx.actor.academyId,
+      result: result.result_set_id,
+    });
     return lookup();
   }
-  private createQueuedReports() {
+  private createQueuedReports(target?: { tenant: string; result: string }) {
     for (const job of rows<{ tenant: string; result: string }>(
       this.db,
-      'SELECT tenant,result FROM grading_v3_report_queue WHERE next_try<=? ORDER BY next_try,rowid LIMIT 5',
+      'SELECT tenant,result FROM grading_v3_report_queue WHERE next_try<=?' +
+        (target ? ' AND tenant=? AND result=?' : '') +
+        ' ORDER BY next_try,rowid LIMIT 5',
       this.now(),
+      ...(target ? [target.tenant, target.result] : []),
     )) {
       try {
         transaction(this.db, () => {

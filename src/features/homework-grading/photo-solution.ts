@@ -63,6 +63,37 @@ function uniqueEntries<T extends { ref: string; no: string }>(
   });
 }
 
+function simpleCalculation(problem: string): PhotoSolution | undefined {
+  const expression = problem
+    .trim()
+    .replace(/^(?:calculate|compute|evaluate)\s+/iu, '')
+    .replace(
+      /^(?:다음(?:\s*식(?:의\s*값을)?)?\s*계산하(?:세요|시오)|계산하(?:세요|시오))\s*[:.]?\s*/u,
+      '',
+    )
+    .replace(/(?:\s*=\s*[□?]?|\.)$/u, '')
+    .trim();
+  // Only a standalone arithmetic expression. Unit/rounding/form/word problems go to independent solving.
+  if (
+    /\d\s+\d/u.test(expression) ||
+    !/^[\d().+\-−×*÷/\s]+$/u.test(expression) ||
+    !/\d\s*[-−+*×÷/]\s*[\d(]/u.test(expression)
+  )
+    return;
+  try {
+    const value = numeric(expression);
+    const answer = value.d === 1n ? String(value.n) : value.n + '/' + value.d;
+    return {
+      problem,
+      answer,
+      explanation: expression + ' = ' + answer,
+      comparison: 'number',
+    };
+  } catch {
+    return;
+  }
+}
+
 export async function solvePrintedItems(
   chat: Chat,
   page: ImagePage,
@@ -80,7 +111,7 @@ export async function solvePrintedItems(
     { manifest },
     page,
   );
-  const questions = uniqueEntries(extracted, printed)
+  const readQuestions = uniqueEntries(extracted, printed)
     .filter(
       (q) =>
         q.complete && manifest.some((m) => m.ref === q.ref && m.no === q.no),
@@ -95,6 +126,13 @@ export async function solvePrintedItems(
         .trim(),
     }))
     .filter((q) => q.problem);
+  const questions = readQuestions.filter((q) => {
+    const solution = simpleCalculation(q.problem);
+    if (!solution) return true;
+    const index = manifest.findIndex((m) => m.ref === q.ref);
+    references.set(items[index].item_ref, solution);
+    return false;
+  });
   if (!questions.length) return references;
   // The independent solver receives only printed content, never the photograph or the student transcription.
   const answers = await chat(

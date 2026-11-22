@@ -591,6 +591,16 @@ async function submit(ctx: PageContext, form: FormData) {
       );
       return '/grading';
     }
+    if (action === 'retry_report') {
+      const submission = readSubmission(ctx, field(form, 'submission'), true);
+      if (!submission.result_id || !submission.published_revision)
+        throw new GradingError('PURGE_NOT_VERIFIED', 409);
+      const result = service.result(ctx, submission.result_id);
+      const report = service.linkedReport(ctx, result, true);
+      return report
+        ? '/grading?report=' + encodeURIComponent(report)
+        : '/grading?submission=' + encodeURIComponent(submission.id);
+    }
     if (action === 'report') {
       const s = snapshot(
         ctx,
@@ -724,7 +734,12 @@ async function render(ctx: PageContext) {
             '<a class="grade-report-row" href="/grading?report=' +
             encodeURIComponent(linked) +
             '"><strong>이 과제의 분석 리포트</strong><span>열기 ›</span></a>';
-        else if (staff) detail += '<p>리포트 초안을 준비하고 있습니다.</p>';
+        else if (staff)
+          detail +=
+            '<p role="status">채점 결과는 확정됐습니다. 리포트 초안을 아직 열 수 없습니다.</p>' +
+            startForm('retry_report') +
+            hidden('submission', s.id) +
+            '<button>과제 리포트 초안 다시 만들기</button></form>';
         detail += `<p>확정 ${result.revision}차 · 수행일 ${h(result.assessment_date)} · 원문은 삭제되었습니다.</p><div class="table-wrap"><table><thead><tr><th>문항</th><th>과목·유형</th><th>결과</th><th>점수</th></tr></thead><tbody>${result.items.map((i) => `<tr><td>${h(a.items.find((d) => d.item_ref === i.item_ref)?.item_no)}</td><td>${subjectNames[i.subject_id]} · ${h(a.items.find((d) => d.item_ref === i.item_ref)?.skill_label)}</td><td>${outcomeNames[i.outcome]}</td><td>${h(i.score ?? '집계 제외')} / ${h(i.max_score)}</td></tr>`).join('')}</tbody></table></div>`;
         if (staff)
           detail += `<details><summary>수행일 정정</summary>${startForm('date')}${hidden('result', s.result_id)}${hidden('revision', result.revision)}${input('date', '확인한 수행일', result.assessment_date, 'date', 'required')}<button>새 정정 이력으로 저장</button></form></details><p>점수 정정이 필요하면 <a href="/grading?view=upload&amp;submission=${encodeURIComponent(s.id)}">같은 답안의 정정 사진 제출</a>을 이용해 주세요. 다시 푼 숙제는 새 풀이로 제출합니다.</p>`;
@@ -991,6 +1006,33 @@ async function render(ctx: PageContext) {
       );
     }
     if (view === 'reports') {
+      const pending: typeof overview.results = [];
+      if (staff) {
+        const unlinked = new Set(
+          rows<{ id: string }>(
+            ctx.db,
+            `SELECT s.id FROM grading_v3_submissions s
+             WHERE s.tenant=? AND s.current_revision=s.published_revision
+               AND NOT EXISTS (
+                 SELECT 1 FROM grading_v3_result_reports p JOIN grading_v3_reports r ON r.id=p.report AND r.tenant=p.tenant
+                 WHERE p.tenant=s.tenant AND p.result=s.result_id AND p.revision=s.published_revision AND r.status IN ('draft','approved')
+               )`,
+            ctx.actor.academyId,
+          ).map(({ id }) => id),
+        );
+        const missing = overview.results.filter((entry) =>
+          unlinked.has(entry.id),
+        );
+        for (const entry of missing.slice(0, 5)) {
+          const s = readSubmission(ctx, entry.id, true);
+          if (
+            !s.result_id ||
+            !service.linkedReport(ctx, service.result(ctx, s.result_id))
+          )
+            pending.push(entry);
+        }
+        pending.push(...missing.slice(5));
+      }
       const visible = new Set(students.map((s) => s.id));
       const reports = rows<{ id: string; student: string; status: string }>(
         ctx.db,
@@ -1025,6 +1067,20 @@ async function render(ctx: PageContext) {
         intro +
         (ctx.actor.role === 'guardian' ? renderStudentReports(ctx) : '') +
         list +
+        (pending.length
+          ? '<section class="panel"><h2>리포트 초안 준비 중</h2>' +
+            pending
+              .map(
+                (entry) =>
+                  '<a class="grade-report-row" href="' +
+                  h(entry.href) +
+                  '"><strong>' +
+                  h(entry.title) +
+                  '</strong><span>확정 결과 열기 ›</span></a>',
+              )
+              .join('') +
+            '</section>'
+          : '') +
         (staff
           ? `<section class="panel"><h2>분석 리포트 만들기</h2>${startForm('report')}${choice(
               'student',
