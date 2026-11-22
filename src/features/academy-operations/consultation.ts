@@ -1116,7 +1116,7 @@ function renderConsultation(ctx: PageContext) {
         (inbox ? 'inbox' : 'archive') +
         (status === 'all' ? '' : '&amp;status=' + encodeURIComponent(status))
       : '#consultation-history';
-  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/consultation?view=assistant">AI 비서</a><a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="${listLink}">${queue && thread ? '목록으로' : '상담 목록'}</a>${own && thread ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
+  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/schedule?view=makeup">휴·보강</a><a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="${listLink}">${queue && thread ? '목록으로' : '상담 목록'}</a>${own && thread ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
     <div class="split consultation-layout" data-has-thread="${!!thread}" data-consultation-view="${queue ? 'queue' : 'conversation'}">
       <aside class="consultation-history" id="consultation-history" tabindex="-1">
         <h2>상담 목록</h2>

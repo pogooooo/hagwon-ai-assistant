@@ -17,6 +17,7 @@ import {
   makeupPollsModule,
   pollChoices,
   pendingMakeupNotices,
+  makeupResultNotices,
   assertPollSessionFree,
   pollScheduleEvidence,
 } from './makeup-polls.ts';
@@ -221,38 +222,46 @@ for (const caseName of [
           ),
         ) as ScheduleState;
       const original = JSON.stringify(schedule());
-      const assistant = s.ctx('TA_TEACHER', '/consultation?view=assistant');
+      const sender =
+        caseName === 'previously confirmed' ? 'TA_DIRECTOR' : 'TA_TEACHER';
+      const assistant = s.ctx(sender, '/schedule?view=makeup');
+      const schedulePage = await calendarModule.render(assistant);
+      assert.match(schedulePage, /id="makeup-assistant"[\s\S]*name="question"/);
+      assert.doesNotMatch(
+        schedulePage,
+        /보강 일정·투표 관리|정해둔 보강 시간 추가|AI 비서에 휴강 요청/,
+      );
       const ask = form({
         action: 'makeup_request',
         question: date + ' 초등 수학반 휴강할게요.',
       });
       await assert.rejects(
         async () =>
-          consultationModule.submit(
-            s.ctx('TA_GUARDIAN_E_MATH', '/consultation?view=assistant'),
+          calendarModule.submit(
+            s.ctx('TA_GUARDIAN_E_MATH', '/schedule?view=makeup'),
             ask,
           ),
         /교사와 원장이/,
       );
-      const preview = await consultationModule.submit(assistant, ask);
-      assert.match(String(preview), /view=assistant&poll=/);
+      const preview = await calendarModule.submit(assistant, ask);
+      assert.match(String(preview), /\/schedule\?view=makeup&poll=/);
       assert.equal(JSON.stringify(schedule()), original);
       assert.equal(s.row().state, 'draft');
-      const reply = await consultationModule.render(
-        s.ctx('TA_TEACHER', String(preview)),
-      );
+      const reply = await calendarModule.render(s.ctx(sender, String(preview)));
       assert.match(reply, /보호자에게 투표를 보낼까요/);
-      const vote = await consultationModule.submit(
+      assert.doesNotMatch(reply, /name="option"/);
+      assert.equal(JSON.parse(s.row().payload).options.length, 1);
+      const published = await calendarModule.submit(
         assistant,
         form({
           action: 'assistant_publish',
           id: s.row().id,
           version: String(s.row().version),
-          option: '0',
         }),
       );
       assert.equal(JSON.stringify(schedule()), original);
-      assert.match(String(vote), /\/makeup-votes\?id=/);
+      assert.equal(published, preview);
+      const vote = '/makeup-votes?id=' + encodeURIComponent(s.row().id);
       assert.equal(s.row().state, 'open');
       const slot = JSON.parse(s.row().payload).options[0];
       const version = String(s.row().version);
@@ -288,6 +297,7 @@ for (const caseName of [
       assert.match(saved, /응답할 보강 투표가 없습니다/);
       assert.doesNotMatch(saved, /name="answer"|보강 확정/);
       assert.equal(pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')), '');
+      assert.equal(makeupResultNotices(s.ctx('TA_TEACHER')), '');
       assert.match(
         pendingMakeupNotices(s.ctx('TA_GUARDIAN_M2')),
         /가능 여부 응답/,
@@ -323,6 +333,26 @@ for (const caseName of [
       );
       assert.match(result, /2\/2명 응답/);
       assert.match(result, /응답 저장 완료/);
+      const staffNotice = makeupResultNotices(s.ctx('TA_TEACHER'));
+      assert.match(staffNotice, /보강 응답 완료[\s\S]*1건/);
+      assert.match(staffNotice, /view=makeup&amp;poll=/);
+      const resultPage = await calendarModule.render(
+        s.ctx('TA_TEACHER', String(preview)),
+      );
+      assert.match(resultPage, /2\/2명 응답/);
+      assert.match(resultPage, /value="assistant_read">결과 확인했어요/);
+      assert.equal(makeupResultNotices(s.ctx('TA_GUARDIAN_E_MATH')), '');
+      const acknowledge = form({ action: 'assistant_read', id: s.row().id });
+      if (sender === 'TA_TEACHER')
+        await assert.rejects(
+          async () => calendarModule.submit(s.ctx('TA_DIRECTOR'), acknowledge),
+          { status: 404 },
+        );
+      else assert.match(makeupResultNotices(s.ctx(sender)), /보강 응답 완료/);
+      await calendarModule.submit(s.ctx('TA_TEACHER'), acknowledge);
+      assert.equal(makeupResultNotices(s.ctx('TA_TEACHER')), '');
+      if (sender !== 'TA_TEACHER')
+        assert.match(makeupResultNotices(s.ctx(sender)), /보강 응답 완료/);
       if (caseName === 'declined' || caseName === 'changed schedule') {
         assert.doesNotMatch(receipt, /보강 확정 · 학원 일정 보기/);
         assert.equal(s.row().state, 'open');

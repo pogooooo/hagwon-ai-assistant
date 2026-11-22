@@ -103,19 +103,15 @@ export function serviceNavigation(
     ],
     [
       '소통과 일정',
-      [
-        '/messages',
-        '/consultation',
-        '/voice',
-        '/schedule',
-        '/makeup-votes',
-        '/documents',
-      ],
+      ['/messages', '/consultation', '/voice', '/schedule', '/documents'],
     ],
     ['운영 관리', ['/directory', '/schools', '/public-data', '/knowledge']],
     ['계정', ['/settings']],
   ] as const;
-  const all = [{ path: '/', label: '홈' }, ...pages];
+  const all = [
+    { path: '/', label: '홈' },
+    ...pages.filter(({ path }) => path !== '/makeup-votes'),
+  ];
   const grouped = groups
     .map(([label, paths]) => {
       const items = paths.flatMap((path) => all.filter((p) => p.path === path));

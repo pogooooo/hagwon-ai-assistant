@@ -373,13 +373,13 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-chat-briefing"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-inline-makeup"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
       '" data-role="' +
       h(actor?.role ?? 'guest') +
-      '"><script src="/service-ui.js?v=ondap-briefing" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=ondap-inline-makeup" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName

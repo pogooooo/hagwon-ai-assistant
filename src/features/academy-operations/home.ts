@@ -5,7 +5,7 @@ import { canAskConsultation, consultationOverview } from './consultation.ts';
 import { recentPublishedDocuments } from './documents.ts';
 import { homeworkOverview } from './homework.ts';
 import { recentLearningReports } from './learning.ts';
-import { pendingMakeupNotices } from './makeup-polls.ts';
+import { makeupResultNotices, pendingMakeupNotices } from './makeup-polls.ts';
 import { serviceIcon } from './service-navigation.ts';
 import { escapeHtml as h, type PageContext } from './shared.ts';
 
@@ -192,7 +192,7 @@ export function renderHome(ctx: PageContext) {
             .slice(0, 10),
         )
       : agenda;
-    return `${heading}<div class="ondap-board"><div class="ondap-column">
+    return `${heading}${makeupResultNotices(ctx)}<div class="ondap-board"><div class="ondap-column">
        ${work || '<p class="home-clear">지금 확인할 제출과 상담이 없습니다.</p>'}
        ${board.table}
        </div><div class="ondap-column">${dayEntries.length ? dayPanel : ''}${links(
@@ -207,7 +207,7 @@ export function renderHome(ctx: PageContext) {
            ? links('운영 관리', [
                ['/directory', '원생·반 관리', '/directory'],
                ['/messages', '학부모 안내', '/messages'],
-               ['/makeup-votes', '보강 투표 결과 확인', '/makeup-votes'],
+               ['/schedule?view=makeup', '휴·보강 관리', '/schedule'],
                ['/schools', '학교 시험 일정', '/schools'],
              ])
            : ''
