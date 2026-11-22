@@ -326,11 +326,15 @@ test('worksheet grading uses actual labels, print agreement and a separate handw
       } else if (data.verifyNumbers && data.format.readings[0].bbox) {
         passes.push('locate');
         assert.deepEqual(data.verifyNumbers, numbers);
-        content = numbers.map((number, index) => ({
-          number,
-          answer_observed: observed[index],
-          bbox: [0.1, 0.1, 0.3, 0.2],
-        }));
+        content = {
+          format: {
+            readings: numbers.map((number, index) => ({
+              number,
+              answer_observed: observed[index],
+              bbox: [0.1, 0.1, 0.3, 0.2],
+            })),
+          },
+        };
       } else if (data.verifyNumbers) {
         passes.push('verify');
         assert.deepEqual(data.verifyNumbers, numbers);

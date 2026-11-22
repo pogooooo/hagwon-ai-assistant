@@ -406,17 +406,22 @@ export function createNaverGrader(
               : [],
           )
         : [];
+      const located = z.union([
+        z.array(z.unknown()),
+        z
+          .object({ readings: z.array(z.unknown()) })
+          .transform(({ readings }) => readings),
+        z
+          .object({ format: z.object({ readings: z.array(z.unknown()) }) })
+          .transform(({ format }) => format.readings),
+      ]);
       const locatedAnswers =
         mode === 'located_answer'
           ? {
               printedPage: null,
               numbers: verifyNumbers,
               complete: true,
-              readings: Array.isArray(value)
-                ? value
-                : value && typeof value === 'object' && 'readings' in value
-                  ? value.readings
-                  : undefined,
+              readings: located.safeParse(value).data,
             }
           : value;
       const parsed = z
