@@ -1,4 +1,5 @@
 import type { OperationsDatabase } from './database.ts';
+import { onboardingPath, savedAcademyProfile } from './academy-onboarding.ts';
 import { authenticate } from './directory.ts';
 import {
   escapeHtml as h,
@@ -92,7 +93,25 @@ export function renderAcademies(
   actor: Actor,
 ) {
   const choices = academyChoices(db, digest);
-  return `<div class="workspace-heading"><h1>내 학원</h1></div><section class="panel academy-picker" aria-label="소속 학원">
+  const profile =
+    actor.role === 'admin'
+      ? savedAcademyProfile(db, actor.academyId)
+      : undefined;
+  const fields = profile
+    ? [
+        ['주소', profile.address],
+        ['시·군·구', profile.district],
+        ['전화번호', profile.phone],
+        ['기관 유형', profile.category],
+        ['교습과정', profile.course],
+      ].filter(([, value]) => value)
+    : [];
+  const details = profile
+    ? `<section class="panel academy-setup-saved"><h2>현재 학원 기본 정보</h2>
+    ${fields.length ? `<dl>${fields.map(([label, value]) => `<div><dt>${h(label)}</dt><dd>${h(value)}</dd></div>`).join('')}</dl>` : '<p class="muted">학원 이름으로 등록했습니다.</p>'}
+    ${profile.source ? '<p class="muted">나이스 교육정보 개방포털 자료를 확인해 등록했습니다.</p>' : ''}</section>`
+    : '';
+  return `<div class="workspace-heading"><h1>내 학원</h1>${actor.role === 'admin' ? `<a class="button-link" href="${onboardingPath}">새 학원 등록</a>` : ''}</div><section class="panel academy-picker" aria-label="소속 학원">
     ${choices
       .map(
         (c) => `<form method="post" action="/academies" class="academy-choice">
@@ -100,7 +119,7 @@ export function renderAcademies(
       <button name="action" value="switch" class="${c.id === actor.id ? 'secondary' : ''}">${c.id === actor.id ? '현재 학원으로 이동' : '선택'}</button></form>`,
       )
       .join('')}</section>
-    <details class="panel academy-picker"><summary>다른 학원 계정으로 연결</summary>
+    ${details}<details class="panel academy-picker"><summary>다른 학원 계정으로 연결</summary>
       <form method="post" action="/academies"><p>해당 학원에서 발급받은 계정으로 확인하세요. 연결은 로그아웃하면 해제됩니다.</p>
       <label>학원 계정 <input name="username" maxlength="64" autocomplete="off" required></label>
       <label>비밀번호 <input type="password" name="password" maxlength="128" autocomplete="current-password" required></label>
