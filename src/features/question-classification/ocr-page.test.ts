@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createCanvas } from '@napi-rs/canvas';
+import { ocrCacheDir } from '../rag-consultation/server/ingest/parsers/ocr.ts';
 import {
   fieldsToLines,
   findPrintedPage,
@@ -397,3 +400,54 @@ test('숙제 등록 판독은 쪽 위 여백의 문항 번호(10)를 쪽 번호�
     result.detected.every((d: { printedPage?: number }) => d.printedPage === 2),
   );
 });
+
+test(
+  '숙제 등록은 OCR에서 빠진 하단 쪽수를 로컬에서 읽고 두 후보가 있으면 비운다',
+  {
+    skip:
+      !existsSync(join(ocrCacheDir(), 'eng.traineddata')) &&
+      '로컬 영어 OCR 모델 없음',
+  },
+  async (t) => {
+    t.mock.method(globalThis, 'fetch', async () =>
+      Response.json({
+        images: [
+          {
+            inferResult: 'SUCCESS',
+            fields: [
+              ...line('01', 80, 120, 20),
+              ...line('Choose the answer.', 120, 120, 240),
+              ...line('02', 80, 480, 20),
+              ...line('Footer', 80, 930, 80),
+            ],
+          },
+        ],
+      }),
+    );
+    t.mock.property(process, 'env', {
+      ...process.env,
+      CLOVA_OCR_INVOKE_URL: 'https://ocr.example.test/general',
+      CLOVA_OCR_SECRET: 'test',
+    });
+    const canvas = createCanvas(900, 1000);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#666';
+    ctx.font = '24px Arial';
+    ctx.fillText('Footer', 80, 950);
+    ctx.fillText('1', 800, 950);
+    const readPage = async () => {
+      const result = await readSheetService(
+        { bytes: canvas.toBuffer('image/png'), mime: 'image/png' },
+        'E',
+      );
+      return result.detected.map(
+        (item: { printedPage?: number }) => item.printedPage,
+      );
+    };
+    assert.deepEqual(await readPage(), [1, 1]);
+    ctx.fillText('2', 440, 950);
+    assert.deepEqual(await readPage(), [undefined, undefined]);
+  },
+);

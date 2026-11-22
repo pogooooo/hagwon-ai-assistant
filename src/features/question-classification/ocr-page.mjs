@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { visionChat } from './read-image.mjs';
+import { ocrCacheDir } from '../rag-consultation/server/ingest/parsers/ocr.ts';
 
 // CLOVA OCR(General)로 쪽 사진의 글자를 읽고, 위치 정보로 단(왼쪽→오른쪽) 순서를 맞춘 뒤
 // 인쇄 번호에서 문항 경계를 나눈다. HCX-005 판독과 달리 결과가 결정적이고 JSON을 모델이
@@ -456,6 +457,65 @@ function withoutItemNumbers(lines) {
   return lines.filter((l) => !numbered.has(l));
 }
 
+// 전체 사진 OCR이 작은 쪽수를 빠뜨렸을 때 하단의 빈 영역만 로컬에서 확대 판독한다.
+// 문항·보기나 꼬리말의 일부를 숫자로 오인하지 않도록 이미 글을 읽은 영역은 제외한다.
+async function readFooterPage(bytes, lines) {
+  let worker;
+  try {
+    const cache = ocrCacheDir();
+    await access(path.join(cache, 'eng.traineddata'));
+    const img = await loadImage(bytes);
+    const y = Math.floor(img.height * 0.88);
+    const h = img.height - y;
+    const regions = [];
+    for (let col = 0; col < 3; col++) {
+      const x = Math.floor((img.width * col) / 3);
+      const end = Math.floor((img.width * (col + 1)) / 3);
+      if (!lines.some((l) => l.y1 >= y && l.x0 < end && l.x1 > x))
+        regions.push({ x, w: end - x });
+    }
+    if (!regions.length) return;
+    const { createWorker } = await import('tesseract.js');
+    worker = await createWorker('eng', 1, {
+      cachePath: cache,
+      cacheMethod: 'readOnly',
+      langPath: cache,
+      errorHandler: () => {},
+    });
+    // SINGLE_BLOCK는 넓은 여백 안의 한 글자도 읽는다.
+    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    const pages = [];
+    for (const { x, w } of regions) {
+      const scale = Math.min(3, 1250 / w, 750 / h);
+      const canvas = createCanvas(Math.round(w * scale), Math.round(h * scale));
+      canvas
+        .getContext('2d')
+        .drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height);
+      const { data } = await worker.recognize(
+        canvas.toBuffer('image/png'),
+        {},
+        { blocks: true },
+      );
+      const word = data.blocks?.[0]?.paragraphs[0]?.lines[0]?.words[0];
+      if (
+        /^[1-9]\d{0,3}$/.test(data.text.trim()) &&
+        word?.text === data.text.trim() &&
+        word.confidence >= 85 &&
+        word.bbox.x0 > 2 &&
+        word.bbox.x1 < canvas.width - 2 &&
+        word.bbox.y0 > 2 &&
+        word.bbox.y1 < canvas.height - 2
+      )
+        pages.push(Number(word.text));
+    }
+    if (pages.length === 1) return pages[0];
+  } catch {
+    // 모델 또는 이미지 디코더를 쓸 수 없으면 교사가 쪽수를 입력한다.
+  } finally {
+    await worker?.terminate();
+  }
+}
+
 export async function readSheetService(source, subject) {
   const bytes =
     typeof source === 'string' ? await readFile(source) : source.bytes;
@@ -467,8 +527,10 @@ export async function readSheetService(source, subject) {
       : source.mime;
   const fields = await ocrImage({ bytes, mime });
   const lines = readingOrder(fieldsToLines(fields));
-  const printedPage = findPrintedPage(withoutItemNumbers(lines));
   const items = segmentItems(lines);
+  const printedPage =
+    findPrintedPage(withoutItemNumbers(lines)) ??
+    (items.length ? await readFooterPage(bytes, lines) : undefined);
   const regions = itemRegions(items, lines);
   const pageOf = printedPage ? { printedPage } : {};
   const detected = [];
