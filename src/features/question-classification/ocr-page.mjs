@@ -135,12 +135,107 @@ export function findPrintedPage(lines) {
   return undefined;
 }
 
+// 인쇄 문항 번호 찾기(교재 사진 분석과 사진 채점이 함께 쓴다). 번호는 각 단의 같은 왼쪽 위치에
+// 세로로 늘어서고 위에서 아래로 커진다. 보기 값("① 3"의 3)과 손글씨 숫자도 번호처럼 읽히므로,
+// 단마다 왼쪽 위치가 같은 숫자 줄 묶음 중 번호가 커지는 가장 긴 묶음만 문항 번호로 받는다.
+// "01", "7", "3.", "12)", "5번", "0012": 번호만 있는 줄이거나, 구두점 뒤에 발문이 이어지는 줄.
+const aloneNumber = /^\s*(\d{1,4})\s*(?:[.)．]|번)?\s*$/u;
+const leadingNumber = /^\s*(\d{1,4})\s*(?:[.)．]|번)\s*\S/u;
+export function pickItemNumberLines(lines) {
+  if (!lines.length) return null;
+  const left = Math.min(...lines.map((l) => l.x0));
+  const right = Math.max(...lines.map((l) => l.x1));
+  const mid = (left + right) / 2;
+  const twoColumns =
+    lines.filter((l) => l.x1 <= mid).length >= 3 &&
+    lines.filter((l) => l.x0 >= mid).length >= 3;
+  const tolerance = Math.max(4, (right - left) * 0.012);
+  const top = Math.min(...lines.map((l) => l.y0));
+  const bottom = Math.max(...lines.map((l) => l.y1));
+  const footer = bottom - (bottom - top) * 0.04;
+  const columnOf = (l) => (!twoColumns ? 0 : (l.x0 + l.x1) / 2 < mid ? 0 : 1);
+  const candidates = lines.flatMap((line) => {
+    const alone = aloneNumber.exec(line.text);
+    const match = alone ?? leadingNumber.exec(line.text);
+    // 맨 아래 쪽 번호 줄은 문항이 아니다.
+    if (!match || line.y0 >= footer) return [];
+    // 같은 줄 높이에서 더 왼쪽에 다른 글자가 있으면("① 3"의 3) 문항 번호가 아니다.
+    const crowded = lines.some(
+      (other) =>
+        other !== line &&
+        columnOf(other) === columnOf(line) &&
+        other.x1 <= line.x0 + 2 &&
+        other.x0 < line.x0 - tolerance &&
+        other.y0 < line.y1 &&
+        line.y0 < other.y1,
+    );
+    if (crowded) return [];
+    return [
+      {
+        line,
+        n: Number(match[1]),
+        display: match[1],
+        // 번호 뒤에 이어지는 발문의 시작 위치(번호만 있는 줄이면 줄 끝).
+        prefix: alone ? line.text.length : match[0].length - 1,
+        padded: /^0\d/.test(match[1]),
+      },
+    ];
+  });
+  // 앞에 0을 붙인 번호("01")가 섞여 있으면 그 문제지는 번호를 그렇게 인쇄한 것이다. 같은 자리에
+  // 숫자 하나로 읽힌 것("4")은 펜에 덮인 보기 기호일 수 있어 뺀다.
+  const score = (group) =>
+    group.length + group.filter((c) => c.padded).length * 0.5;
+  // 위에서 아래 순서로 번호가 커지는(한 번에 10 이내) 묶음 중 점수가 가장 높은 것.
+  const longestIncreasing = (all) => {
+    const group = all.some((c) => c.padded) ? all.filter((c) => c.padded) : all;
+    const chain = group.map((c) => [c]);
+    for (let i = 0; i < group.length; i++)
+      for (let j = 0; j < i; j++) {
+        const step = group[i].n - group[j].n;
+        if (
+          step > 0 &&
+          step <= 10 &&
+          score([...chain[j], group[i]]) > score(chain[i])
+        )
+          chain[i] = [...chain[j], group[i]];
+      }
+    return chain.reduce((best, c) => (score(c) > score(best) ? c : best), []);
+  };
+  const picked = [];
+  for (const column of twoColumns ? [0, 1] : [0]) {
+    const inColumn = candidates
+      .filter((c) => columnOf(c.line) === column)
+      .sort((a, b) => a.line.y0 - b.line.y0);
+    let best = [];
+    for (const anchor of inColumn) {
+      const aligned = longestIncreasing(
+        inColumn.filter(
+          (c) => Math.abs(c.line.x0 - anchor.line.x0) <= tolerance,
+        ),
+      );
+      if (score(aligned) > score(best)) best = aligned;
+    }
+    picked.push(...best);
+  }
+  return {
+    picked,
+    twoColumns,
+    columnOf,
+    left,
+    right,
+    mid,
+    top,
+    bottom,
+    footer,
+  };
+}
+
 // 줄 맨 앞의 인쇄 번호("5.", "0012", "12)")와 공유 지문 머리말("[41~42]")에서 문항을 나눈다.
 // 번호는 앞 번호보다 크고 10 이내로 늘어날 때만 받아 본문 속 숫자를 문항 번호로 오인하지 않는다.
 // 교재에 따라 OCR이 "0001"을 발문과 다른 줄로 읽으므로 번호만 있는 줄도 받는다(네 자리 번호만 채택).
 const itemMark = /^\s*(\d{1,4})\s*(?:[.)．]\s*|\s+(?=\S)|$)/;
 const passageMark = /^\s*\[\s*(\d{1,4})\s*[~∼～\-–]\s*(\d{1,4})\s*\]/;
-export function segmentItems(lines) {
+function segmentByMarks(lines) {
   const items = [];
   const passages = [];
   let current = null;
@@ -177,6 +272,62 @@ export function segmentItems(lines) {
     const shared = passages
       .filter((p) => p.from <= n && n <= p.to)
       .map((p) => p.lines.join('\n'));
+    return {
+      displayNumber: i.displayNumber,
+      text: [...shared, i.lines.join('\n')].join('\n').trim(),
+      confidence: i.confidence,
+      start: i.start,
+    };
+  });
+}
+
+// 문항 나누기. 같은 위치에 세로로 늘어선 번호(pickItemNumberLines)와 줄 맨 앞 표시 규칙
+// (segmentByMarks)을 모두 써 보고 문항을 더 많이 찾은 쪽을 쓴다. 같으면 기존 규칙을 쓴다.
+// "01"처럼 점 없이 인쇄한 번호는 기존 규칙으로는 찾지 못한다.
+export function segmentItems(lines) {
+  const byMarks = segmentByMarks(lines);
+  const layout = pickItemNumberLines(lines);
+  const picked = layout?.picked ?? [];
+  if (picked.length <= byMarks.length) return byMarks;
+  // 같은 단에서 번호 줄 높이의 1.5배 위부터 다음 번호 직전까지를 그 문항의 줄로 본다. 발문 첫 줄이
+  // 번호보다 조금 위에 놓이는 경우(분수·극한 기호)가 있어 읽기 순서만으로 나누지 않는다.
+  const top = (c) => c.line.y0 - (c.line.y1 - c.line.y0) * 1.5;
+  const items = picked.map((c) => ({
+    pick: c,
+    displayNumber: c.display,
+    lines: [],
+    confidence: c.line.confidence,
+    start: { x0: c.line.x0, x1: c.line.x1, y0: c.line.y0, y1: c.line.y1 },
+  }));
+  const passages = [];
+  for (const line of lines) {
+    const column = layout.columnOf(line);
+    const owner = items
+      .filter(
+        (i) =>
+          layout.columnOf(i.pick.line) === column && top(i.pick) <= line.y0,
+      )
+      .reduce(
+        (best, i) => (!best || top(i.pick) > top(best.pick) ? i : best),
+        null,
+      );
+    const passage = line.text.match(passageMark);
+    if (passage) {
+      passages.push({ from: +passage[1], to: +passage[2], line });
+      continue;
+    }
+    if (!owner) continue;
+    owner.lines.push(
+      line === owner.pick.line ? line.text.slice(owner.pick.prefix) : line.text,
+    );
+    if (owner.confidence !== undefined)
+      owner.confidence = Math.min(owner.confidence, line.confidence);
+  }
+  return items.map((i) => {
+    const n = Number(i.displayNumber);
+    const shared = passages
+      .filter((p) => p.from <= n && n <= p.to)
+      .map((p) => p.line.text);
     return {
       displayNumber: i.displayNumber,
       text: [...shared, i.lines.join('\n')].join('\n').trim(),
