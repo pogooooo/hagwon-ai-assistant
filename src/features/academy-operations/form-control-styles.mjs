@@ -406,34 +406,35 @@ const FormControls = createGlobalStyle`
     z-index: 22;
     inset-inline-end: 24px;
     inset-block-end: 24px;
-    border: 1px solid #455831;
+    border: 1px solid #4f6840;
     border-radius: 999px;
-    background: #425731;
-    color: #fff;
+    background: #fff;
+    color: #2e4426;
     text-decoration: none;
     box-shadow: 0 8px 22px #26371b38;
   }
   a.consultation-shortcut:hover {
-    background: #334627;
+    background: var(--field-soft);
   }
   .consultation-shortcut-content {
     display: flex;
     align-items: center;
     min-height: 52px;
     gap: 9px;
-    padding: 0 16px;
+    padding: 0 15px 0 8px;
     font-size: 14px;
     font-weight: 700;
   }
   .consultation-shortcut-content .service-icon {
-    width: 23px;
-    height: 23px;
+    width: 34px;
+    height: 34px;
     color: #fff;
-    background: none;
+    border-radius: 50%;
+    background: #425b34;
   }
   .consultation-shortcut-content svg {
-    width: 23px;
-    height: 23px;
+    width: 20px;
+    height: 20px;
   }
   @media (max-width: 780px) {
     .workspace .fields {
@@ -445,12 +446,10 @@ const FormControls = createGlobalStyle`
       inset-block-end: calc(72px + env(safe-area-inset-bottom));
     }
     .consultation-shortcut-content {
-      width: 52px;
-      justify-content: center;
-      padding: 0;
-    }
-    .consultation-shortcut-content > span:not(.service-icon) {
-      display: none;
+      min-height: 48px;
+      gap: 8px;
+      padding-inline-end: 12px;
+      font-size: 13px;
     }
     body:has(:is(input:not([type]), input[type='text'], input[type='search'], textarea):focus)
       .consultation-shortcut {
