@@ -14,6 +14,7 @@ import {
   setupAcademySelection,
 } from './academy-switcher.ts';
 import { accountDisplayName } from './demo-presentation.ts';
+import { seedDemoLibrary } from './demo-library.ts';
 import { listedDemoLogins, setupDemoLogins } from './demo-logins.ts';
 import {
   seedAcademyChoices,
@@ -263,6 +264,7 @@ export function createOperationsServer({
   if (showDemoAccounts) {
     seedAcademyChoices(db);
     seedDemoConsultationGuides(db);
+    seedDemoLibrary(db);
     setupDemoLogins(db, trialPasswordHashes);
     seedDemoMakeupPolls(db);
     seedDemoHomework(db);
