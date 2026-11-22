@@ -686,6 +686,8 @@ export function seedDemoMakeupPolls(db: OperationsDatabase) {
 
 const assistantPath = '/consultation?view=assistant';
 const votePath = (id: string) => '/makeup-votes?id=' + encodeURIComponent(id);
+const voteReceiptPath = (id: string) =>
+  '/makeup-votes?submitted=' + encodeURIComponent(id) + '#vote-receipt';
 const assistantPollPath = (id: string) =>
   assistantPath + '&poll=' + encodeURIComponent(id);
 
@@ -1021,7 +1023,7 @@ function assistantVote(
   const answer = field(form, 'answer');
   if (answer !== 'yes' && answer !== 'no')
     throw new OperationError('가능 또는 불가를 선택해 주세요.', 422);
-  const address = votePath(p.id) + '#vote-receipt';
+  const address = voteReceiptPath(p.id);
   // An invited account has one immutable response to this exact proposal.
   if (Object.hasOwn(proposal.answers, ctx.actor.id)) return address;
   if (p.state !== 'open')
@@ -1275,7 +1277,7 @@ function submit(ctx: PageContext, form: FormData) {
       p.state = 'approved';
     } else throw new OperationError('지원하지 않는 작업입니다.');
     persistPoll(ctx, p, data);
-    return votePath(p.id) + (action === 'vote' ? '#vote-receipt' : '');
+    return action === 'vote' ? voteReceiptPath(p.id) : votePath(p.id);
   });
 }
 export function pendingMakeupNotices(ctx: PageContext): string {
@@ -1285,16 +1287,17 @@ export function pendingMakeupNotices(ctx: PageContext): string {
   )
     return '';
   const students = accessibleStudents(ctx.db, ctx.actor);
-  const receipts: string[] = [];
-  const notices = rows<Pick<Poll, 'id' | 'payload' | 'state'>>(
+  const notices = rows<Pick<Poll, 'id' | 'payload'>>(
     ctx.db,
-    "SELECT id,payload,state FROM op_makeup_polls WHERE academy_id=? AND state IN ('open','approved') ORDER BY rowid DESC",
+    "SELECT id,payload FROM op_makeup_polls WHERE academy_id=? AND state='open' ORDER BY rowid DESC",
     ctx.actor.academyId,
   ).flatMap((poll) => {
     const data = JSON.parse(poll.payload) as Payload;
     if (data.assistant) {
       if (
         ctx.actor.role !== 'guardian' ||
+        Object.hasOwn(data.assistant.answers, ctx.actor.id) ||
+        responseExpired(data.assistant) ||
         !data.assistant.recipients.some(
           ({ guardian, student }) =>
             guardian === ctx.actor.id &&
@@ -1306,16 +1309,10 @@ export function pendingMakeupNotices(ctx: PageContext): string {
         )
       )
         return [];
-      const voted = Object.hasOwn(data.assistant.answers, ctx.actor.id);
-      const link = `<li><a class="workspace-link" href="${h(votePath(poll.id))}">${h(data.closure.label)} · ${poll.state === 'approved' ? '보강 확정' : voted ? '응답 저장 완료' : '가능 여부 응답'} <span aria-hidden="true">›</span></a></li>`;
-      if (voted || poll.state === 'approved') {
-        if (receipts.length < 3) receipts.push(link);
-        return [];
-      }
-      if (responseExpired(data.assistant)) return [];
-      return [link];
+      return [
+        `<li><a class="workspace-link" href="${h(votePath(poll.id))}">${h(data.closure.label)} · 가능 여부 응답 <span aria-hidden="true">›</span></a></li>`,
+      ];
     }
-    if (poll.state !== 'open') return [];
     return students
       .filter(
         (s) =>
@@ -1328,14 +1325,9 @@ export function pendingMakeupNotices(ctx: PageContext): string {
           `<li><a class="workspace-link" href="/makeup-votes?id=${encodeURIComponent(poll.id)}">${h(s.name)} · ${h(data.closure.label)} · 가능 시간 응답 <span aria-hidden="true">›</span></a></li>`,
       );
   });
-  return (
-    (notices.length
-      ? `<section class="panel"><h2>응답할 보강 투표</h2><ul class="makeup-notice-list">${notices.join('')}</ul></section>`
-      : '') +
-    (receipts.length
-      ? `<section class="panel"><h2>최근 보강 투표</h2><ul class="makeup-notice-list">${receipts.join('')}</ul></section>`
-      : '')
-  );
+  return notices.length
+    ? `<section class="panel"><h2>응답할 보강 투표</h2><ul class="makeup-notice-list">${notices.join('')}</ul></section>`
+    : '';
 }
 
 export function renderMakeupAssistant(ctx: PageContext) {
@@ -1480,51 +1472,93 @@ function pollListStatus(poll: Poll, data: Payload) {
 }
 
 function render(ctx: PageContext) {
-  const ids = rows<Poll>(
+  const isStaff = staff(ctx);
+  const records = rows<Pick<Poll, 'id'>>(
     ctx.db,
-    'SELECT * FROM op_makeup_polls WHERE academy_id=? ORDER BY rowid DESC',
+    'SELECT id FROM op_makeup_polls WHERE academy_id=? ORDER BY rowid DESC',
     ctx.actor.academyId,
-  ).filter((p) => {
+  ).flatMap(({ id }) => {
     try {
-      load(ctx, p.id);
-      return staff(ctx) || p.state !== 'draft';
-    } catch {
-      return false;
+      const record = load(ctx, id);
+      return isStaff || record.p.state !== 'draft' ? [record] : [];
+    } catch (error) {
+      if (error instanceof OperationError && [403, 404].includes(error.status))
+        return [];
+      throw error;
     }
   });
+  const listing = isStaff
+    ? records
+    : records.filter(
+        ({ p, data, own }) =>
+          p.state === 'open' &&
+          (data.assistant
+            ? !responseExpired(data.assistant) &&
+              !Object.hasOwn(data.assistant.answers, ctx.actor.id)
+            : own.some(({ id }) => !Object.hasOwn(data.votes, id))),
+      );
   const chosen = ctx.url.searchParams.get('id');
-  if (chosen && !ids.some((p) => p.id === chosen))
+  const chosenRecord = chosen && records.find(({ p }) => p.id === chosen);
+  if (chosen && !chosenRecord)
     throw new OperationError('조회 가능한 투표가 아닙니다.', 404);
   let html =
     '<div class="workspace-heading"><h1>보강 시간 투표</h1><a class="button-link subtle-link" href="/schedule' +
-    (staff(ctx) ? '?view=makeup">휴강 관리' : '">학원 일정') +
+    (isStaff ? '?view=makeup">휴강 관리' : '">학원 일정') +
     '</a></div><div class="poll-workspace">';
   if (ctx.formError)
     html += `<p class="panel poll-conflict" role="alert">${h(ctx.formError)}</p>`;
+  const submitted = ctx.url.searchParams.get('submitted');
+  if (!isStaff && !chosen && submitted) {
+    const receipt = records.find(({ p }) => p.id === submitted);
+    if (receipt) {
+      const { p, data, own } = receipt;
+      const proposal = data.assistant;
+      const saved = proposal
+        ? Object.hasOwn(proposal.answers, ctx.actor.id)
+        : own.some(({ id }) => Object.hasOwn(data.votes, id));
+      if (saved) {
+        const details = proposal
+          ? proposal.answers[ctx.actor.id]
+            ? '가능으로 응답했습니다.'
+            : '불가로 응답했습니다.'
+          : '응답이 저장됐습니다.';
+        const schedule =
+          proposal && p.state === 'approved'
+            ? `<a class="workspace-link" href="/schedule?month=${h(data.options[0].date.slice(0, 7))}">보강 확정 · 학원 일정 보기</a>`
+            : '';
+        html += `<div id="vote-receipt" class="vote-receipt" role="status" tabindex="-1"><strong>응답 저장 완료</strong><span>${details}</span>${schedule}</div>`;
+      }
+    }
+  }
   const source = ctx.url.searchParams.get('source');
-  const selectable = staff(ctx)
-    ? closures(ctx).filter((c) => !ids.some((p) => p.source_key === c.key))
+  const selectable = isStaff
+    ? closures(ctx).filter(
+        (c) => !records.some(({ p }) => p.source_key === c.key),
+      )
     : [];
   const selectedSource = selectable.find((c) => c.key === source);
   if (selectable.length)
     html += `<section class="panel"><h2>보강 투표 준비</h2><p>휴강한 반을 고르면 시간표에 겹치지 않는 후보를 찾습니다.</p><form class="inline-form" method="post"><label>휴강한 반<select name="source" required>${selectable.map((c) => `<option value="${h(c.key)}"${selectedSource?.key === c.key ? ' selected' : ''}>${h(c.label)}</option>`).join('')}</select></label><button name="action" value="create">보강 후보 찾기</button></form></section>`;
-  if (ids.length > 1 || (ids.length && selectedSource))
-    html += `<details class="poll-index"><summary>다른 보강 투표 보기</summary><nav class="report-library" aria-label="보강 투표 목록">${ids
-      .map((p) => {
-        const data = JSON.parse(p.payload) as Payload;
-        return `<a class="grade-report-row" href="${h(votePath(p.id))}"${p.id === (chosen ?? ids[0].id) ? ' aria-current="page"' : ''}><strong>${h(data.closure.label)}</strong><span class="pill">${pollListStatus(p, data)}</span></a>`;
-      })
+  const selected = chosenRecord || (selectedSource ? undefined : listing[0]);
+  if (listing.length > 1 || (listing.length && selected !== listing[0]))
+    html += `<details class="poll-index"><summary>다른 보강 투표 보기</summary><nav class="report-library" aria-label="보강 투표 목록">${listing
+      .map(
+        ({ p, data }) =>
+          `<a class="grade-report-row" href="${h(votePath(p.id))}"${p.id === selected?.p.id ? ' aria-current="page"' : ''}><strong>${h(data.closure.label)}</strong><span class="pill">${pollListStatus(p, data)}</span></a>`,
+      )
       .join('')}</nav></details>`;
-  const id = chosen ?? (selectedSource ? undefined : ids[0]?.id);
-  if (!id)
+  if (!selected)
     return (
       html +
       (selectedSource
         ? '</div>'
-        : '<p>진행 중인 보강 투표가 없습니다.</p></div>')
+        : isStaff
+          ? '<p>진행 중인 보강 투표가 없습니다.</p></div>'
+          : '<p>응답할 보강 투표가 없습니다.</p></div>')
     );
-  const { p, data, own } = load(ctx, id),
-    hidden = `<input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="version" value="${p.version}">`;
+  const { p, data, own } = selected;
+  const id = p.id;
+  const hidden = `<input type="hidden" name="id" value="${h(id)}"><input type="hidden" name="version" value="${p.version}">`;
   if (data.assistant)
     return (
       html +
@@ -1549,16 +1583,19 @@ function render(ctx: PageContext) {
       h(slots[0]?.date.slice(0, 7) ?? '') +
       '">학원 일정에서 보기</a></p>';
   }
-  const saved = staff(ctx)
-    ? []
-    : own.filter((student) => Object.hasOwn(data.votes, student.id));
+  const saved =
+    !isStaff && chosen
+      ? own.filter((student) => Object.hasOwn(data.votes, student.id))
+      : [];
   if (saved.length)
     html += `<div id="vote-receipt" class="vote-receipt" role="status" tabindex="-1"><strong>응답 저장 완료</strong><span>${saved.map(({ name }) => h(name)).join(', ')}${p.state === 'open' ? ' · 보강은 교사가 일정을 확정하면 표시됩니다.' : ''}</span></div>`;
-  if (p.state === 'open' && !staff(ctx))
+  if (p.state === 'open' && !isStaff)
     html +=
       '<p class="muted">가능한 시간을 1~3순위로 골라 주세요. 전부 어려우면 모두 불가를 선택해 주세요.</p>';
-  if (p.state === 'open' && !staff(ctx))
-    for (const s of own)
+  if (p.state === 'open' && !isStaff)
+    for (const s of chosen
+      ? own
+      : own.filter(({ id }) => !Object.hasOwn(data.votes, id)))
       html += `<form method="post">${hidden}<input type="hidden" name="student" value="${h(s.id)}"><h3>${h(s.name)} 응답${Object.hasOwn(data.votes, s.id) ? ' · 기존 응답 변경' : ''}</h3>${[1, 2, 3].map((rank) => `<label>${rank}순위<select name="rank${rank}"><option value="">선택 안 함</option>${data.options.map((slot, i) => `<option value="${i}"${data.votes[s.id]?.[rank - 1] === i ? ' selected' : ''}>${h(label(slot))}</option>`).join('')}</select></label>`).join('')}<label class="check-label"><input type="checkbox" name="unavailable" value="yes"${Object.hasOwn(data.votes, s.id) && !data.votes[s.id].length ? ' checked' : ''}>모두 불가</label><button name="action" value="vote">가능 시간 응답</button></form>`;
   if (staff(ctx) && p.state === 'open') {
     const candidates = data.options.map((slot, index) => {
