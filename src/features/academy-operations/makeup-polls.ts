@@ -1331,11 +1331,11 @@ export function pendingMakeupNotices(ctx: PageContext): string {
       )
       .map(
         (s) =>
-          `<li><a class="workspace-link" href="/makeup-votes?id=${encodeURIComponent(poll.id)}">${h(s.name)} · ${h(data.closure.label)} · 가능 시간 응답 <span aria-hidden="true">›</span></a></li>`,
+          `<li><a class="workspace-link" href="/makeup-votes?id=${encodeURIComponent(poll.id)}"><span><strong>${h(data.closure.label)}</strong><small>${h(s.name)}</small></span><span>가능 시간 응답 <span aria-hidden="true">›</span></span></a></li>`,
       );
   });
   return notices.length
-    ? `<section class="panel"><h2>응답할 보강 투표</h2><ul class="makeup-notice-list">${notices.join('')}</ul></section>`
+    ? `<section class="panel home-makeup"><h2>응답할 보강 투표</h2><ul class="makeup-notice-list">${notices.join('')}</ul></section>`
     : '';
 }
 
@@ -1399,7 +1399,7 @@ export function renderMakeupAssistant(ctx: PageContext) {
       <article class="message answer"><img class="message-avatar" src="/assets/app-192.png" alt="" width="36" height="36"><div class="message-content"><strong class="message-sender">휴·보강 비서</strong><div class="message-bubble">
       ${
         current.p.state === 'draft'
-          ? `<p>원래 수업은 ${h(label(proposal.original))}입니다.</p><p>추천 보강 시간은 <strong>${h(label(current.data.options[0]))}</strong>입니다. 보호자에게 투표를 보낼까요?</p>
+          ? `<dl class="makeup-proposal"><div><dt>원래 수업</dt><dd>${h(label(proposal.original))}</dd></div><div><dt>추천 보강</dt><dd>${h(label(current.data.options[0]))}</dd></div></dl><p>이 시간으로 보호자에게 투표를 보낼까요?</p>
       <form class="makeup-assistant-action" method="post" action="${h(assistantPollPath(current.p.id))}">
         <input type="hidden" name="id" value="${h(current.p.id)}"><input type="hidden" name="version" value="${current.p.version}">
         <button type="submit" name="action" value="assistant_publish">보호자 ${guardians(proposal).length}명에게 투표 보내기</button>
@@ -1413,7 +1413,7 @@ export function renderMakeupAssistant(ctx: PageContext) {
       }
       </div></div></article></div>
       ${unreadMakeupResult(ctx, current.data) ? `<form class="actions" method="post" action="${h(assistantPollPath(current.p.id))}"><input type="hidden" name="id" value="${h(current.p.id)}"><button class="secondary" name="action" value="assistant_read">결과 확인했어요</button></form>` : ''}`
-        : '<p class="muted">반 이름과 휴강일을 보내면 시간표와 예약을 확인해 보강 시간을 추천합니다.</p>'
+        : '<p class="muted">반 이름과 휴강일을 알려주세요. 시간표와 예약을 확인해 가능한 보강 시간을 찾아드립니다.</p>'
     }
     <form class="chat-composer" data-makeup-composer method="post" action="${h(assistantPath)}">
       <label class="compose-question"><span>휴강 요청</span><textarea name="question" rows="2" maxlength="500" required placeholder="다음 주 수요일 ${h(classes[0]?.name ?? 'A반')} 휴강할게요.">${ctx.submittedForm?.get('action') === 'makeup_request' ? h(ctx.submittedForm.get('question')) : h((ctx.url.searchParams.get('q') ?? '').slice(0, 500))}</textarea></label>
