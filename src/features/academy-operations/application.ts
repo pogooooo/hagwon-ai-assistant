@@ -232,6 +232,7 @@ export function createOperationsServer({
       'operations.css',
       'service-design.css',
       'service-ui.js',
+      'select-ui.js',
       'grading-ui.js',
       'app.webmanifest',
       '.well-known/assetlinks.json',
@@ -423,13 +424,13 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-control-library"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-div-controls"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
       '" data-role="' +
       h(actor?.role ?? 'guest') +
-      '"><script src="/service-ui.js?v=ondap-control-library" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=ondap-control-library" defer></script><script type="module" src="/select-ui.js?v=ondap-div-controls"></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName

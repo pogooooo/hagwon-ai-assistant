@@ -8,7 +8,8 @@ import { renderFormControlStyles } from './form-control-styles.mjs';
 test('the shared field stylesheet compiles to CSS for both local and hosted assets', () => {
   const css = renderFormControlStyles();
   assert.match(css, /--field-radius:10px/);
-  assert.match(css, /::picker\(select\)/);
+  assert.match(css, /\.control-select-options/);
+  assert.match(css, /\.control-combobox/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /::file-selector-button/);
   assert.doesNotMatch(css, /<style/i);
