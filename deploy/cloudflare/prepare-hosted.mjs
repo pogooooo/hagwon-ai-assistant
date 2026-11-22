@@ -18,6 +18,7 @@ cpSync(
 for (const name of [
   'operations.css',
   'service-design.css',
+  'academy-workflow.css',
   'service-ui.js',
   'select-ui.js',
   'control-surface-ui.js',
