@@ -23,13 +23,21 @@ export function gradingBriefing(ctx: PageContext) {
     throw new OperationError('분석 월을 확인해 주세요.', 400);
   if (classId && !classes.some((c) => c.id === classId))
     throw new OperationError('조회 가능한 반이 아닙니다.', 404);
-  const header = '<div class="page-heading"><h1>반 브리핑</h1></div>';
+  const header =
+    '<div class="workspace-heading"><h1>반 브리핑</h1><a class="workspace-link" href="/student-reports">학생 분석·월간 리포트 <span aria-hidden="true">›</span></a></div>';
   if (!classId) return header + '<p>조회 가능한 반이 없습니다.</p>';
   const { students, results } = gradingOverview(ctx);
   const [year, month] = from.split('-').map(Number);
   const end = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
   const pupils = students.filter((s) => s.classIds.includes(classId));
-  const items = pupils.map((s) => {
+  const studentId = ctx.url.searchParams.get('student') ?? '';
+  const selected = pupils.find((s) => s.id === studentId);
+  if (studentId && !selected)
+    throw new OperationError(
+      '이 반에서 조회할 수 있는 학생을 선택해 주세요.',
+      404,
+    );
+  const items = (selected ? [selected] : pupils).map((s) => {
     const stats = computeFacts(
       ctx.db,
       ctx.actor.academyId,
@@ -56,10 +64,14 @@ export function gradingBriefing(ctx: PageContext) {
         r.classId === classId &&
         r.assessment_date.startsWith(from),
     );
-    return `<li><strong>${h(s.name)}</strong><p>${evaluated ? `정답 ${correct} / 평가 가능 ${evaluated}문항` : '집계할 확정 문항이 없습니다.'}</p>${records.map((r) => `<a href="${h(r.href)}">${h(r.title)} · ${h(r.assessment_date)}</a>`).join(' · ')}</li>`;
+    return `<article class="briefing-student-card"><header><h3>${h(s.name)}</h3><p>${evaluated ? `정답 ${correct} / 평가 가능 ${evaluated}문항` : '집계할 확정 문항이 없습니다.'}</p></header>${
+      records.length
+        ? `<ul class="briefing-records">${records.map((r) => `<li><a class="briefing-record-link" href="${h(r.href)}"><span><strong>${h(r.title)}</strong><small>${h(r.assessment_date)}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul>`
+        : ''
+    }</article>`;
   });
   return (
     header +
-    `<section class="panel"><form method="get" action="/briefing" class="inline-form"><label>반<select name="class">${classes.map((c) => `<option value="${h(c.id)}"${c.id === classId ? ' selected' : ''}>${h(c.name)}</option>`).join('')}</select></label><label>분석 월<input type="month" name="month" required value="${h(from)}"></label><button>조회</button></form><h2>학생별 사진 채점 결과</h2><p>과제별로 해당 기간의 최근 풀이를 집계합니다. 확정·공개된 결과만 점수에 포함합니다.</p><ul class="item-list">${items.join('') || '<li>이 반에 조회 가능한 학생이 없습니다.</li>'}</ul><a href="/student-reports">학생 분석·월간 리포트</a></section>`
+    `<section class="panel briefing-results"><form method="get" action="/briefing" class="briefing-filters" data-briefing-filters><label>반<select name="class">${classes.map((c) => `<option value="${h(c.id)}"${c.id === classId ? ' selected' : ''}>${h(c.name)}</option>`).join('')}</select></label><label>학생<select name="student"><option value="">반 전체</option>${pupils.map((s) => `<option value="${h(s.id)}"${s === selected ? ' selected' : ''}>${h(s.name)}</option>`).join('')}</select></label><label>분석 월<input type="month" name="month" required value="${h(from)}"></label><button>조회</button></form><h2>사진 채점 결과</h2><p class="muted">과제별 최근 풀이 중 확정·공개된 결과를 집계합니다.</p><div class="briefing-students">${items.join('') || '<p>이 반에 조회 가능한 학생이 없습니다.</p>'}</div></section>`
   );
 }

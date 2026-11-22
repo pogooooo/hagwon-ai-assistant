@@ -170,6 +170,14 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       const path = thread.headers.get('location')!;
       const answer = await (await send(path, cookie)).text();
       assert.match(answer, /오후 2시/);
+      assert.match(answer, /class="message question" aria-label="질문"/);
+      assert.match(
+        answer,
+        /class="message-avatar" src="\/assets\/app-192\.png"/,
+      );
+      assert.match(answer, /class="message-sender">온답 AI/);
+      assert.match(answer, /class="message-bubble"/);
+      assert.match(answer, /class="message-time" datetime="/);
       for (const question of ['수업 대상이 누구인지', '중학생도 수업하는지']) {
         const course = await send('/consultation', cookie, {
           _academyAccount: alt,

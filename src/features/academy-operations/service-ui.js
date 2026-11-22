@@ -358,5 +358,17 @@ if (
 }
 
 document
+  .querySelector('[data-briefing-filters]')
+  ?.addEventListener('change', (event) => {
+    const form = event.currentTarget;
+    if (event.target.name === 'class') {
+      form.elements.namedItem('student').value = '';
+      const assignment = form.elements.namedItem('workbook');
+      if (assignment) assignment.value = '';
+    }
+    if (['class', 'student'].includes(event.target.name)) form.requestSubmit();
+  });
+
+document
   .querySelector('[data-print-exam]')
   ?.addEventListener('click', () => window.print());
