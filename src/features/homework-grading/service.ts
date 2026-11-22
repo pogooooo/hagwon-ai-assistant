@@ -725,6 +725,95 @@ export class GradingService {
       throw error;
     }
   }
+  /**
+   * 사진 없이 학생이 문항마다 직접 입력한 답으로 제출한다. 등록한 정답과 바로 비교해 초안을 만들고
+   * 교사 검수로 넘긴다. AI를 호출하지 않으므로 정답이 등록된 문항으로만 이루어진 과제에서만 쓴다.
+   */
+  async submitAnswers(
+    ctx: PageContext,
+    id: string,
+    answers: Record<string, string>,
+  ) {
+    const current = readSubmission(ctx, id);
+    if (current.uploaded || current.processing !== 'RECEIVED')
+      throw new GradingError('STATE_CONFLICT', 409);
+    this.open(current);
+    const a = submissionAssignment(this.db, current);
+    if (
+      !a.items.length ||
+      a.items.some(
+        (item) => item.grading_mode === 'photo_solution' || !item.key,
+      )
+    )
+      throw new GradingError('VALIDATION_FAILED');
+    if (
+      Object.keys(answers).some(
+        (ref) => !a.items.some((i) => i.item_ref === ref),
+      )
+    )
+      throw new GradingError('ITEM_SET_MISMATCH');
+    const items: DraftItem[] = a.items.map((item) => {
+      const text = (answers[item.item_ref] ?? '').normalize('NFC').trim();
+      if (text.length > 12000) throw new GradingError('VALIDATION_FAILED');
+      const reading = normalizeNumericReading(item, {
+        item_ref: item.item_ref,
+        answer_observed: text,
+        unit_observed: '',
+        answer_status: text ? 'readable' : 'blank',
+        association_status: 'matched',
+        // 사진이 없으므로 문항 전체를 답 위치로 둔다(교사가 위치를 확인했을 때와 같은 표시).
+        regions: [{ page_no: item.expected_page_no, bbox: [0, 0, 1, 1] }],
+        ambiguity_codes: [],
+        source: 'typed',
+      });
+      const proposed = propose(item, reading);
+      return {
+        extraction: reading,
+        proposed,
+        initial_proposal: { outcome: proposed.outcome, score: proposed.score },
+        reviewed: false,
+      };
+    });
+    await this.lease(id, async (s) => {
+      ctx.assertCurrentAccess?.();
+      readSubmission(ctx, id);
+      const draft: Draft = {
+        submission_id: id,
+        draft_revision: s.draft_revision + 1,
+        items,
+      };
+      await this.write(
+        s,
+        'draft',
+        new TextEncoder().encode(JSON.stringify(draft)),
+        'application/json',
+      );
+      transaction(this.db, () => {
+        this.open(this.current(id));
+        const attempt =
+          s.purpose === 'assessment'
+            ? (one<{ n: number }>(
+                this.db,
+                'SELECT COALESCE(MAX(attempt_no),0)+1 n FROM grading_v3_submissions WHERE tenant=? AND student=? AND assignment=? AND assignment_version=?',
+                s.tenant,
+                s.student,
+                s.assignment,
+                s.assignment_version,
+              )?.n ?? 1)
+            : null;
+        if (
+          !this.db
+            .prepare(
+              "UPDATE grading_v3_submissions SET uploaded=1,attempt_no=?,expected_pages=0,draft_revision=?,processing='REVIEW_REQUIRED',error_code=NULL WHERE id=? AND uploaded=0 AND processing='RECEIVED' AND raw_state='OPEN' AND fence=?",
+            )
+            .run(attempt, draft.draft_revision, id, s.fence).changes
+        )
+          throw new GradingError('STATE_CONFLICT', 409);
+        if (s.purpose === 'assessment')
+          invalidate(this.db, s.tenant, s.student);
+      });
+    });
+  }
   async correctPhotoMap(
     ctx: PageContext,
     id: string,

@@ -189,6 +189,8 @@ export const readingSchema = z
     regions: z.array(regionSchema).max(20),
     ambiguity_codes: z.array(z.string().max(60)).max(15).default([]),
     printed_calculation: z.string().trim().min(1).max(120).optional(),
+    /** typed: 학생이 사진 없이 직접 입력한 답. 없으면 사진에서 읽은 답이다. */
+    source: z.enum(['typed']).optional(),
   })
   .strict();
 export const extractionSchema = z

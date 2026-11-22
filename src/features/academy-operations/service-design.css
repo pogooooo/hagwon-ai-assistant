@@ -3285,6 +3285,35 @@ td {
 .grade-verdict {
   background: #fff1d9;
 }
+/* 사진 없이 답 입력: 보기 ①~⑤를 한 줄에 둔다. */
+.grade-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.grade-choices legend {
+  width: 100%;
+}
+.grade-choices label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #f3f3e8;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+.grade-choices input[type='radio'] {
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+.grade-choices label:has(input:checked) {
+  background: #dfe8c6;
+  font-weight: 700;
+}
 .grade-subjects {
   display: flex;
   flex-wrap: wrap;
