@@ -4651,21 +4651,27 @@ a.assessment-entry.button-link {
   color: var(--muted);
   font-size: 0.79rem;
 }
-.report-meters meter {
-  grid-area: 1 / 2 / span 2;
+.report-document meter {
   width: 100%;
   height: 12px;
   appearance: none;
 }
-.report-meters meter::-webkit-meter-bar {
+.report-highlights meter {
+  display: block;
+  margin-top: 7px;
+}
+.report-meters meter {
+  grid-area: 1 / 2 / span 2;
+}
+.report-document meter::-webkit-meter-bar {
   border: 0;
   border-radius: 20px;
   background: #e8eadf;
 }
-.report-meters meter::-webkit-meter-optimum-value {
+.report-document meter::-webkit-meter-optimum-value {
   background: var(--accent);
 }
-.report-meters meter::-moz-meter-bar {
+.report-document meter::-moz-meter-bar {
   border-radius: 20px;
   background: var(--accent);
 }

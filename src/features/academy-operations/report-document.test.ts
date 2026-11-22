@@ -24,7 +24,7 @@ test('canonical monthly report puts achievement and practice above the evidence'
   const html = renderReportDocument('월간 리포트', markdown, '수학', 'report');
   assert.match(
     html,
-    /<dl class="report-highlights"><div><dt>성취도<\/dt><dd>3 \/ 4문항 정답<\/dd><\/div><div><dt>다음 학습<\/dt><dd>통분 유형을 연습합니다\.<\/dd><\/div><\/dl>/,
+    /<dl class="report-highlights"><div><dt>성취도<\/dt><dd>3 \/ 4문항 정답<meter min="0" max="4" value="3" aria-label="전체 정답률"><\/meter><\/dd><\/div><div><dt>다음 학습<\/dt><dd>통분 유형을 연습합니다\.<\/dd><\/div><\/dl>/,
   );
   assert.match(html, /<h3>유형별 성취도<\/h3>/);
   assert.ok(html.indexOf('report-save') > html.indexOf('report-table'));

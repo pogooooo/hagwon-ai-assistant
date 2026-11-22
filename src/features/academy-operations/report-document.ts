@@ -35,6 +35,20 @@ function cells(line: string) {
     .map((text) => text.trim());
 }
 
+function summaryMeter(text: string) {
+  const full = /^교사 확정 (\d+)문항 중 (\d+)문항 정답/u.exec(text);
+  const fraction = /^(\d+)\s*\/\s*(\d+)문항 정답/u.exec(text);
+  const total = Number(full?.[1] ?? fraction?.[2]);
+  const correct = Number(full?.[2] ?? fraction?.[1]);
+  return Number.isSafeInteger(total) && total > 0 && correct <= total
+    ? '<meter min="0" max="' +
+        total +
+        '" value="' +
+        correct +
+        '" aria-label="전체 정답률"></meter>'
+    : '';
+}
+
 function learningBars(lines: string[]) {
   if (cells(lines[0]).join('|') !== '학습 유형|정답|전체') return '';
   const values = lines.slice(2).map((line) => {
@@ -201,7 +215,12 @@ export function renderReportDocument(
         highlights
           .map(
             ({ label, text }) =>
-              '<div><dt>' + h(label) + '</dt><dd>' + h(text) + '</dd></div>',
+              '<div><dt>' +
+              h(label) +
+              '</dt><dd>' +
+              h(text) +
+              (label === '성취도' ? summaryMeter(text) : '') +
+              '</dd></div>',
           )
           .join('') +
         '</dl>'
