@@ -27,6 +27,9 @@ db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA busy_timeout = 5000;
 `);
+const localDemoLogins =
+  !process.env.AXR_OPERATIONS_PUBLIC_ORIGIN &&
+  process.env.AXR_OPERATIONS_LOCAL_DEMO_LOGINS !== 'false';
 const server = createOperationsServer({
   db,
   formControlStyles: renderFormControlStyles(),
@@ -35,8 +38,8 @@ const server = createOperationsServer({
     ? new URL(process.env.AXR_OPERATIONS_PUBLIC_ORIGIN)
     : undefined,
   demoPassword: process.env.AXR_OPERATIONS_DEMO_PASSWORD ?? 'axr-demo',
-  localDemoLogins: !process.env.AXR_OPERATIONS_PUBLIC_ORIGIN,
-  showDefaultPassword: !process.env.AXR_OPERATIONS_PUBLIC_ORIGIN,
+  localDemoLogins,
+  showDefaultPassword: localDemoLogins,
 });
 server.listen(port, '127.0.0.1', () => {
   const address = server.address();
