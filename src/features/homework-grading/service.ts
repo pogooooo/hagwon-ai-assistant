@@ -39,7 +39,10 @@ import {
   type ImagePage,
 } from './media.ts';
 import type { GradeProvider } from './provider.ts';
-import { comparePhotoAnswer } from './photo-solution.ts';
+import {
+  comparePhotoAnswer,
+  solveVerifiedCalculation,
+} from './photo-solution.ts';
 import { ensureResultReport } from './facts.ts';
 
 export const newId = (prefix: string) =>
@@ -860,13 +863,36 @@ export class GradingService {
           const solutions = new Map<string, PhotoSolution>();
           const failedSolves = new Set<string>();
           for (const page of pages) {
-            const defs = a.items.filter(
-              (i) =>
-                i.grading_mode === 'photo_solution' &&
-                i.expected_page_no === page.page_no &&
-                i.approval_status === 'approved',
-            );
-            if (!defs.length || unavailable) continue;
+            if (unavailable) continue;
+            const defs = a.items
+              .filter(
+                (item) =>
+                  item.grading_mode === 'photo_solution' &&
+                  item.expected_page_no === page.page_no &&
+                  item.approval_status === 'approved',
+              )
+              .filter((item) => {
+                if (!a.scope || item.subject_id !== 'MATH') return true;
+                const first = readings.filter(
+                  (entry) => entry.item_ref === item.item_ref,
+                );
+                const second = (verified.get(page.page_no) ?? []).filter(
+                  (entry) => entry.item_ref === item.item_ref,
+                );
+                const solution =
+                  first.length === 1 &&
+                  second.length === 1 &&
+                  !first[0].ambiguity_codes.length &&
+                  !second[0].ambiguity_codes.length &&
+                  solveVerifiedCalculation(
+                    first[0].printed_calculation,
+                    second[0].printed_calculation,
+                  );
+                if (!solution) return true;
+                solutions.set(item.item_ref, solution);
+                return false;
+              });
+            if (!defs.length) continue;
             const blind = await maskStudentAnswers(page, [
               ...readings,
               ...(verified.get(page.page_no) ?? []),
