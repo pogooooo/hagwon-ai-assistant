@@ -121,6 +121,8 @@ export const itemSchema = z
     grading_mode: z.literal('photo_solution').optional(),
     item_ref: id,
     item_no: z.string().min(1).max(40),
+    /** 교재 과제의 책 쪽수. 사진 번호(expected_page_no)와 다르다. */
+    book_page: z.number().int().min(1).max(100000).optional(),
     subject_id: z.enum(subjects),
     answer_type: z.enum(answerTypes),
     primary_skill_id: id,
@@ -187,6 +189,11 @@ export const readingSchema = z
     regions: z.array(regionSchema).max(20),
     ambiguity_codes: z.array(z.string().max(60)).max(15).default([]),
     printed_calculation: z.string().trim().min(1).max(120).optional(),
+    /**
+     * 답의 출처. typed: 사진에서 못 읽어 학생이 직접 입력, photo: 사진에서 읽은 답을 학생이 그대로 제출,
+     * photo_edited: 사진에서 읽은 답을 학생이 고쳐 제출. 없으면 AI가 사진에서 읽은 답이다.
+     */
+    source: z.enum(['typed', 'photo', 'photo_edited']).optional(),
   })
   .strict();
 export const extractionSchema = z

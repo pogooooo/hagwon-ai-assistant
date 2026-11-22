@@ -16,6 +16,7 @@ import {
   type Reading,
 } from './contracts.ts';
 import { verificationTiles, type ImagePage } from './media.ts';
+import { createPageOcr, type OcrLayout } from './ocr.ts';
 import {
   solvePrintedItems,
   solveVerifiedCalculation,
@@ -48,6 +49,8 @@ export interface GradeProvider {
     assignment: Assignment,
     answerOnly?: boolean,
   ): Promise<Reading[]>;
+  /** CLOVA OCR로 인쇄 문항 번호와 문항 영역을 찾는다. 확정하지 못하면 null. */
+  locateItems?(page: ImagePage): Promise<OcrLayout | null>;
   check?(
     crop: ImagePage,
     item: Item,
@@ -91,6 +94,12 @@ export function createNaverGrader(
     env.AXR_GRADING_EXTERNAL_DATA_APPROVED === 'true' &&
     !!env.AXR_GRADING_INPUT_POLICY_REF?.trim();
   const request = createOperationsClovaFetch(env, fetchImpl, db);
+  const ocr = createPageOcr(env, db, fetchImpl);
+  const rateLimitWaitMs = Math.min(
+    60000,
+    Math.max(0, Number(env.AXR_GRADING_RATE_LIMIT_WAIT_MS ?? 20000) || 0),
+  );
+  const rateLimitRetries = rateLimitWaitMs > 0 ? 2 : 0;
   let authenticationFailed = false;
   async function chat(
     model: string,
@@ -118,9 +127,8 @@ export function createNaverGrader(
           { type: 'text', text: JSON.stringify(data) },
         ]
       : JSON.stringify(data);
-    let response: Response;
-    try {
-      response = await request(
+    const send = () =>
+      request(
         'https://clovastudio.stream.ntruss.com/v3/chat-completions/' + model,
         {
           method: 'POST',
@@ -146,6 +154,26 @@ export function createNaverGrader(
           }),
         },
       );
+    let response: Response;
+    try {
+      response = await send();
+      // 문항마다 나눠 부르면 분당 한도(429)에 쉽게 닿는다. 잠시 기다렸다 두 번까지 다시 보낸다.
+      for (
+        let retry = 0;
+        response.status === 429 && retry < rateLimitRetries;
+        retry++
+      ) {
+        const after = Number(response.headers.get('retry-after'));
+        await new Promise((resolve) =>
+          setTimeout(
+            resolve,
+            Number.isFinite(after) && after > 0
+              ? Math.min(after * 1000, 60000)
+              : rateLimitWaitMs,
+          ),
+        );
+        response = await send();
+      }
     } catch {
       throw new GradingError('PROVIDER_TEMPORARY_FAILURE', 503);
     }
@@ -682,6 +710,11 @@ export function createNaverGrader(
         );
         return match ? [{ ...match.answer, item_ref: item.item_ref }] : [];
       });
+    },
+    async locateItems(page) {
+      // 학생 사진을 OCR로 보내는 것도 외부 전송이므로 같은 승인 조건을 따른다.
+      if (!allowed || !ocr) return null;
+      return ocr.locate(page);
     },
     async check(crop, item) {
       const result = parse(

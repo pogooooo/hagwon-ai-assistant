@@ -137,7 +137,8 @@ export function findPrintedPage(lines) {
 
 // 줄 맨 앞의 인쇄 번호("5.", "0012", "12)")와 공유 지문 머리말("[41~42]")에서 문항을 나눈다.
 // 번호는 앞 번호보다 크고 10 이내로 늘어날 때만 받아 본문 속 숫자를 문항 번호로 오인하지 않는다.
-const itemMark = /^\s*(\d{1,4})\s*(?:[.)．]\s*|\s+(?=\S))/;
+// 교재에 따라 OCR이 "0001"을 발문과 다른 줄로 읽으므로 번호만 있는 줄도 받는다(네 자리 번호만 채택).
+const itemMark = /^\s*(\d{1,4})\s*(?:[.)．]\s*|\s+(?=\S)|$)/;
 const passageMark = /^\s*\[\s*(\d{1,4})\s*[~∼～\-–]\s*(\d{1,4})\s*\]/;
 export function segmentItems(lines) {
   const items = [];

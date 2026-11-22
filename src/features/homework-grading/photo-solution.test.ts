@@ -243,6 +243,11 @@ test('register without a key → student photo → teacher corrects or withholds
     gradingModule.render({ ...ctx, url: new URL(path, ctx.url) });
   assert.match(
     await target(teacher, '/grading?view=register'),
+    /교재로 과제 만들기/,
+  );
+  // 새 과제 등록 화면은 AI가 문제를 푸는 과제를 더 만들지 않는다.
+  assert.doesNotMatch(
+    await target(teacher, '/grading?view=register'),
     /AI 풀이로 채점할 과제/,
   );
   registration.set('question_pages', '1-2\n2-3');

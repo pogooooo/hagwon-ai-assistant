@@ -3320,6 +3320,73 @@ td {
 .grade-verdict {
   background: #fff1d9;
 }
+/* 사진 없이 답 입력: 보기 ①~⑤를 한 줄에 둔다. */
+.grade-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.grade-choices legend {
+  width: 100%;
+}
+.grade-choices label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #f3f3e8;
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+.grade-choices input[type='radio'] {
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+.grade-choices label:has(input:checked) {
+  background: #dfe8c6;
+  font-weight: 700;
+}
+.grade-read {
+  width: 100%;
+  margin: 0;
+  color: #4a5a2a;
+}
+.grade-unread {
+  color: #8a4b12;
+}
+/* 검수: 학생이 고쳤거나 사진에서 못 읽은 문항을 먼저 보게 한다. */
+.grade-attention {
+  border-left: 4px solid #d08a2c;
+}
+.grade-flag,
+.grade-attention-summary {
+  margin: 0.4rem 0;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: #fff1d9;
+  color: #6b3d0a;
+  font-weight: 600;
+}
+.grade-queue-list li:has(.grade-bulk-pick) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.grade-queue-list li:has(.grade-bulk-pick) .grade-queue-entry {
+  flex: 1;
+}
+.grade-bulk-pick input {
+  width: 22px;
+  height: 22px;
+}
+.grade-bulk {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
 .grade-subjects {
   display: flex;
   flex-wrap: wrap;

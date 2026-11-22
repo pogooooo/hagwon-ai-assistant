@@ -32,13 +32,16 @@ import {
   validateRetained,
 } from './scoring.ts';
 import { MemoryRawStore, type RawStore } from './raw-store.ts';
+import { setupWorkbookCatalog } from '../academy-operations/workbook-catalog.ts';
 import {
   cropAnswer,
   decodeUploads,
   maskStudentAnswers,
+  detectMarkedChoice,
   type ImagePage,
 } from './media.ts';
 import type { GradeProvider } from './provider.ts';
+import type { OcrLayout } from './ocr.ts';
 import {
   comparePhotoAnswer,
   solveVerifiedCalculation,
@@ -127,8 +130,18 @@ type Options = {
   inputPolicyRef?: string;
   restoredBackup?: boolean;
 };
+/** 교재 과제 사진에서 읽은 답(문항별 보기와 표시 위치). 제출 전 확인 화면에 채운다. */
+export interface PhotoPrefill {
+  reordered: boolean;
+  items: Record<
+    string,
+    { answer: string; bbox: [number, number, number, number] }
+  >;
+}
 const activeStores = new WeakMap<OperationsDatabase, RawStore>();
 export function setupGrading(db: OperationsDatabase) {
+  // 과제 등록 탭이 학원 공용 교재 목록(쪽·번호·유형·정답)을 쓴다.
+  setupWorkbookCatalog(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS grading_v3_assignments(tenant TEXT NOT NULL,id TEXT NOT NULL,version INTEGER NOT NULL,payload TEXT NOT NULL,PRIMARY KEY(tenant,id,version));
     CREATE TABLE IF NOT EXISTS grading_v3_submissions(
@@ -720,6 +733,209 @@ export class GradingService {
       throw error;
     }
   }
+  /** 교재 과제(정답이 등록된 문항만)인지. 사진 자동 읽기와 직접 입력 제출은 이 과제에서만 쓴다. */
+  private workbookAssignment(s: Submission) {
+    const a = submissionAssignment(this.db, s);
+    if (
+      a.scope ||
+      !a.items.length ||
+      a.items.some(
+        (item) => item.grading_mode === 'photo_solution' || !item.key,
+      )
+    )
+      throw new GradingError('VALIDATION_FAILED');
+    return a;
+  }
+  /**
+   * 교재 과제 사진에서 학생이 표시한 보기를 읽어 제출 전 확인 화면에 채울 답을 만든다. OCR로 각 사진의
+   * 책 쪽수를 찾아 과제의 쪽 순서와 다르면 사진 순서를 맞추고, 객관식은 체크 감지기로 표시한 보기를
+   * 찾는다. 확정하지 못한 문항은 비워 두고 학생이 직접 고른다. AI 풀이·판독은 호출하지 않는다.
+   */
+  async readWorkbookPhotos(ctx: PageContext, id: string) {
+    const current = readSubmission(ctx, id);
+    if (!current.uploaded || current.processing !== 'PROCESSING')
+      throw new GradingError('STATE_CONFLICT', 409);
+    const a = this.workbookAssignment(current);
+    const practice = this.db
+      .prepare(
+        'SELECT policy FROM grading_v3_practice_consent WHERE submission=?',
+      )
+      .get(id);
+    const provider = practice ? this.practiceProvider! : this.provider;
+    const prefill: PhotoPrefill = { reordered: false, items: {} };
+    await this.lease(id, async (s) => {
+      const pages: ImagePage[] = [];
+      for (let n = 1; n <= s.expected_pages; n++) {
+        const p = await this.raw.get(s.scope, 'page_' + n);
+        if (!p) throw new GradingError('RAW_EXPIRED', 410);
+        pages.push({ bytes: p.bytes, mime: p.mime, page_no: n });
+      }
+      try {
+        const layouts: (OcrLayout | null)[] = [];
+        for (const page of pages) {
+          readSubmission(ctx, id);
+          layouts.push(
+            provider.inputAllowed && provider.locateItems
+              ? await provider.locateItems(page).catch(() => null)
+              : null,
+          );
+        }
+        // 사진마다 OCR이 찾은 책 쪽수로 과제의 쪽 순서(사진 번호)를 정한다. 모든 사진이 서로 다른
+        // 과제 쪽으로 확정될 때만 순서를 바꾸고, 아니면 학생이 올린 순서를 그대로 쓴다.
+        const bookPages = [
+          ...new Set(a.items.map((i) => i.book_page ?? i.expected_page_no)),
+        ].sort((x, y) => x - y);
+        // 인쇄된 쪽수를 못 읽었으면 사진에서 찾은 문항 번호가 가장 많이 겹치는 과제 쪽으로 정한다.
+        const targets = layouts.map((layout) => {
+          if (!layout) return 0;
+          const printed = layout.printedPage
+            ? bookPages.indexOf(layout.printedPage) + 1
+            : 0;
+          if (printed) return printed;
+          const overlap = bookPages.map(
+            (page) =>
+              a.items.filter(
+                (i) =>
+                  (i.book_page ?? i.expected_page_no) === page &&
+                  layout.numbers.includes(Number(i.item_no)),
+              ).length,
+          );
+          const best = Math.max(...overlap);
+          return best > 0 && overlap.filter((n) => n === best).length === 1
+            ? overlap.indexOf(best) + 1
+            : 0;
+        });
+        const order =
+          targets.every((t) => t > 0) &&
+          new Set(targets).size === targets.length &&
+          targets.some((t, i) => t !== i + 1)
+            ? targets
+            : pages.map((_, i) => i + 1);
+        if (order.some((t, i) => t !== i + 1)) {
+          for (const [i, page] of pages.entries())
+            await this.write(s, 'page_' + order[i], page.bytes, page.mime);
+          prefill.reordered = true;
+        }
+        for (const item of a.items) {
+          if (item.answer_type !== 'choice_single') continue;
+          const photo = order.indexOf(item.expected_page_no);
+          const layout = photo >= 0 ? layouts[photo] : null;
+          const grid = layout?.choices.get(Number(item.item_no));
+          if (!grid) continue;
+          const mark = await detectMarkedChoice(pages[photo], grid).catch(
+            () => null,
+          );
+          if (mark)
+            prefill.items[item.item_ref] = {
+              answer: mark.answer_observed,
+              bbox: mark.regions[0].bbox,
+            };
+        }
+      } finally {
+        for (const page of pages) page.bytes.fill(0);
+      }
+      await this.write(
+        s,
+        'prefill',
+        new TextEncoder().encode(JSON.stringify(prefill)),
+        'application/json',
+      );
+    });
+    return prefill;
+  }
+  /** 사진 자동 읽기 결과(제출 전 확인 화면용). */
+  async photoPrefill(ctx: PageContext, id: string): Promise<PhotoPrefill> {
+    const s = readSubmission(ctx, id);
+    this.open(s);
+    const object = await this.raw.get(s.scope, 'prefill');
+    if (!object) return { reordered: false, items: {} };
+    try {
+      return JSON.parse(new TextDecoder().decode(object.bytes)) as PhotoPrefill;
+    } finally {
+      object.bytes.fill(0);
+    }
+  }
+  /**
+   * 사진에서 읽은 답을 학생이 확인·수정해 제출한다(못 읽은 문항은 학생이 직접 고른다). 등록한 정답과
+   * 바로 비교해 초안을 만들고 교사 검수로 넘긴다. AI를 호출하지 않는다. 사진 없는 제출은 받지 않는다.
+   */
+  async submitAnswers(
+    ctx: PageContext,
+    id: string,
+    answers: Record<string, string>,
+  ) {
+    const current = readSubmission(ctx, id);
+    if (!current.uploaded || current.processing !== 'PROCESSING')
+      throw new GradingError('STATE_CONFLICT', 409);
+    this.open(current);
+    const a = this.workbookAssignment(current);
+    if (
+      Object.keys(answers).some(
+        (ref) => !a.items.some((i) => i.item_ref === ref),
+      )
+    )
+      throw new GradingError('ITEM_SET_MISMATCH');
+    const prefill = await this.photoPrefill(ctx, id);
+    const items: DraftItem[] = a.items.map((item) => {
+      const text = (answers[item.item_ref] ?? '').normalize('NFC').trim();
+      if (text.length > 12000) throw new GradingError('VALIDATION_FAILED');
+      const read = prefill.items[item.item_ref];
+      const source = !read
+        ? ('typed' as const)
+        : read.answer === text
+          ? ('photo' as const)
+          : ('photo_edited' as const);
+      const reading = normalizeNumericReading(item, {
+        item_ref: item.item_ref,
+        answer_observed: text,
+        unit_observed: '',
+        answer_status: text ? 'readable' : 'blank',
+        association_status: 'matched',
+        // 사진에서 표시를 찾았으면 그 위치를, 아니면 문항 전체를 답 위치로 둔다.
+        regions: [
+          {
+            page_no: item.expected_page_no,
+            bbox: read ? read.bbox : [0, 0, 1, 1],
+          },
+        ],
+        ambiguity_codes: [],
+        source,
+      });
+      const proposed = propose(item, reading);
+      return {
+        extraction: reading,
+        proposed,
+        initial_proposal: { outcome: proposed.outcome, score: proposed.score },
+        reviewed: false,
+      };
+    });
+    await this.lease(id, async (s) => {
+      ctx.assertCurrentAccess?.();
+      readSubmission(ctx, id);
+      const draft: Draft = {
+        submission_id: id,
+        draft_revision: s.draft_revision + 1,
+        items,
+      };
+      await this.write(
+        s,
+        'draft',
+        new TextEncoder().encode(JSON.stringify(draft)),
+        'application/json',
+      );
+      transaction(this.db, () => {
+        this.open(this.current(id));
+        if (
+          !this.db
+            .prepare(
+              "UPDATE grading_v3_submissions SET draft_revision=?,processing='REVIEW_REQUIRED',error_code=NULL WHERE id=? AND uploaded=1 AND processing='PROCESSING' AND raw_state='OPEN' AND fence=?",
+            )
+            .run(draft.draft_revision, id, s.fence).changes
+        )
+          throw new GradingError('STATE_CONFLICT', 409);
+      });
+    });
+  }
   async correctPhotoMap(
     ctx: PageContext,
     id: string,
@@ -783,6 +999,9 @@ export class GradingService {
           number,
           Awaited<ReturnType<NonNullable<GradeProvider['readWorksheetPrint']>>>
         >();
+        // CLOVA OCR로 문항 영역을 찾은 쪽. 이 쪽은 문항마다 잘라 읽고 푼다.
+        const layouts = new Map<number, OcrLayout>();
+        const itemVerified = new Map<number, Reading[]>();
         const useWorksheetReader =
           !staffRemap &&
           !a.items.length &&
@@ -802,6 +1021,23 @@ export class GradingService {
               ctx.assertCurrentAccess?.();
               readSubmission(ctx, id);
               this.open(this.current(id));
+              if (!staffRemap && provider.locateItems) {
+                const layout = await provider
+                  .locateItems(page)
+                  .catch(() => null);
+                if (
+                  layout &&
+                  (a.scope.kind !== 'workbook' || layout.printedPage !== null)
+                ) {
+                  found.push({
+                    printedPage:
+                      a.scope.kind === 'workbook' ? layout.printedPage : null,
+                    numbers: layout.numbers,
+                  });
+                  layouts.set(page.page_no, layout);
+                  continue;
+                }
+              }
               if (useWorksheetReader) {
                 try {
                   const printed = await provider.readWorksheetPrint!(page);
@@ -862,6 +1098,24 @@ export class GradingService {
                 throw error;
             }
           }
+          // OCR 쪽의 객관식: 펜 표시가 덮은 보기를 픽셀과 OCR 두 신호로 찾는다. 두 신호가 같은
+          // 보기를 가리킬 때만 답으로 쓰고, 나머지 문항은 아래 쪽 전체 판독으로 넘어간다.
+          for (const page of pages) {
+            const layout = layouts.get(page.page_no);
+            if (!layout) continue;
+            const detected: Reading[] = [];
+            for (const item of a.items) {
+              if (item.expected_page_no !== page.page_no) continue;
+              const grid = layout.choices.get(Number(item.item_no));
+              const mark = grid && (await detectMarkedChoice(page, grid));
+              if (!mark) continue;
+              const reading = { ...mark, item_ref: item.item_ref };
+              readings.push(reading);
+              detected.push(reading);
+            }
+            // 두 신호가 이미 서로 독립된 확인이므로 같은 판독을 검증 결과로도 둔다.
+            itemVerified.set(page.page_no, detected);
+          }
           const recognized = new Set(readings.map((r) => r.item_ref));
           const remaining = a.items.filter((i) => !recognized.has(i.item_ref));
           if (remaining.length) {
@@ -883,7 +1137,7 @@ export class GradingService {
         try {
           readSubmission(ctx, id);
           this.open(this.current(id));
-          const verified = new Map<number, Reading[]>();
+          const verified = new Map<number, Reading[]>(itemVerified);
           if (!unavailable && provider.verifyPage) {
             const eligible = new Set(
               readings
@@ -897,23 +1151,27 @@ export class GradingService {
                 .map((reading) => reading.item_ref),
             );
             for (const page of pages) {
+              const itemChecked = new Set(
+                (itemVerified.get(page.page_no) ?? []).map((r) => r.item_ref),
+              );
               const candidates = a.items.filter(
                 (item) =>
                   item.expected_page_no === page.page_no &&
-                  eligible.has(item.item_ref),
+                  eligible.has(item.item_ref) &&
+                  !itemChecked.has(item.item_ref),
               );
               if (!candidates.length) continue;
               readSubmission(ctx, id);
               this.open(this.current(id));
               try {
-                verified.set(
-                  page.page_no,
-                  await provider.verifyPage(
+                verified.set(page.page_no, [
+                  ...(itemVerified.get(page.page_no) ?? []),
+                  ...(await provider.verifyPage(
                     page,
                     { ...a, items: candidates },
                     worksheetPrint.has(page.page_no),
-                  ),
-                );
+                  )),
+                ]);
               } catch (error) {
                 partialIssue ??= providerIssue(error);
               }

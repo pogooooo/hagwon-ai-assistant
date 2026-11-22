@@ -8,10 +8,14 @@
     rows = section.querySelector('#workbook-rows');
   const catalog = JSON.parse(section.dataset.items),
     tags = JSON.parse(section.dataset.tags);
+  // 사진 채점의 과제 등록 탭에서는 /grading으로 보내고 문항마다 정답을 받는다.
+  const base = section.dataset.base || '/homework',
+    done = section.dataset.done || 'detail',
+    requireAnswer = section.dataset.requireAnswer === '1';
   const states = new Map();
   async function request(action, data) {
     data.set('_academyAccount', document.body.dataset.account);
-    const res = await fetch('/homework?' + action + '=1', {
+    const res = await fetch(base + '?' + action + '=1', {
       method: 'POST',
       body: data,
     });
@@ -40,6 +44,8 @@
     find('[data-page]').value = item.page || '';
     find('[data-number]').value = item.number || '';
     find('[data-select]').checked = !!item.selected;
+    const answer = find('[data-answer]');
+    if (answer) answer.value = item.answer || '';
     const area = find('[data-area]'),
       minor = find('[data-minor]'),
       chosen = find('[data-chosen]');
@@ -156,9 +162,15 @@
     for (const [row, tags] of states) {
       if (!row.querySelector('[data-select]').checked) continue;
       const page = Number(row.querySelector('[data-page]').value),
-        number = row.querySelector('[data-number]').value.trim();
+        number = row.querySelector('[data-number]').value.trim(),
+        answer = row.querySelector('[data-answer]')?.value.trim() ?? '';
       if (!Number.isInteger(page) || page < 1 || page > 100000 || !number) {
         status.textContent = '선택한 문항의 쪽수와 번호를 입력해 주세요.';
+        return;
+      }
+      if (requireAnswer && !answer) {
+        status.textContent =
+          page + '쪽 ' + number + '번의 정답을 입력해 주세요.';
         return;
       }
       const key = JSON.stringify([page, number]);
@@ -175,6 +187,7 @@
         number,
         tagIds: [...tags],
         version: master?.version ?? null,
+        ...(requireAnswer ? { answer } : {}),
       });
     }
     if (!items.length || items.length > 300) {
@@ -215,8 +228,8 @@
     const data = new FormData(save);
     save.inert = true;
     try {
-      const res = await fetch('/homework', { method: 'POST', body: data });
-      if (!res.ok || !new URL(res.url).searchParams.has('detail')) {
+      const res = await fetch(base, { method: 'POST', body: data });
+      if (!res.ok || !new URL(res.url).searchParams.has(done)) {
         const doc = new DOMParser().parseFromString(
           await res.text(),
           'text/html',
