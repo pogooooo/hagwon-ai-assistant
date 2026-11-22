@@ -952,23 +952,40 @@ export function currentCitationRevisions(ctx: PageContext) {
   return revisions;
 }
 
+const messageClock = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+const consultationIcon = '/assets/app-192.png';
+
 function renderMessage(
-  { kind, text, response }: Message,
+  { kind, text, response, created_at }: Message,
   currentRevisions: ReadonlyMap<string, ReadonlySet<number>>,
 ) {
-  const answer = response ? (JSON.parse(response) as RagAnswer) : null;
-  if (
-    answer?.citations.some(
-      ({ documentId, revision }) =>
-        revision === undefined ||
-        !currentRevisions.get(documentId)?.has(revision),
-    )
-  ) {
-    return '<article class="message answer"><strong>이전 답변</strong><p>자료 개정 또는 열람 범위가 변경되어 답변을 표시할 수 없습니다. 다시 질문해 주세요.</p></article>';
-  }
-  return `<article class="message ${kind}"${answer ? ' data-answer-status="' + h(answer.status) + '"' : ''}>
-    <strong>${kind === 'question' ? '질문' : kind === 'staff' ? '담당자 답변' : h(answer ? answerLabels[answer.status] : '답변')}</strong>
-    <p class="preserve">${h(text)}</p>
+  const stored = response ? (JSON.parse(response) as RagAnswer) : null;
+  const stale = stored?.citations.some(
+    ({ documentId, revision }) =>
+      revision === undefined ||
+      !currentRevisions.get(documentId)?.has(revision),
+  );
+  const answer = stale ? null : stored;
+  const sender =
+    kind === 'question' ? '질문' : kind === 'staff' ? '담당자 답변' : '온답 AI';
+  const state = stale
+    ? '이전 답변'
+    : answer && answer.status !== 'answered'
+      ? answerLabels[answer.status]
+      : '';
+  const date = new Date(created_at);
+  return `<article class="message ${kind}"${answer ? ' data-answer-status="' + h(answer.status) + '"' : ''} aria-label="${sender}">
+    ${kind === 'answer' ? `<img class="message-avatar" src="${consultationIcon}" alt="" width="36" height="36">` : kind === 'staff' ? '<span class="message-avatar staff-avatar" aria-hidden="true">담</span>' : ''}
+    <div class="message-content">
+      ${kind === 'question' ? '' : `<strong class="message-sender">${sender}</strong>`}
+      <div class="message-bubble">
+        ${state ? `<span class="message-state">${h(state)}</span>` : ''}
+        <p class="preserve">${h(stale ? '자료 개정 또는 열람 범위가 변경되어 답변을 표시할 수 없습니다. 다시 질문해 주세요.' : text)}</p>
     ${
       answer?.citations.length
         ? `<details class="source-details"><summary>확인한 자료 ${answer.citations.length}개</summary><ul class="citations">${answer.citations
@@ -978,11 +995,14 @@ function renderMessage(
                     .slice(citation.title.length)
                     .replace(/^[\s·:>/—-]+/, '')
                 : citation.location;
-              return `<li>${citation.documentId.startsWith('workbook-') ? `<a href="/homework?view=source&amp;publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : citation.documentId.startsWith('learning-') ? `<a href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${location ? ' · ' + h(location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`;
+              return `<li>${citation.documentId.startsWith('workbook-') ? `<a href="/homework?view=source&amp;publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : citation.documentId.startsWith('learning-') ? `<a class="workspace-link" href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${location ? ' · ' + h(location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`;
             })
             .join('')}</ul></details>`
         : ''
     }
+      </div>
+    </div>
+    ${Number.isFinite(date.getTime()) ? `<time class="message-time" datetime="${h(created_at)}">${h(messageClock.format(date))}</time>` : ''}
   </article>`;
 }
 
@@ -1133,7 +1153,7 @@ function renderConsultation(ctx: PageContext) {
               : `<div class="thread-heading"><h2>${h(thread.title)}</h2><span class="pill">${h(threadLabels[thread.status])}</span></div>`
             : inbox || archive
               ? `<h2>${inbox ? '처리 중인 상담' : '완료된 상담'}</h2>${threads.length ? '<p class="muted">목록에서 상담을 선택해 주세요.</p>' : '<p class="muted">현재 목록이 비어 있습니다.</p>'}`
-              : `<div class="consultation-welcome"><img src="/assets/owl.png" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="자주 묻는 질문">${suggestions.map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
+              : `<div class="consultation-welcome"><img src="${consultationIcon}" alt=""><div><h2>무엇이 궁금하세요?</h2><p>학원에서 확인한 자료로 답변해 드립니다.</p></div></div><div class="question-suggestions" aria-label="자주 묻는 질문">${suggestions.map((q) => `<button type="button" class="secondary" data-question="${h(q)}">${h(q)}<span aria-hidden="true">›</span></button>`).join('')}</div>`
         }
         <div class="conversation-messages">${messages.map((message) => renderMessage(message, currentRevisions)).join('')}</div>
         ${

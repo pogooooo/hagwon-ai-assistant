@@ -310,6 +310,21 @@ test('복수 반은 실제 배정 관계를 사용하고 학생 합산은 제출
     workbookAnalytics(s.ctx('TA_TEACHER', '/briefing?class=extra'), false),
     /확인 완료 1건 · 정답 1\/2/,
   );
+  const filtered = workbookAnalytics(
+    s.ctx('TA_TEACHER', '/briefing?class=extra&student=TA_STU_001'),
+    false,
+  );
+  assert.match(filtered, /value="TA_STU_001" selected/);
+  assert.match(filtered, /class="briefing-student-heading"/);
+  assert.match(filtered, /확인 완료 1건 · 정답 1\/2/);
+  assert.throws(
+    () =>
+      workbookAnalytics(
+        s.ctx('TA_TEACHER', '/briefing?class=extra&student=TA_STU_002'),
+        false,
+      ),
+    { status: 404 },
+  );
   assert.match(
     workbookAnalytics(s.ctx('TA_TEACHER', '/homework?view=analysis'), true),
     /확인 완료 1건 · 정답 1\/2/,
