@@ -12,6 +12,56 @@ async function exclusive(action) {
   }
 }
 const maxOutputPixels = 1_000_000;
+const maxWorkbookSourcePixels = 8_000_000;
+
+export function workerWorkbookPhotoCrop(bytes, box) {
+  if (box.sourcePixels > maxWorkbookSourcePixels)
+    throw new GradingError('INPUT_UNREADABLE');
+  return exclusive(async () => {
+    const { PhotonImage, crop, resize, SamplingFilter } =
+      await import('@cf-wasm/photon/workerd');
+    const source = PhotonImage.new_from_byteslice(bytes);
+    let clipped;
+    let scaled;
+    let pixels;
+    let background;
+    let padded;
+    try {
+      clipped = crop(
+        source,
+        box.x,
+        box.y,
+        box.x + box.width,
+        box.y + box.height,
+      );
+      scaled = resize(
+        clipped,
+        box.scaledWidth,
+        box.scaledHeight,
+        SamplingFilter.Triangle,
+      );
+      pixels = scaled.get_raw_pixels();
+      background = new Uint8Array(box.canvasWidth * box.canvasHeight * 4).fill(
+        255,
+      );
+      const stride = box.scaledWidth * 4;
+      for (let row = 0; row < box.scaledHeight; row++) {
+        const dest = ((box.top + row) * box.canvasWidth + box.left) * 4;
+        background.set(pixels.subarray(row * stride, (row + 1) * stride), dest);
+      }
+      padded = new PhotonImage(background, box.canvasWidth, box.canvasHeight);
+      return padded.get_bytes();
+    } finally {
+      padded?.free();
+      background?.fill(0);
+      pixels?.fill(0);
+      scaled?.free();
+      clipped?.free();
+      source.free();
+    }
+  });
+}
+
 function outputScale(width, height, maxScale) {
   if (
     !Number.isFinite(width) ||

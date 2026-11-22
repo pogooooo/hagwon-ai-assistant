@@ -293,7 +293,7 @@ export async function suggestArea(subject, text) {
         encodeURIComponent(model),
       {
         method: 'POST',
-        redirect: 'error',
+        redirect: 'manual',
         signal: AbortSignal.timeout(60000),
         headers: {
           'Content-Type': 'application/json',
