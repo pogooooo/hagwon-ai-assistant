@@ -38,6 +38,7 @@ export function photoReportStats(
       (n, a) => n + a.n_pending_items + a.n_unavailable_items,
       0,
     ),
+    excluded: overall.reduce((n, f) => n + f.n_ungradable + f.n_excluded, 0),
     types: s.facts
       .filter((f) => f.period_role === 'primary' && f.primary_skill_id !== null)
       .map((f) => ({

@@ -2,6 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { demoReports } from './demo-reports.ts';
 import {
+  buildLearningNarrative,
+  comparedReportFingerprint,
+  previousReportComparison,
+  reportMatchesEvidence,
+} from './report-narrative.ts';
+import {
   renderReportDocument,
   reportTeacherComment,
   withTeacherComment,
@@ -79,13 +85,8 @@ function reportEvidence(
   classId: string,
   period: string,
 ) {
-  const { sources, types, total, correct, unknown } = photoReportStats(
-    db,
-    academyId,
-    studentId,
-    classId,
-    period,
-  );
+  const { sources, types, total, correct, unknown, excluded } =
+    photoReportStats(db, academyId, studentId, classId, period);
   const attendance = rows<{ date: string; status: string; actor_id: string }>(
     db,
     'SELECT date,status,actor_id FROM op_student_attendance WHERE academy_id=? AND student_id=? AND class_id=? AND date LIKE ? ORDER BY date',
@@ -107,6 +108,7 @@ function reportEvidence(
     total,
     correct,
     unknown,
+    excluded,
     types,
     repeated,
     suggestions,
@@ -145,81 +147,90 @@ export function approvedPhotoReports(
     classId,
   ).filter((r) => {
     const current = reportEvidence(db, academy, student, r.class_id, period);
-    return current.sourceCount > 0 && current.fingerprint === r.fingerprint;
+    return (
+      current.sourceCount > 0 &&
+      reportMatchesEvidence(r.fingerprint, current.fingerprint, () => {
+        const comparison = previousReportComparison(
+          period,
+          current.types,
+          (previous) =>
+            reportEvidence(db, academy, student, r.class_id, previous).types,
+        );
+        return comparison && hash(comparison);
+      })
+    );
   });
 }
+function priorComparison(
+  ctx: PageContext,
+  student: string,
+  klass: string,
+  month: string,
+  types: ReturnType<typeof studentReportEvidence>['types'],
+) {
+  return previousReportComparison(
+    month,
+    types,
+    (period) => studentReportEvidence(ctx, student, klass, period).types,
+  );
+}
+
+function matchesReport(
+  ctx: PageContext,
+  report: Report,
+  current = studentReportEvidence(
+    ctx,
+    report.student_id,
+    report.class_id,
+    report.period,
+  ),
+) {
+  return reportMatchesEvidence(report.fingerprint, current.fingerprint, () => {
+    const previous = priorComparison(
+      ctx,
+      report.student_id,
+      report.class_id,
+      report.period,
+      current.types,
+    );
+    return previous && hash(previous);
+  });
+}
+
 function draft(
   ctx: PageContext,
   studentId: string,
   classId: string,
   period: string,
 ) {
-  const student = scope(ctx, studentId, classId),
-    e = studentReportEvidence(ctx, studentId, classId, period);
-  const score = e.total
-    ? `교사 확정 ${e.total}문항 중 ${e.correct}문항 정답 (${Math.round((e.correct / e.total) * 100)}%).`
-    : '이 기간에 교사가 확정한 채점 기록이 없습니다.';
-  const repeat = e.repeated.length
-    ? '반복 오답: ' +
-      e.repeated
-        .map((t) => `${t.name} ${t.wrong}/${t.total}문항 오답`)
-        .join(', ')
-    : '반복 오답 유형을 확인할 기록이 부족합니다.';
-  const practice = e.suggestions.length
-    ? '추천 연습 유형: ' +
-      e.suggestions.map((t) => t.name).join(', ') +
-      ' (확인된 오답을 바탕으로 한 제안).'
-    : '추천 연습 유형을 정할 근거가 없습니다.';
-  const attendance = e.attendance.length
-    ? '출결 기록: ' +
-      ['present', 'late', 'absent']
-        .map(
-          (v, i) =>
-            ['출석', '지각', '결석'][i] +
-            ' ' +
-            e.attendance.filter((a) => a.status === v).length +
-            '건',
-        )
-        .join(' · ')
-    : '출석·지각 등 출결 기록이 없습니다. 출석이나 태도를 추정하지 않습니다.';
-  const body = [
-    '# ' + student.name + ' · ' + period + ' 월간 리포트',
-    '## 성취도',
-    score +
-      (e.unknown
-        ? ' 미확인 ' + e.unknown + '문항은 정답률에서 제외했습니다.'
-        : ''),
-    ...(e.types.some((type) => type.total > 0)
-      ? [
-          [
-            '| 학습 유형 | 정답 | 전체 |',
-            '| --- | ---: | ---: |',
-            ...e.types
-              .filter((type) => type.total > 0)
-              .map(
-                (type) =>
-                  '| ' +
-                  type.name.replaceAll('|', '｜').replace(/\s+/gu, ' ') +
-                  ' | ' +
-                  (type.total - type.wrong) +
-                  ' | ' +
-                  type.total +
-                  ' |',
-              ),
-          ].join('\n'),
-        ]
-      : []),
-    '## 오답 유형',
-    repeat,
-    '## 다음 학습',
-    practice,
-    '## 출결',
-    attendance,
-  ].join('\n\n');
+  const student = scope(ctx, studentId, classId);
+  const current = studentReportEvidence(ctx, studentId, classId, period);
+  const comparison = priorComparison(
+    ctx,
+    studentId,
+    classId,
+    period,
+    current.types,
+  );
+  const attendance = { present: 0, late: 0, absent: 0 };
+  for (const { status } of current.attendance) {
+    if (status === 'present' || status === 'late' || status === 'absent')
+      attendance[status]++;
+  }
+  const narrative = buildLearningNarrative(
+    { ...current, attendance },
+    comparison,
+  );
+  const title = student.name + ' · ' + period + ' 월간 리포트';
   return {
-    body,
-    counsel: `교사용 상담 자료 초안\n${body}\n상담 확인 항목: 반복 오답을 함께 살펴보고 다음 연습 유형을 협의합니다. 기록에 없는 원인·태도·가정 상황은 단정하지 않습니다.`,
-    e,
+    body: '# ' + title + '\n\n' + narrative.body,
+    counsel: narrative.teacher.replace(
+      '# 교사용 상담 자료 초안',
+      '# 교사용 상담 자료 초안 · ' + title,
+    ),
+    fingerprint: comparison
+      ? comparedReportFingerprint(current.fingerprint, hash(comparison))
+      : current.fingerprint,
   };
 }
 function load(ctx: PageContext, id: string) {
@@ -235,9 +246,7 @@ function load(ctx: PageContext, id: string) {
     !staff(ctx) &&
     (ctx.actor.role !== 'guardian' ||
       r.state !== 'approved' ||
-      r.fingerprint !==
-        studentReportEvidence(ctx, r.student_id, r.class_id, r.period)
-          .fingerprint)
+      !matchesReport(ctx, r))
   )
     throw new OperationError(
       '교사가 승인한 최신 리포트만 보호자에게 공개됩니다.',
@@ -347,7 +356,7 @@ function submit(ctx: PageContext, form: FormData) {
             )
           : result.body,
         counsel: result.counsel,
-        fingerprint: result.e.fingerprint,
+        fingerprint: result.fingerprint,
         approved_by: null,
       };
       ctx.db
@@ -380,7 +389,7 @@ function submit(ctx: PageContext, form: FormData) {
         r.class_id,
         r.period,
       );
-      if (action !== 'withdraw' && current.fingerprint !== r.fingerprint)
+      if (action !== 'withdraw' && !matchesReport(ctx, r, current))
         throw new OperationError(
           '채점·출결 근거가 바뀌었습니다. 다시 분석하고 검토해 주세요.',
           409,
@@ -571,11 +580,7 @@ export function renderStudentReports(
   const entries = [
     ...reports.map((r) => {
       const changed =
-        r.state === 'approved' &&
-        !family &&
-        r.fingerprint !==
-          studentReportEvidence(ctx, r.student_id, r.class_id, r.period)
-            .fingerprint;
+        r.state === 'approved' && !family && !matchesReport(ctx, r);
       return {
         id: r.id,
         period: r.period,
@@ -681,7 +686,7 @@ export function renderStudentReports(
   if (!staff(ctx)) return html + '</div></div>';
   const e = studentReportEvidence(ctx, r.student_id, r.class_id, r.period);
   const hidden = `<input type="hidden" name="id" value="${h(r.id)}"><input type="hidden" name="version" value="${r.version}">`;
-  const changed = r.fingerprint !== e.fingerprint;
+  const changed = !matchesReport(ctx, r, e);
   const publication = changed
     ? '보호자 비공개 · 근거가 변경되어 갱신이 필요합니다.'
     : r.state === 'approved'

@@ -1,4 +1,5 @@
 import { accessibleStudents } from './directory.ts';
+import { buildLearningNarrative } from './report-narrative.ts';
 import { one, type PageContext } from './shared.ts';
 
 const academies = {
@@ -120,14 +121,19 @@ export function demoReports(ctx: PageContext) {
     const correct = lesson.rows.reduce((sum, [, value]) => sum + value, 0);
     const total = lesson.rows.reduce((sum, [, , value]) => sum + value, 0);
     const title = lesson.month.replace('-', '년 ') + '월 학습 리포트';
-    const progress = [
-      '| 학습 유형 | 정답 | 전체 |',
-      '| --- | ---: | ---: |',
-      ...lesson.rows.map(
-        ([name, value, count]) =>
-          '| ' + name + ' | ' + value + ' | ' + count + ' |',
-      ),
-    ].join('\n');
+    const [present, late, absent] = lesson.sessions;
+    const narrative = buildLearningNarrative({
+      total,
+      correct,
+      unknown: 0,
+      types: lesson.rows.map(([name, count, all]) => ({
+        id: name,
+        name,
+        total: all,
+        wrong: all - count,
+      })),
+      attendance: { present, late, absent },
+    });
     return {
       id: 'archived-' + lesson.month,
       period: lesson.month,
@@ -140,26 +146,11 @@ export function demoReports(ctx: PageContext) {
       body: [
         '# ' + title,
         student.name + ' · ' + data.className + ' · ' + lesson.unit,
-        '## 성취도',
-        correct +
-          ' / ' +
-          total +
-          '문항 정답 · ' +
-          Math.round((correct * 100) / total) +
-          '%',
-        progress,
+        narrative.body,
+        '## 담당 교사의 연습 제안',
+        lesson.next,
         '## 교사 코멘트',
         lesson.comment,
-        '## 다음 학습',
-        lesson.next,
-        '## 출결',
-        '출석 ' +
-          lesson.sessions[0] +
-          '회 · 지각 ' +
-          lesson.sessions[1] +
-          '회 · 결석 ' +
-          lesson.sessions[2] +
-          '회',
       ].join('\n\n'),
     };
   });
