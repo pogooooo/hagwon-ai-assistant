@@ -1228,7 +1228,7 @@ async function render(ctx: PageContext) {
         intro +
         (ctx.actor.role === 'guardian' ? renderStudentReports(ctx) : '') +
         (staff
-          ? '<div class="report-kind-actions"><a class="button-link subtle-link" href="/student-reports">월간 리포트 열기</a></div>'
+          ? '<div class="report-kind-actions"><a class="button-link" href="#grade-report-builder">분석 리포트 만들기</a><a class="button-link subtle-link" href="/student-reports">월간 리포트 열기</a></div>'
           : '') +
         list +
         (pending.length
@@ -1246,13 +1246,13 @@ async function render(ctx: PageContext) {
             '</section>'
           : '') +
         (staff
-          ? `<section class="panel"><h2>분석 리포트 만들기</h2>${startForm('report')}${choice(
+          ? `<section id="grade-report-builder" class="panel report-builder"><h2>분석 리포트 만들기</h2><p class="workflow-description">학생과 기간을 선택하면 교사가 확정한 채점 기록으로 초안을 만듭니다.</p>${startForm('report')}${choice(
               'student',
               '학생',
               students.map((s) => s.id),
               '',
               Object.fromEntries(students.map((s) => [s.id, s.name])),
-            )}<div class="form-grid">${input('from', '기간 시작', kstDate(service.now()).slice(0, 8) + '01', 'date', 'required')}${input('to', '기간 끝 — 해당 날짜 미포함', kstDate(service.now() + 86400000), 'date', 'required')}${input('compare_from', '비교 기간 시작 — 선택', '', 'date')}${input('compare_to', '비교 기간 끝 — 해당 날짜 미포함', '', 'date')}</div><fieldset class="grade-subjects"><legend>분석 과목</legend>${subjects.map((s) => `<label><input type="checkbox" name="subject" value="${s}" checked>${subjectNames[s]}</label>`).join('')}</fieldset>${choice('attempt', '반복 풀이 집계', ['first_ever', 'latest_in_window'], 'first_ever', { first_ever: '기록된 첫 풀이', latest_in_window: '기간 내 최근 풀이' })}<button>확정 기록으로 초안 생성</button></form></section>`
+            )}<div class="report-periods"><fieldset class="report-period-group"><legend>분석 기간</legend><div class="report-period-fields">${input('from', '시작일', kstDate(service.now()).slice(0, 8) + '01', 'date', 'required')}${input('to', '종료일', kstDate(service.now() + 86400000), 'date', 'required')}</div></fieldset><fieldset class="report-period-group"><legend>비교 기간 <small>선택</small></legend><div class="report-period-fields">${input('compare_from', '시작일', '', 'date')}${input('compare_to', '종료일', '', 'date')}</div></fieldset><p class="workflow-description">분석 기간과 비교 기간의 종료일은 집계에 포함되지 않습니다.</p></div><fieldset class="grade-subjects"><legend>분석 과목</legend>${subjects.map((s) => `<label><input type="checkbox" name="subject" value="${s}" checked>${subjectNames[s]}</label>`).join('')}</fieldset>${choice('attempt', '반복 풀이 집계', ['first_ever', 'latest_in_window'], 'first_ever', { first_ever: '기록된 첫 풀이', latest_in_window: '기간 내 최근 풀이' })}<button>확정 기록으로 초안 생성</button></form></section>`
           : '')
       );
     }

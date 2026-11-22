@@ -547,7 +547,7 @@ export function renderStudentReports(
       )
       .join('')}</select></label>`;
     const period = submitted?.get('period') ?? today.slice(0, 7);
-    html += `<section class="panel report-create"><h2>월간 리포트 작성</h2>${
+    html += `<section class="panel report-create"><h2>월간 리포트 작성</h2><p class="workflow-description">학생과 분석 월을 선택하면 확정된 학습·출결 기록으로 초안이 만들어집니다.</p>${
       enrollments.length
         ? `<form method="post" action="/student-reports" class="report-create-fields">${enrollSelect}<label>분석 월<input type="month" name="period" value="${h(period)}" required></label><button type="submit" name="action" value="analyze">월간 리포트 초안 만들기</button></form>
           <details class="report-attendance-editor"${submitted?.get('action') === 'attendance' ? ' open' : ''}><summary>출결 기록 입력</summary><form method="post" action="/student-reports" class="report-create-fields">${enrollSelect}<label>날짜<input type="date" name="date" value="${h(submitted?.get('date') ?? today)}" max="${today}" required></label><label>출결<select name="status"><option value="present">출석</option><option value="late"${submitted?.get('status') === 'late' ? ' selected' : ''}>지각</option><option value="absent"${submitted?.get('status') === 'absent' ? ' selected' : ''}>결석</option></select></label><button type="submit" name="action" value="attendance">출결 저장</button></form></details>`
@@ -625,7 +625,7 @@ export function renderStudentReports(
         .join('') +
       '</nav>';
   const index =
-    '<aside class="report-index panel"><h2>월간 리포트</h2>' +
+    '<aside id="report-history" class="report-index panel"><h2>월간 리포트 목록</h2>' +
     filters +
     (visible.length
       ? '<nav class="report-index-list" aria-label="월간 리포트 목록">' +
@@ -639,8 +639,15 @@ export function renderStudentReports(
       : '<p class="muted">이 분류에 표시할 리포트가 없습니다.</p>') +
     '</aside>';
   if (!id) return html + index;
-  html +=
-    '<div class="report-workspace">' + index + '<div class="report-preview">';
+  const otherMonths =
+    family && visible.length > 1
+      ? '<a class="workspace-link report-history-link" href="#report-history">다른 달 리포트 <span aria-hidden="true">↓</span></a>'
+      : '';
+  html += family
+    ? '<div class="report-workspace report-workspace-family"><div class="report-preview">' +
+      otherMonths
+    : '<div class="report-workspace">' + index + '<div class="report-preview">';
+  const endWorkspace = '</div>' + (family ? index : '') + '</div>';
 
   const archived = samples.find((r) => r.id === id);
   if (archived)
@@ -656,7 +663,7 @@ export function renderStudentReports(
           archived.unit,
         archived.period + '-학습-리포트',
       ) +
-      '</div></div>'
+      endWorkspace
     );
 
   const r = load(ctx, id);
@@ -667,7 +674,7 @@ export function renderStudentReports(
     name + ' · ' + reportClass(r.class_id),
     r.period + '-학습-리포트',
   );
-  if (!staff(ctx)) return html + '</div></div>';
+  if (!staff(ctx)) return html + endWorkspace;
   const e = studentReportEvidence(ctx, r.student_id, r.class_id, r.period);
   const hidden = `<input type="hidden" name="id" value="${h(r.id)}"><input type="hidden" name="version" value="${r.version}">`;
   const changed = !matchesReport(ctx, r, e);
@@ -686,7 +693,7 @@ export function renderStudentReports(
     body: restoring ? (submitted.get('body') ?? saved.body) : saved.body,
     counsel: restoring ? (submitted.get('counsel') ?? r.counsel) : r.counsel,
   };
-  html += `<section class="panel report-manage"><header><h2>검토와 공개</h2><p role="status">${publication}</p></header>
+  html += `<section class="panel report-manage"><header><h2>검토와 공개</h2><p class="report-publication" role="status">${publication}</p></header>
     <form method="post" action="${h(reportLink(r.id))}" class="report-comment-editor">${hidden}<label for="report-comment">보호자에게 남길 교사 코멘트 <span>선택</span></label>
     <p id="report-comment-help">수업에서 관찰한 변화나 다음 연습을 적어 주세요. 초안에 저장하고 리포트를 승인하면 보호자에게 표시됩니다.</p>
     <textarea id="report-comment" name="comment" rows="4" maxlength="1500" aria-describedby="report-comment-help" placeholder="예: 통분은 익숙해졌어요. 이번 주에는 분수의 뺄셈을 한 번 더 연습해 주세요.">${h(editable.comment)}</textarea>
@@ -702,7 +709,7 @@ export function renderStudentReports(
         : ''
     }
     ${r.state === 'approved' ? `<form method="post" action="${h(reportLink(r.id))}">${hidden}<button class="secondary" type="submit" name="action" value="withdraw">공개 철회</button></form>` : ''}
-    <form method="post" action="${h(reportLink(r.id))}">${hidden}<input type="hidden" name="student" value="${h(r.student_id)}"><input type="hidden" name="class" value="${h(r.class_id)}"><input type="hidden" name="period" value="${h(r.period)}"><button class="secondary" type="submit" name="action" value="analyze">최신 기록으로 갱신</button><small>학습·출결 요약을 갱신합니다. 저장한 코멘트는 유지되며 다시 승인해야 공개됩니다.</small></form>
+    <form method="post" action="${h(reportLink(r.id))}" class="report-refresh">${hidden}<input type="hidden" name="student" value="${h(r.student_id)}"><input type="hidden" name="class" value="${h(r.class_id)}"><input type="hidden" name="period" value="${h(r.period)}"><button class="secondary" type="submit" name="action" value="analyze" aria-describedby="report-refresh-help">최신 기록으로 갱신</button><small id="report-refresh-help">교사 코멘트는 유지됩니다. 갱신 후 다시 승인하면 공개됩니다.</small></form>
     </div></section></div></div>`;
   return html;
 }
