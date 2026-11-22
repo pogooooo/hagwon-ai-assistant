@@ -47,7 +47,11 @@ import {
   currentDocumentRevisions,
 } from './documents.ts';
 import { scheduleDocuments, scheduleFacts } from './schedule.ts';
-import { pollScheduleEvidence } from './makeup-polls.ts';
+import {
+  pollScheduleEvidence,
+  renderMakeupAssistant,
+  submitMakeupAssistant,
+} from './makeup-polls.ts';
 import {
   escapeHtml as h,
   field,
@@ -821,6 +825,8 @@ function eligibleAssignees(ctx: PageContext, thread: Thread) {
 
 async function submitConsultation(ctx: PageContext, form: FormData) {
   const action = field(form, 'action');
+  if (ctx.url.searchParams.get('view') === 'assistant')
+    return submitMakeupAssistant(ctx, form);
   const id = field(form, 'id', 40);
   if (action === 'ask') {
     const conversationId = await ask(
@@ -982,6 +988,8 @@ function renderMessage(
 
 function renderConsultation(ctx: PageContext) {
   const { db, actor, url } = ctx;
+  if (url.searchParams.get('view') === 'assistant')
+    return renderMakeupAssistant(ctx);
   if (!isStaff(actor) && !canAskConsultation(actor))
     throw new OperationError(
       '학생, 학부모와 상담 담당자가 이용할 수 있습니다.',
@@ -1088,7 +1096,7 @@ function renderConsultation(ctx: PageContext) {
         (inbox ? 'inbox' : 'archive') +
         (status === 'all' ? '' : '&amp;status=' + encodeURIComponent(status))
       : '#consultation-history';
-  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="${listLink}">${queue && thread ? '목록으로' : '상담 목록'}</a>${own && thread ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
+  return `<div class="workspace-heading"><div><h1>${inbox ? '상담 관리' : archive ? '완료된 상담' : '학원 상담'}</h1></div><div class="actions consult-heading-actions">${actorIsStaff ? '<a class="button-link subtle-link" href="/consultation?view=assistant">AI 비서</a><a class="button-link subtle-link" href="/student-reports">교사용 상담 자료</a>' : ''}<a class="consultation-history-jump" href="${listLink}">${queue && thread ? '목록으로' : '상담 목록'}</a>${own && thread ? '<a class="button-link subtle-link" href="/consultation">새 상담</a>' : ''}</div></div>
     <div class="split consultation-layout" data-has-thread="${!!thread}" data-consultation-view="${queue ? 'queue' : 'conversation'}">
       <aside class="consultation-history" id="consultation-history" tabindex="-1">
         <h2>상담 목록</h2>

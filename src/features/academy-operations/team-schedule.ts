@@ -1,6 +1,7 @@
 import type { OperationsDatabase } from './database.ts';
 import type { SourceDocumentInput } from '../rag-consultation/server/types.ts';
 import { assertUnifiedSchedule } from './schedule-conflicts.ts';
+import { saveTeamSchedule } from './team-schedule-store.ts';
 import { assertPollSourceEditable, teamMakeupPoll } from './makeup-polls.ts';
 import { z } from 'zod';
 import {
@@ -606,25 +607,15 @@ function submit(ctx: PageContext, form: FormData, preview = false) {
         academyConfig(ctx.db, ctx.actor.academyId, config),
       );
     if (preview) return;
-    ctx.db
-      .prepare(
-        'INSERT INTO op_team_schedule VALUES (?, ?, ?, ?) ON CONFLICT(academy_id) DO UPDATE SET version=excluded.version, config=excluded.config, state=excluded.state',
-      )
-      .run(
-        ctx.actor.academyId,
-        old.version + 1,
-        JSON.stringify(config),
-        JSON.stringify(state),
-      );
-    ctx.db
-      .prepare('INSERT INTO op_team_schedule_history VALUES (?, ?, ?, ?, ?)')
-      .run(
-        ctx.actor.academyId,
-        old.version + 1,
-        ctx.actor.id,
-        JSON.stringify({ config, state }),
-        new Date().toISOString(),
-      );
+    saveTeamSchedule(
+      ctx.db,
+      ctx.actor.academyId,
+      old.version + 1,
+      ctx.actor.id,
+      config,
+      state,
+      new Date().toISOString(),
+    );
   });
 }
 
@@ -769,7 +760,7 @@ function render(ctx: PageContext) {
     "SELECT id, name FROM accounts WHERE academy_id = ? AND role IN ('admin','teacher') ORDER BY name",
     ctx.actor.academyId,
   );
-  return `<div class="page-heading"><h2>휴·보강 일정</h2><p class="muted">${staff(ctx) ? '휴강은 원장이 확정합니다. 보강 투표는 교사가 열고 학생·보호자가 직접 응답합니다.' : '취소된 수업, 보강 투표, 확정된 보강 시간·교실을 확인하세요.'}</p></div>
+  return `<div class="page-heading"><h2>휴·보강 일정</h2><p class="muted">${staff(ctx) ? 'AI 비서는 보호자 전원 동의가 모이면 일정을 반영합니다. 아래에서는 휴강을 등록하거나 진행 중인 투표를 확인할 수 있습니다.' : '취소된 수업, 보강 투표, 확정된 보강 시간·교실을 확인하세요.'}</p>${staff(ctx) ? '<a class="button-link subtle-link" href="/consultation?view=assistant">AI 비서에 휴강 요청</a>' : ''}</div>
     ${ctx.actor.role === 'admin' ? `<details class="panel" ${config.classes.length ? '' : 'open'}><summary>정규 시간표 설정 · ${config.classes.length}개 반 등록</summary><p class="muted">모든 반의 정규 수업을 등록하면 강사·교실·원생의 시간 겹침을 함께 확인할 수 있습니다.</p><ul>${academy.classes.map((c) => `<li>${h(c.name)} · ${c.days.map((d) => '일월화수목금토'[d]).join('·')} · ${h(c.start)}~${h(c.end)} · ${h(c.room)}</li>`).join('')}</ul><form method="post">${hidden}<input type="hidden" name="action" value="class-config"><div class="fields"><label>반<select name="classId">${options(classes)}</select></label><label>담당 강사<select name="teacher">${options(teachers)}</select></label><label>교실<input name="room" maxlength="60" required value="1강의실"></label><label>시작<input name="start" type="time" required></label><label>적용일<input name="effectiveFrom" type="date"></label><label>종료<input name="end" type="time" required></label><label>학원 동시 수용 인원<input name="capacity" type="number" min="1" max="1000" value="${config.capacity}" required></label><label>학원 수업 종료 한도<input name="closeTime" type="time" value="${h(config.closeTime)}" required></label></div><fieldset><legend>정규 수업 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><button>시간표 저장</button></form></details>` : ''}
     ${staff(ctx) ? `<details class="panel makeup-registration"${ctx.formError && ctx.submittedForm?.get('action') === 'create' ? ' open' : ''}><summary>휴강·결석 일정 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="create"><div class="fields"><label>반<select name="classId" required>${options(classes.filter((c) => academy.classes.some((x) => x.classId === c.id)))}</select></label><label>등록 유형<select name="scope"><option value="class">반 전체 휴강</option><option value="student">개별 학생 결석</option></select></label><label>휴강·결석일<input type="date" name="date" required></label><label>결석 학생<select name="studentId"><option value="">개별 결석일 때 선택</option>${students.map((s) => `<option value="${h(s.id)}" data-class-ids="${h(JSON.stringify(s.classIds))}">${h(s.name)}</option>`).join('')}</select></label></div><label>사유<input name="reason" maxlength="500"></label><details${ctx.submittedForm?.get('makeupDate') ? ' open' : ''}><summary>정해둔 보강 시간 추가</summary><div class="fields"><label>보강일<input type="date" name="makeupDate"></label><label>보강 시작<input type="time" name="makeupStart"></label><label>교실<select name="room">${config.rooms.map((room) => `<option>${h(room)}</option>`).join('')}</select></label></div></details><div class="actions">${ctx.actor.role === 'admin' ? '<button name="confirm" value="yes">휴강·결석 확정</button><button class="secondary" type="submit">초안 저장</button>' : '<button>원장 검토로 보내기</button>'}</div></form></details>` : ''}
     ${sessions}<div class="makeup-events">${
