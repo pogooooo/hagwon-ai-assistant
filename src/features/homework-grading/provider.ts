@@ -47,6 +47,7 @@ export interface GradeProvider {
   solvePage?(
     page: ImagePage,
     items: Item[],
+    requireVerifiedCalculation?: boolean,
   ): Promise<Map<string, PhotoSolution>>;
   report?(facts: unknown): Promise<unknown>;
 }
@@ -201,7 +202,9 @@ export function createNaverGrader(
                 unit_observed: '',
                 answer_status: 'readable',
                 printed_calculation: '',
-                bbox: [0.15, 0.2, 0.45, 0.3],
+                ...(verifyNumbers.length
+                  ? {}
+                  : { bbox: [0.15, 0.2, 0.45, 0.3] }),
               },
             ],
           },
@@ -241,11 +244,19 @@ export function createNaverGrader(
           return [];
         const observed = z
           .object({
-            answer_observed: z.string(),
+            answer_observed: z.preprocess(
+              (value) =>
+                verifyNumbers.length &&
+                typeof value === 'number' &&
+                Number.isSafeInteger(value)
+                  ? String(value)
+                  : value,
+              z.string(),
+            ),
             unit_observed: z.string().optional(),
             answer_status: z.enum(['readable', 'blank']),
             printed_calculation: z.string().max(120).optional(),
-            bbox: z.unknown(),
+            bbox: z.unknown().optional(),
           })
           .safeParse(record);
         if (!observed.success) return [];
@@ -257,7 +268,10 @@ export function createNaverGrader(
           ...(printed_calculation?.trim() ? { printed_calculation } : {}),
           item_ref: 'discovery',
           association_status: 'matched',
-          regions: [{ page_no: page.page_no, bbox }],
+          // Location still comes from the original read. The independent read verifies only literal, numbered evidence.
+          regions: verifyNumbers.length
+            ? []
+            : [{ page_no: page.page_no, bbox }],
         });
         if (!reading.success) return [];
         return [
@@ -276,7 +290,8 @@ export function createNaverGrader(
       });
       return { ...manifest, readings: firstPass };
     },
-    solvePage: (page, items) => solvePrintedItems(chat, page, items),
+    solvePage: (page, items, requireVerifiedCalculation) =>
+      solvePrintedItems(chat, page, items, requireVerifiedCalculation),
     async read(pages, assignment, mode) {
       const items: Reading[] = [];
       let lastError: GradingError | undefined;
@@ -314,7 +329,10 @@ export function createNaverGrader(
                 {
                   page_no: page.page_no,
                   instruction:
-                    'manifest의 문제마다 정확히 한 항목을 작성하세요. 각 문제에서 학생이 실제 적은 답을 찾으세요. 학생 답, Answer 같은 인쇄된 칸 이름은 답이 아닙니다. 숫자가 쓰인 칸은 숫자만 옮기고 정답을 추측하지 마세요. regions에는 문제 전체가 아닌 학생 답의 경계를 넣고 page_no는 이 요청의 page_no를 사용하세요.',
+                    'manifest의 문제마다 정확히 한 항목을 작성하세요. 각 문제에서 학생이 실제 적은 답을 찾으세요. 학생 답, Answer 같은 인쇄된 칸 이름은 답이 아닙니다. 숫자가 쓰인 칸은 숫자만 옮기고 정답을 추측하지 마세요. regions에는 문제 전체가 아닌 학생 답의 경계를 넣고 page_no는 이 요청의 page_no를 사용하세요.' +
+                    (assignment.scope
+                      ? ' 단위나 풀이 조건 없는 숫자 계산 문항은 인쇄된 식만 printed_calculation에 별도로 옮기세요. 식이 불확실하면 이 키는 생략하세요.'
+                      : ''),
                   manifest: batch.map(publicAlias),
                 },
                 page,

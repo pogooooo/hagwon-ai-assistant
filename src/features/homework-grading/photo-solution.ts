@@ -114,6 +114,7 @@ export async function solvePrintedItems(
   chat: Chat,
   page: ImagePage,
   items: Item[],
+  requireVerifiedCalculation = false,
 ) {
   const references = new Map<string, PhotoSolution>();
   const manifest = items.map((i, n) => ({
@@ -145,8 +146,10 @@ export async function solvePrintedItems(
   const questions = readQuestions.filter((q) => {
     const solution = simpleCalculation(q.problem);
     if (!solution) return true;
-    const index = manifest.findIndex((m) => m.ref === q.ref);
-    references.set(items[index].item_ref, solution);
+    if (!requireVerifiedCalculation) {
+      const index = manifest.findIndex((m) => m.ref === q.ref);
+      references.set(items[index].item_ref, solution);
+    }
     return false;
   });
   if (!questions.length) return references;

@@ -910,6 +910,7 @@ export class GradingService {
                   for (const [ref, solution] of await provider.solvePage(
                     blind,
                     group,
+                    !!a.scope,
                   )) {
                     if (group.some((d) => d.item_ref === ref))
                       solutions.set(ref, solution);
