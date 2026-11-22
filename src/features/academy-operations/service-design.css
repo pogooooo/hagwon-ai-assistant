@@ -4416,6 +4416,35 @@ a.assessment-entry.button-link {
   gap: 4px 14px;
   padding: 10px 0 15px;
 }
+.assistant-vote-times {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.assistant-vote-times > div,
+.vote-receipt {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.assistant-vote-times dt {
+  color: var(--muted);
+  font-size: 0.83rem;
+}
+.assistant-vote-times dd {
+  margin: 3px 0 0;
+  font-weight: 700;
+}
+.vote-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-block: 10px;
+  background: var(--accent-soft);
+  scroll-margin-top: 84px;
+}
 .poll-response-summary strong {
   font-size: 1.15rem;
 }
