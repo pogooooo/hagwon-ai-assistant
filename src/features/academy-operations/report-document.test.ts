@@ -1,6 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { renderReportDocument } from './report-document.ts';
+import {
+  renderOutputMarkdown,
+  renderReportDocument,
+} from './report-document.ts';
+
+test('shared output formats mixed Markdown blocks and keeps embedded HTML inert', () => {
+  const html = renderOutputMarkdown(
+    '## 확인 결과\n**분수 계산**을 다시 연습합니다.\n- 통분하기\n- 약분하기\n\n' +
+      '7. 교과서 확인\n9. 오답 다시 풀기\n\n> <script>alert(1)</script>\n\n' +
+      '| 유형 | 확인 |\n| --- | ---: |\n| 분수 | 3 |',
+  );
+  assert.match(html, /<h3>확인 결과<\/h3><p><strong>분수 계산<\/strong>/);
+  assert.match(html, /<ul><li>통분하기<\/li><li>약분하기<\/li><\/ul>/);
+  assert.match(html, /<ol><li value="7">교과서 확인<\/li><li value="9">/);
+  assert.match(html, /<blockquote><p>&lt;script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /<th scope="col">유형<\/th>[\s\S]*<td>3<\/td>/);
+});
 
 test('report Markdown renders tables and escapes edited content', () => {
   const content =

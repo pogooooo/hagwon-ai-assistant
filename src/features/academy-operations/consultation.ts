@@ -1,3 +1,4 @@
+import { renderOutputMarkdown } from './report-document.ts';
 import { accountDisplayName, isAcceptanceRecord } from './demo-presentation.ts';
 import { randomUUID } from 'node:crypto';
 import { setupKnowledge, knowledgeEvidence } from './knowledge.ts';
@@ -985,7 +986,7 @@ function renderMessage(
       ${kind === 'question' ? '' : `<strong class="message-sender">${sender}</strong>`}
       <div class="message-bubble">
         ${state ? `<span class="message-state">${h(state)}</span>` : ''}
-        <p class="preserve">${h(stale ? '자료 개정 또는 열람 범위가 변경되어 답변을 표시할 수 없습니다. 다시 질문해 주세요.' : text)}</p>
+        ${kind === 'question' ? `<p class="preserve">${h(text)}</p>` : `<div class="formatted-output">${renderOutputMarkdown(stale ? '자료 개정 또는 열람 범위가 변경되어 답변을 표시할 수 없습니다. 다시 질문해 주세요.' : text)}</div>`}
     ${
       answer?.citations.length
         ? `<details class="source-details"><summary>확인한 자료 ${answer.citations.length}개</summary><ul class="citations">${answer.citations

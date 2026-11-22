@@ -188,7 +188,12 @@ const FormControls = createGlobalStyle`
     cursor: pointer;
   }
   body[data-page] input[type='checkbox'] {
-    border-radius: 5px;
+    inline-size: 18px;
+    block-size: 18px;
+    min-inline-size: 18px;
+    min-block-size: 18px;
+    aspect-ratio: 1;
+    border-radius: 0;
   }
   body[data-page] input[type='radio'] {
     border-radius: 50%;
@@ -249,6 +254,88 @@ const FormControls = createGlobalStyle`
   }
   body[data-page] button {
     appearance: none;
+  }
+  .workspace .fields,
+  .workspace .actions:has(> label) {
+    align-items: end;
+  }
+  .workspace .check-label,
+  .workspace label:has(> input[type='checkbox']) {
+    align-items: center;
+  }
+  .workspace .compose-actions {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .workspace .compose-actions label {
+    flex: 1 1 130px;
+    flex-direction: row;
+    align-items: center;
+    white-space: nowrap;
+  }
+  .compose-actions .control-select-value {
+    white-space: normal;
+  }
+  .workspace .briefing-filters button,
+  .workspace .chat-composer .compose-actions button {
+    min-height: 44px;
+  }
+  .formatted-output {
+    display: flow-root;
+    overflow-wrap: anywhere;
+  }
+  .formatted-output > h3 {
+    padding-inline-start: 10px;
+    border-inline-start: 3px solid #839661;
+    color: #354b2a;
+  }
+  .formatted-output > :is(p, ul, ol, blockquote, .report-table) {
+    margin: 0 0 10px;
+  }
+  .formatted-output > :last-child {
+    margin-bottom: 0;
+  }
+  .formatted-output > :is(ul, ol) {
+    padding-inline-start: 22px;
+  }
+  .formatted-output li + li {
+    margin-top: 4px;
+  }
+  .formatted-output li::marker {
+    color: #5e7546;
+    font-weight: 700;
+  }
+  .formatted-output blockquote {
+    padding: 8px 11px;
+    border-inline-start: 3px solid #91a776;
+    border-radius: 0 8px 8px 0;
+    background: #edf2e2;
+    color: #384c2e;
+  }
+  .formatted-output blockquote p {
+    margin: 0;
+  }
+  .formatted-output strong {
+    color: #34482b;
+  }
+  .formatted-output code {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: #eff2e9;
+  }
+  .formatted-output .report-table {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .message-bubble .formatted-output h3 {
+    margin: 0 0 6px;
+    font-size: 14px;
+  }
+  .parent-message-body.formatted-output {
+    padding: 14px;
+    border: 1px solid var(--field-border);
+    border-radius: 10px;
+    background: #fbfcf8;
   }
   summary.control-disclosure {
     display: flex;
@@ -349,6 +436,10 @@ const FormControls = createGlobalStyle`
     height: 23px;
   }
   @media (max-width: 780px) {
+    .workspace .fields {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 138px), 1fr));
+      gap: 8px 10px;
+    }
     a.consultation-shortcut {
       inset-inline-end: max(14px, env(safe-area-inset-right));
       inset-block-end: calc(72px + env(safe-area-inset-bottom));
