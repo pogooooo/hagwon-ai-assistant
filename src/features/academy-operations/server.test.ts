@@ -903,7 +903,10 @@ test('통합 일정 경로와 관리자 설정은 로그인·동일 출처와 �
   assert.match(home.text, /\/assets\/ondap-report-mascot\.png/);
   assert.doesNotMatch(home.text, /\/assets\/(?:walnut|water)\.png/);
   const consultation = await s.send('/consultation', parent);
-  assert.match(consultation.text, /\/assets\/owl\.png/);
+  assert.match(
+    consultation.text,
+    /class="consultation-welcome"><img src="\/assets\/app-192\.png"/,
+  );
   assert.doesNotMatch(consultation.text, /\/assets\/(?:walnut|water)\.png/);
   const admin = await s.login('TA_DIRECTOR');
   const other = await s.send('/', admin);
