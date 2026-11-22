@@ -3,7 +3,10 @@ import { registerHooks } from 'node:module';
 import { test } from 'node:test';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { PDFDocument } from 'pdf-lib';
-import { workerGradingMedia } from '../../../deploy/cloudflare/grading-media.mjs';
+import {
+  workerGradingMedia,
+  workerWorkbookPhotoCrop,
+} from '../../../deploy/cloudflare/grading-media.mjs';
 import {
   configureGradingMedia,
   cropAnswer,
@@ -76,6 +79,28 @@ test('Worker grading codecs render and crop photo and PDF pixels and enforce upl
     assert.ok((await inspect(masked.bytes)).dark < before.dark - 1400);
     assert.deepEqual(await inspect(page.bytes), before);
     assert.equal(await maskStudentAnswers(page, []), null);
+  }
+  const workbookCrop = {
+    x: 35,
+    y: 25,
+    width: 45,
+    height: 35,
+    scaledWidth: 90,
+    scaledHeight: 70,
+    canvasWidth: 120,
+    canvasHeight: 100,
+    left: 15,
+    top: 15,
+    sourcePixels: 128 * 96,
+  };
+  for (const bytes of [png, canvas.toBuffer('image/jpeg')]) {
+    const pixels = await inspect(
+      await workerWorkbookPhotoCrop(bytes, workbookCrop),
+    );
+    assert.deepEqual([pixels.width, pixels.height], [120, 100]);
+    assert.ok(pixels.dark >= 6000 && pixels.dark <= 6300);
+    assert.ok(Math.abs(pixels.centerX - 60) <= 1);
+    assert.ok(Math.abs(pixels.centerY - 50) <= 1);
   }
   const exif = Buffer.from(
     'ffe1002245786966000049492a0008000000010012010300010000000600000000000000',

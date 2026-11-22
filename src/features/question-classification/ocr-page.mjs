@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { visionChat } from './read-image.mjs';
 import { ocrCacheDir } from '../rag-consultation/server/ingest/parsers/ocr.ts';
+import { imageDimensions } from '../rag-consultation/server/ingest/parsers/image.ts';
 
 // CLOVA OCR(General)로 쪽 사진의 글자를 읽고, 위치 정보로 단(왼쪽→오른쪽) 순서를 맞춘 뒤
 // 인쇄 번호에서 문항 경계를 나눈다. HCX-005 판독과 달리 결과가 결정적이고 JSON을 모델이
@@ -34,7 +35,7 @@ export async function ocrImage(source) {
       : 'jpg';
   const response = await fetch(url, {
     method: 'POST',
-    redirect: 'error',
+    redirect: 'manual',
     signal: AbortSignal.timeout(120000),
     headers: { 'Content-Type': 'application/json', 'X-OCR-SECRET': secret },
     body: JSON.stringify({
@@ -393,23 +394,57 @@ export function itemRegions(items, lines) {
 
 // 잘라 낸 문항 이미지. HCX-005는 너무 길쭉하거나 큰 이미지를 거절하므로(HTTP 400) 흰 여백으로
 // 가로세로 비율을 4:1 안에 맞추고 긴 변을 2000px 이하로 둔다.
-async function cropRegion(bytes, region, { pad = 20, scale = 1.5 } = {}) {
+let renderWorkbookCrop = async (bytes, box) => {
   const img = await loadImage(bytes);
-  const x0 = Math.max(0, region.x0 - pad);
-  const y0 = Math.max(0, region.y0 - pad);
-  const w = Math.min(img.width, region.x1 + pad) - x0;
-  const h = Math.min(img.height, region.y1 + pad) - y0;
-  const s = Math.min(scale, 2000 / Math.max(w, h));
-  const sw = Math.round(w * s);
-  const sh = Math.round(h * s);
-  const cw = Math.max(sw, Math.ceil(sh / 4), 64);
-  const ch = Math.max(sh, Math.ceil(sw / 4), 64);
-  const canvas = createCanvas(cw, ch);
+  const canvas = createCanvas(box.canvasWidth, box.canvasHeight);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, cw, ch);
-  ctx.drawImage(img, x0, y0, w, h, (cw - sw) / 2, (ch - sh) / 2, sw, sh);
-  return { bytes: canvas.toBuffer('image/png'), mime: 'image/png' };
+  ctx.fillRect(0, 0, box.canvasWidth, box.canvasHeight);
+  ctx.drawImage(
+    img,
+    box.x,
+    box.y,
+    box.width,
+    box.height,
+    box.left,
+    box.top,
+    box.scaledWidth,
+    box.scaledHeight,
+  );
+  return canvas.toBuffer('image/png');
+};
+
+export function configureWorkbookPhotoCrop(render) {
+  renderWorkbookCrop = render;
+}
+
+async function cropRegion(bytes, region) {
+  const size = imageDimensions(bytes);
+  if (!size) throw Error('문항 이미지 크기를 읽지 못함');
+  const x = Math.max(0, Math.floor(region.x0 - 20));
+  const y = Math.max(0, Math.floor(region.y0 - 20));
+  const width = Math.min(size.width, Math.ceil(region.x1 + 20)) - x;
+  const height = Math.min(size.height, Math.ceil(region.y1 + 20)) - y;
+  if (width < 1 || height < 1) throw Error('문항 이미지 영역이 비어 있음');
+  const scale = Math.min(1.5, 2000 / Math.max(width, height));
+  const scaledWidth = Math.max(1, Math.round(width * scale));
+  const scaledHeight = Math.max(1, Math.round(height * scale));
+  const canvasWidth = Math.max(scaledWidth, Math.ceil(scaledHeight / 4), 64);
+  const canvasHeight = Math.max(scaledHeight, Math.ceil(scaledWidth / 4), 64);
+  const rendered = await renderWorkbookCrop(bytes, {
+    x,
+    y,
+    width,
+    height,
+    scaledWidth,
+    scaledHeight,
+    canvasWidth,
+    canvasHeight,
+    left: Math.floor((canvasWidth - scaledWidth) / 2),
+    top: Math.floor((canvasHeight - scaledHeight) / 2),
+    sourcePixels: size.width * size.height,
+  });
+  return { bytes: Buffer.from(rendered), mime: 'image/png' };
 }
 
 const ITEM_PROMPT =

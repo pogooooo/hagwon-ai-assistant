@@ -77,7 +77,7 @@ export async function visionChat(filename, prompt, { maxTokens = 800 } = {}) {
     'https://clovastudio.stream.ntruss.com/v3/chat-completions/' + model,
     {
       method: 'POST',
-      redirect: 'error',
+      redirect: 'manual',
       signal: AbortSignal.timeout(120000),
       headers: {
         Authorization: 'Bearer ' + key,

@@ -13,9 +13,14 @@ import { runParentMessageJobs } from '../../src/features/academy-operations/pare
 import { gradingService } from '../../src/features/homework-grading/module.ts';
 
 import { configureGradingMedia } from '../../src/features/homework-grading/media.ts';
-import { workerGradingMedia } from './grading-media.mjs';
+import { configureWorkbookPhotoCrop } from '../../src/features/question-classification/ocr-page.mjs';
+import {
+  workerGradingMedia,
+  workerWorkbookPhotoCrop,
+} from './grading-media.mjs';
 
 configureGradingMedia(workerGradingMedia);
+configureWorkbookPhotoCrop(workerWorkbookPhotoCrop);
 
 const fixtureRoot = '/bundle/academies/';
 
