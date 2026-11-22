@@ -833,6 +833,35 @@ export class GradingService {
               return [{ ...reading.answer, item_ref: item.item_ref }];
             });
           }
+          for (const page of pages) {
+            const printed = worksheetPrint.get(page.page_no);
+            if (!printed || !provider.discoverPage) continue;
+            readSubmission(ctx, id);
+            this.open(this.current(id));
+            try {
+              const located = await provider.discoverPage(
+                page,
+                printed.numbers.map(String),
+                'located_answer',
+              );
+              for (const item of a.items) {
+                if (item.expected_page_no !== page.page_no) continue;
+                const match = located.readings?.find(
+                  ({ number }) => String(number) === item.item_no,
+                );
+                if (match?.answer.regions.length)
+                  readings.push({ ...match.answer, item_ref: item.item_ref });
+              }
+            } catch (error) {
+              if (
+                !(error instanceof GradingError) ||
+                !['PHOTO_SCOPE_UNCLEAR', 'PROVIDER_INVALID_OUTPUT'].includes(
+                  error.code,
+                )
+              )
+                throw error;
+            }
+          }
           const recognized = new Set(readings.map((r) => r.item_ref));
           const remaining = a.items.filter((i) => !recognized.has(i.item_ref));
           if (remaining.length) {

@@ -323,6 +323,14 @@ test('worksheet grading uses actual labels, print agreement and a separate handw
           { number: 3, expression: '17 + 2' },
           { number: 3 },
         ];
+      } else if (data.verifyNumbers && data.format.readings[0].bbox) {
+        passes.push('locate');
+        assert.deepEqual(data.verifyNumbers, numbers);
+        content = numbers.map((number, index) => ({
+          number,
+          answer_observed: observed[index],
+          bbox: [0.1, 0.1, 0.3, 0.2],
+        }));
       } else if (data.verifyNumbers) {
         passes.push('verify');
         assert.deepEqual(data.verifyNumbers, numbers);
@@ -370,7 +378,7 @@ test('worksheet grading uses actual labels, print agreement and a separate handw
   ]);
   await f.service.process(student, submission_id);
   const draft = await f.service.draft(f.ctx(), submission_id);
-  assert.deepEqual(passes, ['print', 'print', 'print', 'read', 'verify']);
+  assert.deepEqual(passes, ['print', 'print', 'print', 'locate', 'verify']);
   assert.deepEqual(
     draft.items.map((item) => item.proposed.outcome),
     ['correct', 'ungradable', 'ungradable'],
