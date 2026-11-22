@@ -25,6 +25,12 @@ import {
   studentReportEvidence,
 } from './student-reports.ts';
 import { emptyState, createEvent } from '../makeup-schedule/model/schedule.ts';
+import {
+  addDays,
+  dayOfWeek,
+  kstDateOf,
+} from '../makeup-schedule/model/time.ts';
+import { parseMakeupRequest } from './makeup-assistant-intent.ts';
 import type {
   AcademyConfig,
   ScheduleState,
@@ -152,6 +158,178 @@ test('missing and all-unavailable never produce an approval; complete ranks pref
   data.options[1] = { ...data.options[0] };
   assert.equal(pollChoices(data).choices.length, 0);
 });
+
+test('staff requests resolve a single class and date, and ask for clarification when ambiguous', () => {
+  const today = '2026-11-22';
+  const classes = [
+    { id: 'math', name: '중2 A반' },
+    { id: 'other', name: '고1 A반' },
+  ];
+  assert.deepEqual(
+    parseMakeupRequest('다음 주 수요일 중2 A반 휴강할게요.', classes, today),
+    { classId: 'math', date: '2026-11-25' },
+  );
+  assert.deepEqual(
+    parseMakeupRequest(
+      '11월 25일 A반 휴강 예정이에요',
+      classes.slice(0, 1),
+      today,
+    ),
+    { classId: 'math', date: '2026-11-25' },
+  );
+  assert.throws(
+    () => parseMakeupRequest('내일 A반 휴강', classes, today),
+    /반 이름을 하나만/,
+  );
+  assert.throws(
+    () => parseMakeupRequest('11월 25일 중2 A반 휴강 안 해요', classes, today),
+    /휴강할 반과 날짜/,
+  );
+  assert.throws(
+    () =>
+      parseMakeupRequest(
+        '11월 23일 또는 11월 25일 중2 A반 휴강',
+        classes,
+        today,
+      ),
+    /날짜를 하나만/,
+  );
+});
+
+for (const caseName of [
+  'unanimous',
+  'declined',
+  'changed schedule',
+  'previously confirmed',
+] as const)
+  test(
+    'staff assistant votes update the calendar safely: ' + caseName,
+    async (t) => {
+      const today = kstDateOf(Date.now());
+      const date = addDays(today, (8 - dayOfWeek(today)) % 7 || 7);
+      const s = setup(t, date);
+      if (caseName !== 'previously confirmed')
+        s.db
+          .prepare('UPDATE op_team_schedule SET state=? WHERE academy_id=?')
+          .run(JSON.stringify(emptyState()), 'AC_TEST_A');
+      const schedule = () =>
+        JSON.parse(
+          String(
+            s.db
+              .prepare('SELECT state FROM op_team_schedule WHERE academy_id=?')
+              .get('AC_TEST_A')!.state,
+          ),
+        ) as ScheduleState;
+      const original = JSON.stringify(schedule());
+      const assistant = s.ctx('TA_TEACHER', '/consultation?view=assistant');
+      const ask = form({
+        action: 'makeup_request',
+        question: date + ' 초등 수학반 휴강할게요.',
+      });
+      await assert.rejects(
+        async () =>
+          consultationModule.submit(
+            s.ctx('TA_GUARDIAN_E_MATH', '/consultation?view=assistant'),
+            ask,
+          ),
+        /교사와 원장이/,
+      );
+      const preview = await consultationModule.submit(assistant, ask);
+      assert.match(String(preview), /view=assistant&poll=/);
+      assert.equal(JSON.stringify(schedule()), original);
+      assert.equal(s.row().state, 'draft');
+      const reply = await consultationModule.render(
+        s.ctx('TA_TEACHER', String(preview)),
+      );
+      assert.match(reply, /보호자에게 투표를 보낼까요/);
+      const vote = await consultationModule.submit(
+        assistant,
+        form({
+          action: 'assistant_publish',
+          id: s.row().id,
+          version: String(s.row().version),
+          option: '0',
+        }),
+      );
+      assert.equal(JSON.stringify(schedule()), original);
+      assert.match(String(vote), /\/makeup-votes\?id=/);
+      assert.equal(s.row().state, 'open');
+      const slot = JSON.parse(s.row().payload).options[0];
+      const version = String(s.row().version);
+      assert.match(
+        pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')),
+        /가능 여부 응답/,
+      );
+      assert.equal(pendingMakeupNotices(s.ctx('TA_STUDENT_001')), '');
+      assert.throws(
+        () =>
+          s.submit(
+            'assistant_vote',
+            { answer: 'yes', version },
+            'TA_STUDENT_001',
+          ),
+        /접근|보호자만/,
+      );
+      const first = await s.submit(
+        'assistant_vote',
+        { answer: 'yes', version },
+        'TA_GUARDIAN_E_MATH',
+      );
+      assert.match(String(first), /#vote-receipt$/);
+      assert.match(
+        await makeupPollsModule.render(
+          s.ctx('TA_GUARDIAN_E_MATH', String(vote)),
+        ),
+        /응답 저장 완료/,
+      );
+      assert.match(
+        pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')),
+        /최근 보강 투표[\s\S]*응답 저장 완료/,
+      );
+      assert.equal(JSON.stringify(schedule()), original);
+      if (caseName === 'changed schedule') {
+        s.config.holidays[slot.date] = '추가 휴일';
+        s.db
+          .prepare('UPDATE op_team_schedule SET config=? WHERE academy_id=?')
+          .run(JSON.stringify(s.config), 'AC_TEST_A');
+      }
+      const answer = caseName === 'declined' ? 'no' : 'yes';
+      await s.submit('assistant_vote', { answer, version }, 'TA_GUARDIAN_M2');
+      const result = await makeupPollsModule.render(
+        s.ctx('TA_GUARDIAN_M2', String(vote)),
+      );
+      assert.match(result, /2\/2명 응답/);
+      assert.match(result, /응답 저장 완료/);
+      if (caseName === 'declined' || caseName === 'changed schedule') {
+        assert.equal(s.row().state, 'open');
+        assert.match(result, /전원 응답 완료/);
+        assert.equal(JSON.stringify(schedule()), original);
+        return;
+      }
+      assert.match(result, /보강 확정/);
+      assert.equal(s.row().state, 'approved');
+      assert.equal(schedule().events.length, 1);
+      assert.equal(schedule().events[0].date, date);
+      assert.deepEqual(schedule().events[0].makeup, slot);
+      assert.equal(
+        s.db.prepare('SELECT COUNT(*) n FROM op_makeup_sessions').get()?.n,
+        0,
+      );
+      const revision = s.row().version;
+      await s.submit(
+        'assistant_vote',
+        { answer: 'yes', version },
+        'TA_GUARDIAN_M2',
+      );
+      assert.equal(s.row().version, revision);
+      await s.submit('cancel', {}, 'TA_TEACHER');
+      assert.equal(s.row().state, 'cancelled');
+      assert.equal(
+        schedule().events[0].status,
+        caseName === 'previously confirmed' ? 'confirmed' : 'withdrawn',
+      );
+    },
+  );
 test('recommend → teacher selects → own-student votes → teacher approval → calendar; replay rejected', async (t) => {
   const s = setup(t);
   s.start();
