@@ -258,6 +258,11 @@ for (const caseName of [
       assert.equal(s.row().state, 'open');
       const slot = JSON.parse(s.row().payload).options[0];
       const version = String(s.row().version);
+      const receiptUrl = `/makeup-votes?submitted=${encodeURIComponent(s.row().id)}#vote-receipt`;
+      assert.doesNotMatch(
+        await makeupPollsModule.render(s.ctx('TA_GUARDIAN_E_MATH', receiptUrl)),
+        /응답 저장 완료/,
+      );
       assert.match(
         pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')),
         /가능 여부 응답/,
@@ -277,16 +282,23 @@ for (const caseName of [
         { answer: 'yes', version },
         'TA_GUARDIAN_E_MATH',
       );
-      assert.match(String(first), /#vote-receipt$/);
+      assert.equal(first, receiptUrl);
+      const saved = await makeupPollsModule.render(
+        s.ctx('TA_GUARDIAN_E_MATH', String(first)),
+      );
+      assert.match(saved, /응답 저장 완료[\s\S]*가능으로 응답했습니다/);
+      assert.match(saved, /응답할 보강 투표가 없습니다/);
+      assert.doesNotMatch(saved, /name="answer"|보강 확정/);
+      assert.equal(pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')), '');
+      assert.match(
+        pendingMakeupNotices(s.ctx('TA_GUARDIAN_M2')),
+        /가능 여부 응답/,
+      );
       assert.match(
         await makeupPollsModule.render(
           s.ctx('TA_GUARDIAN_E_MATH', String(vote)),
         ),
         /응답 저장 완료/,
-      );
-      assert.match(
-        pendingMakeupNotices(s.ctx('TA_GUARDIAN_E_MATH')),
-        /최근 보강 투표[\s\S]*응답 저장 완료/,
       );
       assert.equal(JSON.stringify(schedule()), original);
       if (caseName === 'changed schedule') {
@@ -296,19 +308,32 @@ for (const caseName of [
           .run(JSON.stringify(s.config), 'AC_TEST_A');
       }
       const answer = caseName === 'declined' ? 'no' : 'yes';
-      await s.submit('assistant_vote', { answer, version }, 'TA_GUARDIAN_M2');
+      const second = await s.submit(
+        'assistant_vote',
+        { answer, version },
+        'TA_GUARDIAN_M2',
+      );
+      const receipt = await makeupPollsModule.render(
+        s.ctx('TA_GUARDIAN_M2', String(second)),
+      );
+      assert.match(receipt, /응답 저장 완료/);
+      assert.match(receipt, /응답할 보강 투표가 없습니다/);
+      assert.doesNotMatch(receipt, /name="answer"/);
+      assert.equal(pendingMakeupNotices(s.ctx('TA_GUARDIAN_M2')), '');
       const result = await makeupPollsModule.render(
         s.ctx('TA_GUARDIAN_M2', String(vote)),
       );
       assert.match(result, /2\/2명 응답/);
       assert.match(result, /응답 저장 완료/);
       if (caseName === 'declined' || caseName === 'changed schedule') {
+        assert.doesNotMatch(receipt, /보강 확정 · 학원 일정 보기/);
         assert.equal(s.row().state, 'open');
         assert.match(result, /전원 응답 완료/);
         assert.equal(JSON.stringify(schedule()), original);
         return;
       }
       assert.match(result, /보강 확정/);
+      assert.match(receipt, /보강 확정 · 학원 일정 보기/);
       assert.equal(s.row().state, 'approved');
       assert.equal(schedule().events.length, 1);
       assert.equal(schedule().events[0].date, date);

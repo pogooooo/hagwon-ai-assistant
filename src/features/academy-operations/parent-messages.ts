@@ -107,7 +107,7 @@ function renderParentMessages(ctx: PageContext) {
       : stored;
   const classOptions = (value = '') =>
     `<option value="">전체 수강 반</option>${classes.map((c) => `<option value="${h(c.id)}"${c.id === value ? ' selected' : ''}>${h(c.name)}</option>`).join('')}`;
-  const nav = `<nav class="page-tabs parent-message-tabs" aria-label="알림 관리"><a href="/messages"${view === 'monthly' ? ' aria-current="page"' : ''}>정기 리포트</a><a href="/messages?view=notice"${view === 'notice' ? ' aria-current="page"' : ''}>새 안내</a><a href="/messages?view=history"${view === 'history' ? ' aria-current="page"' : ''}>발송 내역</a></nav>`;
+  const nav = `<nav class="page-tabs parent-message-tabs" aria-label="알림 관리"><a href="/messages"${view === 'monthly' ? ' aria-current="page"' : ''}>정기 리포트</a><a href="/messages?view=notice"${view === 'notice' ? ' aria-current="page"' : ''}>새 공지</a><a href="/messages?view=history"${view === 'history' ? ' aria-current="page"' : ''}>발송 내역</a></nav>`;
   if (selected)
     return (
       heading +
