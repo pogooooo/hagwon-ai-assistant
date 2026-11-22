@@ -317,7 +317,7 @@ test('worksheet grading uses actual labels, print agreement and a separate handw
       if (data.example) {
         passes.push('print');
         content = [
-          { number: '2.', expression: 'Calculate 4 x 6.' },
+          { number: passes.length === 1 ? 2.4 : '2.', expression: '4 x 6' },
           { number: '5번', expression: '15 - 4' },
           { number: '8)', expression: passes.length === 1 ? '8 + 4' : '9 + 3' },
           { number: 3, expression: '17 + 2' },

@@ -193,16 +193,34 @@ export function createNaverGrader(
     modelId: 'clova:HCX-005+HCX-007',
     inputAllowed: allowed,
     async readWorksheetPrint(page) {
-      const label = z.preprocess(
-        (value) =>
-          typeof value === 'string'
-            ? value
-                .trim()
-                .replace(/(?:[.)]|번)$/u, '')
-                .trim()
-            : value,
-        printedItemNumber,
-      );
+      const printNumber = (record: unknown) => {
+        const parsed = z
+          .object({
+            number: z.union([z.number(), z.string()]),
+            expression: z.string().optional(),
+          })
+          .safeParse(record);
+        if (!parsed.success) return;
+        const { number, expression } = parsed.data;
+        const label = String(number)
+          .trim()
+          .replace(/(?:[.)]|번)$/u, '')
+          .trim();
+        const standalone = printedItemNumber.safeParse(label);
+        if (standalone.success) return standalone.data;
+        // Only recover a fused label when its suffix is also the exact start of the separate expression.
+        const fused = /^(\d{1,3})\.(\d+(?:\s*\/\s*\d+)?)$/u.exec(label);
+        if (!fused || !expression) return;
+        const tail = fused[2].replace(/\s/gu, '');
+        const source = expression.trim().replace(/\s/gu, '');
+        if (
+          source.slice(0, tail.length) !== tail ||
+          !/^[-+*/=xX×÷−]/u.test(source.slice(tail.length))
+        )
+          return;
+        const recovered = printedItemNumber.safeParse(fused[1]);
+        return recovered.data;
+      };
       const read = async (image: ImagePage, partial: boolean) => {
         const output = await chat(
           'HCX-005',
@@ -214,6 +232,16 @@ export function createNaverGrader(
             example: [{ number: 22, expression: '8 + 4' }],
           },
           image,
+          undefined,
+          (json) =>
+            JSON.parse(
+              repairJsonText(
+                json.replace(
+                  /("number"\s*:\s*)(\d{1,3}\.\d+\s*\/\s*\d+)(?=\s*[,}])/gu,
+                  '$1"$2"',
+                ),
+              ),
+            ) as unknown,
         );
         const records = parse(
           z.preprocess(
@@ -225,16 +253,13 @@ export function createNaverGrader(
           ),
           output,
         );
-        const numbered = records.map((record) =>
-          z.object({ number: label }).safeParse(record),
-        );
+        const numbered = records.map(printNumber);
         const unique = new Map<number, string>();
         for (const [index, record] of records.entries()) {
-          const number = numbered[index].data?.number;
+          const number = numbered[index];
           if (
             !number ||
-            numbered.filter((entry) => entry.data?.number === number).length !==
-              1
+            numbered.filter((entry) => entry === number).length !== 1
           )
             continue;
           const parsed = z
@@ -274,21 +299,25 @@ export function createNaverGrader(
       } finally {
         for (const crop of crops) if (crop !== page) crop.bytes.fill(0);
       }
-      for (const [number, expression] of whole) {
+      const stripInvalidLabel = (number: number, value: string) => {
+        if (solveVerifiedCalculation(value, value)) return value;
+        const prefix = /^\s*(\d{1,3})[.)]\s*/u.exec(value);
+        if (!prefix || Number(prefix[1]) !== number) return value;
+        const unlabelled = value.slice(prefix[0].length);
+        return solveVerifiedCalculation(unlabelled, unlabelled)
+          ? unlabelled
+          : value;
+      };
+      for (const [number, original] of whole) {
+        const expression = stripInvalidLabel(number, original);
         if (solveVerifiedCalculation(expression, expression))
           arithmetic.add(number);
-        const seen = corroboration.get(number)?.flatMap((candidate) => {
-          if (solveVerifiedCalculation(candidate, candidate))
-            return [candidate];
-          // OCR can fuse the question label and a decimal (2.4.2 - 6).
-          // Only remove that label if the original is invalid and the rest exactly matches the full page.
-          const prefix = /^\s*(\d{1,3})[.)]\s*/u.exec(candidate);
-          if (Number(prefix?.[1]) !== number || !prefix) return [];
-          const unlabelled = candidate.slice(prefix[0].length);
-          return solveVerifiedCalculation(expression, unlabelled)
-            ? [unlabelled]
-            : [];
-        });
+        const seen = corroboration
+          .get(number)
+          ?.map((candidate) => stripInvalidLabel(number, candidate))
+          .filter((candidate) =>
+            solveVerifiedCalculation(candidate, candidate),
+          );
         if (!seen?.length) continue;
         const solution = solveVerifiedCalculation(expression, seen[0]);
         if (
