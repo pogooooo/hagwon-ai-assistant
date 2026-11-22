@@ -1,5 +1,89 @@
 import { escapeHtml as h } from './shared.ts';
 
+const teacherCommentHeading = '## 교사 코멘트';
+
+export function reportTeacherComment(body: string) {
+  const section =
+    /^## 교사 코멘트[ \t]*(?:\r?\n|$)([\s\S]*?)(?=^#{1,2} |(?![\s\S]))/mu.exec(
+      body,
+    );
+  return section
+    ? {
+        body: (
+          body.slice(0, section.index) +
+          body.slice(section.index + section[0].length)
+        ).trim(),
+        comment: section[1].trim(),
+      }
+    : { body, comment: '' };
+}
+
+export function withTeacherComment(body: string, comment: string) {
+  return comment
+    ? [
+        body,
+        teacherCommentHeading,
+        comment.replace(/^[ \t]*(?=#{1,3} )/gmu, '· '),
+      ].join('\n\n')
+    : body;
+}
+
+function cells(line: string) {
+  return line
+    .slice(1, -1)
+    .split('|')
+    .map((text) => text.trim());
+}
+
+function learningBars(lines: string[]) {
+  if (cells(lines[0]).join('|') !== '학습 유형|정답|전체') return '';
+  const values = lines.slice(2).map((line) => {
+    const [label, correct, total, ...remainder] = cells(line);
+    if (
+      !label ||
+      remainder.length ||
+      !/^\d+$/u.test(correct) ||
+      !/^\d+$/u.test(total)
+    )
+      return;
+    return { label, correct: Number(correct), total: Number(total) };
+  });
+  if (
+    values.some(
+      (v) =>
+        !v || !Number.isSafeInteger(v.total) || !v.total || v.correct > v.total,
+    )
+  )
+    return '';
+  return (
+    '<ul class="report-meters" aria-label="유형별 정답률">' +
+    values
+      .map((v) => {
+        const { label, correct, total } = v!;
+        const percent = Math.round((100 * correct) / total);
+        return (
+          '<li><span class="report-meter-label">' +
+          h(label) +
+          '</span><strong>' +
+          correct +
+          ' / ' +
+          total +
+          '문항</strong><meter min="0" max="' +
+          total +
+          '" value="' +
+          correct +
+          '" aria-label="' +
+          h(label + ' 정답률') +
+          '"></meter><span class="report-meter-rate">' +
+          percent +
+          '%</span></li>'
+        );
+      })
+      .join('') +
+    '</ul>'
+  );
+}
+
 /** A small Markdown subset. Report fields and edited content are always escaped. */
 export function renderReportDocument(
   title: string,
@@ -8,7 +92,8 @@ export function renderReportDocument(
   filename: string,
 ) {
   const markdown = body.startsWith('# ') ? body : '# ' + title + '\n\n' + body;
-  const blocks = markdown
+  const { body: reportBody, comment } = reportTeacherComment(markdown);
+  const blocks = reportBody
     .replace(/^# [^\n]*\n*/, '')
     .trim()
     .split(/\r?\n\s*\r?\n/);
@@ -38,11 +123,10 @@ export function renderReportDocument(
         divider.test(lines[1]) &&
         lines.every((line) => line.startsWith('|') && line.endsWith('|'))
       ) {
+        const visual = learningBars(lines);
         const row = (line: string, tag: 'th' | 'td') =>
           '<tr>' +
-          line
-            .slice(1, -1)
-            .split('|')
+          cells(line)
             .map(
               (cell) =>
                 '<' +
@@ -56,7 +140,7 @@ export function renderReportDocument(
             )
             .join('') +
           '</tr>';
-        return (
+        const table =
           '<div class="report-table"><table><thead>' +
           row(lines[0], 'th') +
           '</thead><tbody>' +
@@ -64,9 +148,33 @@ export function renderReportDocument(
             .slice(2)
             .map((line) => row(line, 'td'))
             .join('') +
-          '</tbody></table></div>'
-        );
+          '</tbody></table></div>';
+        return visual
+          ? visual +
+              '<details class="report-values"><summary>수치 표로 보기</summary>' +
+              table +
+              '</details>'
+          : table;
       }
+      const counts =
+        /^(?:출결 기록:\s*)?출석 (\d+)(?:건|회) · 지각 (\d+)(?:건|회) · 결석 (\d+)(?:건|회)$/u.exec(
+          block,
+        );
+      if (counts)
+        return (
+          '<dl class="report-attendance">' +
+          ['출석', '지각', '결석']
+            .map(
+              (label, i) =>
+                '<div><dt>' +
+                label +
+                '</dt><dd>' +
+                counts[i + 1] +
+                '회</dd></div>',
+            )
+            .join('') +
+          '</dl>'
+        );
       if (lines.every((line) => line.startsWith('- ')))
         return (
           '<ul>' +
@@ -100,6 +208,14 @@ export function renderReportDocument(
       : '') +
     '<div class="report-document-body">' +
     content +
+    (comment
+      ? '<section class="report-teacher-note"><h3>교사 코멘트</h3>' +
+        comment
+          .split(/\r?\n\s*\r?\n/u)
+          .map((text) => '<p>' + h(text) + '</p>')
+          .join('') +
+        '</section>'
+      : '') +
     '</div><details class="report-save"><summary>리포트 저장</summary><a class="button-link subtle-link" download="' +
     h(filename) +
     '.md" href="data:text/markdown;charset=utf-8,' +

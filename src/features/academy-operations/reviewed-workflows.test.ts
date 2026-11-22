@@ -514,6 +514,16 @@ test('HTTP routes require login and reject student report access and guardian ap
   );
   const student = await login('TA_STUDENT_001');
   assert.equal((await send('/student-reports', student)).status, 403);
+  const teacher = await login('TA_TEACHER');
+  const invalidReport = await send('/student-reports', teacher, {
+    action: 'analyze',
+    enrollment: 'TA_STU_001:TA_E_MATH',
+    period: '2026-13',
+  });
+  assert.equal(invalidReport.status, 400);
+  const invalidHtml = await invalidReport.text();
+  assert.match(invalidHtml, /role="alert">분석 월을 확인/);
+  assert.match(invalidHtml, /월간 리포트 초안 만들기/);
 });
 test('stale versions, duplicate ranks and changed closure are rejected', (t) => {
   const s = setup(t);
@@ -550,10 +560,12 @@ test('stale versions, duplicate ranks and changed closure are rejected', (t) => 
 test('report drafts stay private, absence of evidence explicit; approval/edit/revocation and source changes enforced', async (t) => {
   const s = setup(t),
     base = { student: 'TA_STU_001', class: 'TA_E_MATH', period: '2026-11' };
-  await studentReportsModule.submit(
-    s.ctx(),
-    form({ action: 'analyze', ...base }),
-  );
+  const firstRequest = form({
+    action: 'analyze',
+    enrollment: 'TA_STU_001:TA_E_MATH',
+    period: base.period,
+  });
+  const firstUrl = await studentReportsModule.submit(s.ctx(), firstRequest);
   const report = () =>
     s.db.prepare('SELECT * FROM op_student_reports').get() as {
       id: string;
@@ -570,6 +582,16 @@ test('report drafts stay private, absence of evidence explicit; approval/edit/re
       }),
     );
   const url = () => '/student-reports?id=' + report().id;
+  assert.equal(firstUrl, url());
+  assert.equal(
+    await studentReportsModule.submit(s.ctx(), firstRequest),
+    firstUrl,
+  );
+  assert.equal(report().version, 1);
+  assert.equal(
+    s.db.prepare('SELECT COUNT(*) n FROM op_student_report_history').get()?.n,
+    1,
+  );
   assert.match(
     await studentReportsModule.render(s.ctx('TA_TEACHER', url())),
     /채점 기록이 없습니다/,
@@ -597,12 +619,25 @@ test('report drafts stay private, absence of evidence explicit; approval/edit/re
   await write('save', {
     body: '가상학생 A · 확인된 지각 기록 1건',
     counsel: '교사 전용 상담 초안',
+    comment: '다음에는 통분 과정을 한 줄 더 적어 봅시다.',
   });
+  assert.match(
+    await studentReportsModule.render(
+      s.ctx('TA_TEACHER', url() + '&status=draft'),
+    ),
+    /보호자에게 남길 교사 코멘트/,
+  );
+  assert.throws(
+    () => studentReportsModule.render(s.ctx('TA_GUARDIAN_E_MATH', url())),
+    /승인/,
+  );
   await write('approve', { reviewed: 'yes' });
   const guardian = await studentReportsModule.render(
     s.ctx('TA_GUARDIAN_E_MATH', url()),
   );
   assert.match(guardian, /확인된 지각/);
+  assert.match(guardian, /다음에는 통분 과정을 한 줄 더 적어 봅시다/);
+  assert.doesNotMatch(guardian, /report-comment-editor/);
   assert.doesNotMatch(guardian, /교사 전용 상담 초안/);
   assert.throws(
     () => studentReportsModule.render(s.ctx('TA_GUARDIAN_M2', url())),
@@ -620,6 +655,11 @@ test('report drafts stay private, absence of evidence explicit; approval/edit/re
       }),
     );
   const approvedVersion = report().version;
+  assert.equal(
+    await studentReportsModule.submit(s.ctx(), firstRequest),
+    firstUrl,
+  );
+  assert.equal(report().version, approvedVersion);
   await recordAttendance('late');
   assert.equal(report().version, approvedVersion);
   await recordAttendance('present');
@@ -631,6 +671,14 @@ test('report drafts stay private, absence of evidence explicit; approval/edit/re
   assert.throws(
     () => studentReportsModule.render(s.ctx('TA_GUARDIAN_E_MATH', url())),
     /승인/,
+  );
+  await studentReportsModule.submit(
+    s.ctx('TA_TEACHER'),
+    form({ action: 'analyze', ...base, version: String(report().version) }),
+  );
+  assert.match(
+    await studentReportsModule.render(s.ctx('TA_TEACHER', url())),
+    /다음에는 통분 과정을 한 줄 더 적어 봅시다/,
   );
   await write('approve', { reviewed: 'yes' });
   await write('save', { body: '수정됨', counsel: '교사 전용' });

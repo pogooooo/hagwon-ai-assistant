@@ -30,3 +30,21 @@ test('canonical monthly report puts achievement and practice above the evidence'
   assert.ok(html.indexOf('report-save') > html.indexOf('report-table'));
   assert.ok(html.includes(encodeURIComponent(markdown)));
 });
+
+test('charts show original counts while the saved Markdown preserves the table and teacher note', () => {
+  const markdown =
+    '# 월간 리포트\n\n## 성취도\n\n4 / 5문항 정답\n\n' +
+    '| 학습 유형 | 정답 | 전체 |\n| --- | ---: | ---: |\n| 분수 | 4 | 5 |\n\n' +
+    '## 교사 코멘트\n\n다음에는 <강조> 통분부터 확인합니다.\n\n' +
+    '## 출결\n\n출석 3회 · 지각 1회 · 결석 0회';
+  const html = renderReportDocument('학습 리포트', markdown, '수학', 'monthly');
+  assert.match(
+    html,
+    /<meter min="0" max="5" value="4" aria-label="분수 정답률">/,
+  );
+  assert.match(html, /report-meter-rate">80%/);
+  assert.match(html, /<summary>수치 표로 보기<\/summary>/);
+  assert.match(html, /<dt>지각<\/dt><dd>1회/);
+  assert.match(html, /report-teacher-note[\s\S]*&lt;강조&gt;/);
+  assert.ok(html.includes(encodeURIComponent(markdown)));
+});
