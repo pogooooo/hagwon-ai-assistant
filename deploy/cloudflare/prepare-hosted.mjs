@@ -1,6 +1,7 @@
 import { appendFileSync, cpSync, mkdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { renderFormControlStyles } from '../../src/features/academy-operations/form-control-styles.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const source = join(root, 'src/features/academy-operations');
@@ -29,6 +30,10 @@ for (const name of [
 ]) {
   cpSync(join(source, name), join(assets, name), { recursive: true });
 }
+appendFileSync(
+  join(assets, 'service-design.css'),
+  '\n' + renderFormControlStyles(),
+);
 cpSync(
   join(root, 'src/features/makeup-schedule/academies/AC_TEST_A'),
   join(modules, 'academies/AC_TEST_A'),

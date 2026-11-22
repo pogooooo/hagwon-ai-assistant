@@ -3,6 +3,16 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { serviceNavigation } from './service-navigation.ts';
+import { renderFormControlStyles } from './form-control-styles.mjs';
+
+test('the shared field stylesheet compiles to CSS for both local and hosted assets', () => {
+  const css = renderFormControlStyles();
+  assert.match(css, /--field-radius:10px/);
+  assert.match(css, /::picker\(select\)/);
+  assert.match(css, /:focus-visible/);
+  assert.match(css, /::file-selector-button/);
+  assert.doesNotMatch(css, /<style/i);
+});
 
 test('navigation preserves role-filtered pages, staff inbox and current state', () => {
   const menu = serviceNavigation(

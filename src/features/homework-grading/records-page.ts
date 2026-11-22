@@ -10,8 +10,8 @@ import { kstDate, subjects } from './contracts.ts';
 
 export function gradingLearning(ctx: PageContext) {
   const { results } = gradingOverview(ctx);
-  return `<div class="page-heading"><h1>학습 기록</h1></div><section class="panel"><div class="panel-heading"><h2>공개된 사진 채점 결과</h2><a href="/grading?view=reports">학습 리포트</a></div>
-    ${results.length ? `<ul class="item-list">${results.map((s) => `<li><a href="${h(s.href)}">${h(s.studentName)} · ${h(s.title)}</a><small>${h(s.assessment_date)} · 교사 검수 완료</small></li>`).join('')}</ul>` : '<p>교사 검수와 원본 삭제 확인을 마친 결과가 없습니다.</p>'}</section>`;
+  return `<div class="workspace-heading"><h1>학습 기록</h1><a class="workspace-link" href="/grading?view=reports">학습 리포트 <span aria-hidden="true">›</span></a></div><section class="panel learning-records"><h2>공개된 사진 채점 결과</h2>
+    ${results.length ? `<ul class="record-card-list">${results.map((s) => `<li><a class="record-card-link" href="${h(s.href)}"><span><strong>${h(s.title)}</strong><small>${h(s.studentName)} · ${h(s.assessment_date)}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul>` : '<p class="muted">교사 검수와 원본 삭제 확인을 마친 결과가 없습니다.</p>'}</section>`;
 }
 
 export function gradingBriefing(ctx: PageContext) {
@@ -66,7 +66,7 @@ export function gradingBriefing(ctx: PageContext) {
     );
     return `<article class="briefing-student-card"><header><h3>${h(s.name)}</h3><p>${evaluated ? `정답 ${correct} / 평가 가능 ${evaluated}문항` : '집계할 확정 문항이 없습니다.'}</p></header>${
       records.length
-        ? `<ul class="briefing-records">${records.map((r) => `<li><a class="briefing-record-link" href="${h(r.href)}"><span><strong>${h(r.title)}</strong><small>${h(r.assessment_date)}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul>`
+        ? `<ul class="record-card-list">${records.map((r) => `<li><a class="record-card-link" href="${h(r.href)}"><span><strong>${h(r.title)}</strong><small>${h(r.assessment_date)}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul>`
         : ''
     }</article>`;
   });
