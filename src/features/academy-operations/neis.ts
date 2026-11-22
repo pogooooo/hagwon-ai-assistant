@@ -15,11 +15,15 @@ export const neisText = (row: NeisRow, key: string) =>
 export function createNeisClient(key = '', fetchImpl: typeof fetch = fetch) {
   const cache = new Map<string, { until: number; result: NeisResult }>();
   const pending = new Map<string, Promise<NeisResult>>();
-  async function load(endpoint: string, params: Record<string, string>) {
+  async function load(
+    endpoint: string,
+    params: Record<string, string>,
+    firstPage: boolean,
+  ) {
     const url = new URL('https://open.neis.go.kr/hub/' + endpoint);
     url.search = new URLSearchParams({
       Type: 'json',
-      pSize: key ? '100' : '5',
+      pSize: key ? (firstPage ? '24' : '100') : '5',
       ...params,
     }).toString();
     const source = url.href;
@@ -32,7 +36,7 @@ export function createNeisClient(key = '', fetchImpl: typeof fetch = fetch) {
       try {
         const response = await fetchImpl(url, {
           signal: AbortSignal.timeout(15000),
-          redirect: 'error',
+          redirect: 'manual',
         });
         if (!response.ok) throw new Error();
         const text = await response.text();
@@ -72,7 +76,8 @@ export function createNeisClient(key = '', fetchImpl: typeof fetch = fetch) {
           503,
         );
       rows.push(...batch);
-      if (!key || rows.length >= total || batch.length === 0) break;
+      if (firstPage || !key || rows.length >= total || batch.length === 0)
+        break;
     }
     return {
       rows,
@@ -86,14 +91,15 @@ export function createNeisClient(key = '', fetchImpl: typeof fetch = fetch) {
     async query(
       endpoint: 'acaInsTiInfo' | 'schoolInfo' | 'SchoolSchedule',
       params: Record<string, string>,
+      { firstPage = false } = {},
     ): Promise<NeisResult> {
-      const id = JSON.stringify([endpoint, params]);
+      const id = JSON.stringify([endpoint, params, firstPage]);
       const cached = cache.get(id);
       if (cached && cached.until > Date.now())
         return structuredClone(cached.result);
       let request = pending.get(id);
       if (!request) {
-        request = load(endpoint, params)
+        request = load(endpoint, params, firstPage)
           .then((result) => {
             if (cache.size >= 100) cache.delete(cache.keys().next().value!);
             cache.set(id, { until: Date.now() + 300000, result });
