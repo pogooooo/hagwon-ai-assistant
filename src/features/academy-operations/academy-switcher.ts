@@ -5,6 +5,7 @@ import {
   escapeHtml as h,
   field,
   OperationError,
+  one,
   roleLabels,
   rows,
   type Actor,
@@ -87,6 +88,22 @@ export function academyChoices(db: OperationsDatabase, digest: string) {
   );
 }
 
+export function academyCreatingOwner(
+  db: OperationsDatabase,
+  digest: string,
+  actor: Actor,
+) {
+  return actor.role === 'admin'
+    ? one<{ id: string; name: string }>(
+        db,
+        `SELECT a.id, a.name FROM op_sessions s JOIN accounts a ON a.id=s.account_id
+     WHERE s.digest=? AND s.expires_at>? AND a.role='admin'`,
+        digest,
+        Date.now(),
+      )
+    : undefined;
+}
+
 export function renderAcademies(
   db: OperationsDatabase,
   digest: string,
@@ -111,7 +128,7 @@ export function renderAcademies(
     ${fields.length ? `<dl>${fields.map(([label, value]) => `<div><dt>${h(label)}</dt><dd>${h(value)}</dd></div>`).join('')}</dl>` : '<p class="muted">학원 이름으로 등록했습니다.</p>'}
     ${profile.source ? '<p class="muted">나이스 교육정보 개방포털 자료를 확인해 등록했습니다.</p>' : ''}</section>`
     : '';
-  return `<div class="workspace-heading"><h1>내 학원</h1>${actor.role === 'admin' ? `<a class="button-link" href="${onboardingPath}">새 학원 등록</a>` : ''}</div><section class="panel academy-picker" aria-label="소속 학원">
+  return `<div class="workspace-heading"><h1>내 학원</h1>${academyCreatingOwner(db, digest, actor) ? `<a class="button-link" href="${onboardingPath}">새 학원 등록</a>` : ''}</div><section class="panel academy-picker" aria-label="소속 학원">
     ${choices
       .map(
         (c) => `<form method="post" action="/academies" class="academy-choice">
