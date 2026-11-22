@@ -19,6 +19,7 @@ for (const name of [
   'operations.css',
   'service-design.css',
   'service-ui.js',
+  'select-ui.js',
   'app.webmanifest',
   '.well-known',
   'service-worker.js',
