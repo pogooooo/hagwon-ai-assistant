@@ -94,6 +94,22 @@ function simpleCalculation(problem: string): PhotoSolution | undefined {
   }
 }
 
+export function solveVerifiedCalculation(first?: string, second?: string) {
+  if (!first || !second || /\d\s+\d/u.test(first) || /\d\s+\d/u.test(second))
+    return;
+  const comparable = (value: string) =>
+    value
+      .normalize('NFKC')
+      .replaceAll('×', '*')
+      .replaceAll('÷', '/')
+      .replaceAll('−', '-')
+      .replace(/\s+/gu, '')
+      .replace(/=$/u, '');
+  // Matching results are insufficient: both visual reads must identify the same printed equation.
+  if (comparable(first) !== comparable(second)) return;
+  return simpleCalculation(first);
+}
+
 export async function solvePrintedItems(
   chat: Chat,
   page: ImagePage,

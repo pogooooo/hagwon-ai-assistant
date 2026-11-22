@@ -186,6 +186,7 @@ export const readingSchema = z
     association_status: z.enum(['matched', 'ambiguous', 'missing']),
     regions: z.array(regionSchema).max(20),
     ambiguity_codes: z.array(z.string().max(60)).max(15).default([]),
+    printed_calculation: z.string().trim().min(1).max(120).optional(),
   })
   .strict();
 export const extractionSchema = z

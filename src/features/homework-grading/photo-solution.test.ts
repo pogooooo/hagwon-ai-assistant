@@ -5,7 +5,10 @@ import { gradingModule } from './module.ts';
 import { fixture, item, photo, reading } from './test-fixtures.ts';
 import { assignmentFor, newId } from './service.ts';
 import { aggregate } from './scoring.ts';
-import { comparePhotoAnswer } from './photo-solution.ts';
+import {
+  comparePhotoAnswer,
+  solveVerifiedCalculation,
+} from './photo-solution.ts';
 import { GradingError, type PhotoSolution } from './contracts.ts';
 
 const reference: PhotoSolution = {
@@ -384,4 +387,12 @@ test('independent comparison handles equivalent values, single choices, blank, a
     'partial',
   );
   assert.equal(calls, 1);
+});
+
+test('direct computation requires agreement on the same standalone printed calculation', () => {
+  assert.equal(solveVerifiedCalculation('3 × 3 =', '3*3')?.answer, '9');
+  assert.equal(solveVerifiedCalculation('14−5', '14 - 5')?.answer, '9');
+  assert.equal(solveVerifiedCalculation('14-5', '10-1'), undefined);
+  assert.equal(solveVerifiedCalculation('1 2 + 3', '12+3'), undefined);
+  assert.equal(solveVerifiedCalculation('7+5 cm', '7+5 cm'), undefined);
 });
