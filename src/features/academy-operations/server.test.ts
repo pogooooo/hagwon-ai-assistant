@@ -18,7 +18,11 @@ import { fileURLToPath } from 'node:url';
 
 const demoPassword = 'axr-http-test';
 
-async function startOperations(t: TestContext, publicOrigin = '') {
+async function startOperations(
+  t: TestContext,
+  publicOrigin = '',
+  useDefaultLogins = false,
+) {
   const directory = mkdtempSync(join(tmpdir(), 'axr-operations-test-'));
   const filename = join(directory, 'academy.sqlite');
   const child = spawn(
@@ -34,6 +38,9 @@ async function startOperations(t: TestContext, publicOrigin = '') {
         AXR_OPERATIONS_PORT: '0',
         AXR_OPERATIONS_DEMO_PASSWORD: demoPassword,
         AXR_OPERATIONS_PUBLIC_ORIGIN: publicOrigin,
+        AXR_OPERATIONS_LOCAL_DEMO_LOGINS: useDefaultLogins
+          ? undefined
+          : 'false',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -173,6 +180,12 @@ async function startOperations(t: TestContext, publicOrigin = '') {
     filename,
   };
 }
+
+test('기본 로컬 서버에서 역할별 체험 아이디와 공통 비밀번호로 로그인한다', async (t) => {
+  const s = await startOperations(t, '', true);
+  for (const username of ['admin', 'teacher', 'student', 'parent', 'visitor'])
+    await s.login(username, 'ondap1234');
+});
 
 test('기존 교재 분석의 HTTP 상담 인용·권한·정정 후 철회', async (t) => {
   const s = await startOperations(t);

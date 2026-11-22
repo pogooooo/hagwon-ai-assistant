@@ -73,14 +73,14 @@ export function renderWorkbookForm(
   <div id="workbook-first"><h2>1단계 · 문항 선택</h2>
   <form id="workbook-photo"><input type="hidden" name="subject" value="${book.subject}"><label>교재 사진 한 장 (PNG·JPEG, 최대 5MB)<input type="file" name="photo" accept="image/png,image/jpeg" required></label>
   <button>사진 분석하기</button></form>
-  <p>교재와 대조해 쪽수와 번호를 확인하세요. ${grading ? '유형은 처음 고른 것이 대표 유형으로 집계됩니다. 정답은 객관식이면 보기 기호(①~⑤), 수는 단위와 함께(예: 5/6 L), 인정할 답이 여럿이면 | 로 나눠 적어 주세요.' : '유형은 핵심 행동이 여러 개일 때 복수 선택할 수 있습니다.'}</p>
+  <p>교재와 대조해 쪽수와 번호를 확인하세요. ${grading ? '객관식은 보기 번호를 입력하세요. 주관식은 객관식 체크를 해제하고 정답을 적어 주세요. 인정할 답이 여럿이면 | 로 구분합니다. 처음 고른 유형이 대표 유형으로 집계됩니다.' : '유형은 핵심 행동이 여러 개일 때 복수 선택할 수 있습니다.'}</p>
   <div id="workbook-rows"></div><div class="actions"><button type="button" id="workbook-add">문항 직접 추가</button><button type="button" id="workbook-next">다음 · 배정 설정</button></div></div>
   ${grading ? gradingAssignStep(book.subject, id, targets) : homeworkAssignStep(book.subject, id, targets, students)}
   <p id="workbook-status" role="status" aria-live="polite"></p>
   <template id="workbook-row"><fieldset><legend><label><input type="checkbox" data-select> 출제</label></legend><p data-reading hidden></p>
   <div data-review hidden><label>확인한 원문<textarea data-transcript maxlength="60000"></textarea></label><button type="button" data-reclassify>원문 확인 후 다시 분류</button></div>
   <div class="fields"><label>쪽수<input type="number" data-page min="1" max="100000"></label><label>문항 번호<input data-number maxlength="80"></label>
-  <label>대분류<select data-area></select></label>${grading ? '<label>정답<input data-answer maxlength="200" placeholder="예: ③"></label>' : ''}</div><div data-minor></div><p data-chosen></p>
+  <label>대분류<select data-area></select></label>${grading ? '<label class="check-label"><input type="checkbox" data-is-choice>객관식</label><label><span data-answer-label>정답</span><input data-answer maxlength="200"></label>' : ''}</div><div data-minor></div><p data-chosen></p>
   <button type="button" data-remove>목록에서 빼기</button></fieldset></template>
   </section><script defer src="/workbook-ui.js"></script>`;
 }

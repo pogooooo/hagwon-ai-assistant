@@ -47,13 +47,17 @@ export function setupWorkbookCatalog(db: OperationsDatabase) {
     );
   `);
   // 교재 문항의 정답. 처음 등록할 때 한 번 입력하고 이후 숙제에서 다시 쓴다. 비어 있으면 정답 미등록이다.
-  if (
-    !rows<{ name: string }>(db, 'PRAGMA table_info(book_questions)').some(
-      (c) => c.name === 'answer',
-    )
-  )
+  const columns = rows<{ name: string }>(
+    db,
+    'PRAGMA table_info(book_questions)',
+  ).map((c) => c.name);
+  if (!columns.includes('answer'))
     db.exec(
       "ALTER TABLE book_questions ADD COLUMN answer TEXT NOT NULL DEFAULT ''",
+    );
+  if (!columns.includes('is_choice'))
+    db.exec(
+      'ALTER TABLE book_questions ADD COLUMN is_choice INTEGER CHECK(is_choice IN (0,1))',
     );
 }
 
@@ -96,6 +100,7 @@ export function bookQuestions(ctx: PageContext, bookId: string) {
     number: string;
     version: number;
     answer: string;
+    is_choice: number | null;
     tags: string;
   }>(
     ctx.db,
@@ -165,6 +170,7 @@ export function saveBookQuestion(
     tagIds: string[];
     version?: number | null;
     answer?: string;
+    isChoice?: boolean;
   },
 ) {
   const ids = [...new Set(q.tagIds)].sort();
@@ -173,27 +179,35 @@ export function saveBookQuestion(
     ids.some((t) => tagById.get(t)?.subject !== book.subject)
   )
     throw new OperationError('중복 문항 또는 과목과 다른 유형이 있습니다.');
-  const prior = one<{ id: string; version: number; answer: string }>(
+  const prior = one<{
+    id: string;
+    version: number;
+    answer: string;
+    is_choice: number | null;
+  }>(
     ctx.db,
-    'SELECT id,version,answer FROM book_questions WHERE book_id=? AND page=? AND number=?',
+    'SELECT id,version,answer,is_choice FROM book_questions WHERE book_id=? AND page=? AND number=?',
     book.id,
     q.page,
     q.number,
   );
   const master = prior?.id ?? randomUUID();
+  const choice = q.isChoice === undefined ? null : Number(q.isChoice);
   if (!prior)
     ctx.db
       .prepare(
-        'INSERT INTO book_questions(id,book_id,page,number,answer) VALUES(?,?,?,?,?)',
+        'INSERT INTO book_questions(id,book_id,page,number,answer,is_choice) VALUES(?,?,?,?,?,?)',
       )
-      .run(master, book.id, q.page, q.number, q.answer ?? '');
+      .run(master, book.id, q.page, q.number, q.answer ?? '', choice);
   const previous = rows<{ tag_id: string }>(
     ctx.db,
     'SELECT tag_id FROM book_question_types WHERE question_id=? ORDER BY tag_id',
     master,
   ).map((t) => t.tag_id);
   const answerChanged =
-    !!prior && q.answer !== undefined && q.answer !== prior.answer;
+    !!prior &&
+    q.answer !== undefined &&
+    (q.answer !== prior.answer || choice !== prior.is_choice);
   const typesChanged = JSON.stringify(previous) !== JSON.stringify(ids);
   if (prior && (typesChanged || answerChanged) && q.version !== prior.version)
     throw new OperationError(
@@ -213,8 +227,8 @@ export function saveBookQuestion(
   }
   if (answerChanged)
     ctx.db
-      .prepare('UPDATE book_questions SET answer=? WHERE id=?')
-      .run(q.answer ?? '', master);
+      .prepare('UPDATE book_questions SET answer=?,is_choice=? WHERE id=?')
+      .run(q.answer ?? '', choice, master);
   if (prior && (typesChanged || answerChanged))
     ctx.db
       .prepare('UPDATE book_questions SET version=version+1 WHERE id=?')

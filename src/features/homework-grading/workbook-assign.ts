@@ -24,6 +24,7 @@ const workbookItems = z
       tagIds: z.array(z.string()).max(25),
       version: z.number().int().positive().nullable().optional(),
       answer: z.string().trim().min(1).max(200),
+      isChoice: z.boolean().optional(),
     }),
   )
   .min(1)
@@ -37,7 +38,10 @@ const quantity =
  * 교사가 입력한 정답을 채점 정답으로 바꾼다. 보기 기호만 있으면 객관식, 수(와 단위) 하나면 수치,
  * 그 밖에는 글자 그대로 비교한다(| 로 나눈 허용 답안). AI 채점은 쓰지 않는다.
  */
-export function keyFromAnswer(answer: string): {
+export function keyFromAnswer(
+  answer: string,
+  isChoice?: boolean,
+): {
   answer_type: Item['answer_type'];
   key: Pick<
     NonNullable<Item['key']>,
@@ -60,7 +64,15 @@ export function keyFromAnswer(answer: string): {
     collapse_inner_space: true,
     case_sensitive: false,
   };
-  if (options.every((o) => /^[①-⑨]$/u.test(o) || /^[1-9]번$/u.test(o)))
+  const legacyChoice = options.every(
+    (o) => /^[①-⑨]$/u.test(o) || /^[1-9]번$/u.test(o),
+  );
+  if (
+    isChoice === true &&
+    !answer.split('|').every((o) => /^[1-9]$/.test(o.trim()))
+  )
+    throw new GradingError('VALIDATION_FAILED');
+  if (isChoice ?? legacyChoice)
     return {
       answer_type: 'choice_single',
       key: {
@@ -100,13 +112,19 @@ export function keyFromAnswer(answer: string): {
 /** 교재 문항(쪽·번호·대표 유형·정답) 하나를 정답 채점 문항으로 만든다. */
 export function workbookItem(
   subject: 'M' | 'E',
-  q: { page: number; number: string; tagIds: string[]; answer: string },
+  q: {
+    page: number;
+    number: string;
+    tagIds: string[];
+    answer: string;
+    isChoice?: boolean;
+  },
   photoPage: number,
   rights: string,
 ): Item {
   // 대표 유형: 교사가 처음 고른 유형. 유형이 없으면 과목 종합으로 집계한다.
   const tag = q.tagIds.length ? tagById.get(q.tagIds[0]) : undefined;
-  const { answer_type, key } = keyFromAnswer(q.answer);
+  const { answer_type, key } = keyFromAnswer(q.answer, q.isChoice);
   const itemRef = newId('item');
   return {
     item_ref: itemRef,
@@ -196,7 +214,7 @@ export function assignWorkbookGrading(
       const key = JSON.stringify([q.page, q.number]);
       if (seen.has(key)) throw new GradingError('VALIDATION_FAILED');
       seen.add(key);
-      keyFromAnswer(q.answer);
+      keyFromAnswer(q.answer, q.isChoice);
       saveBookQuestion(ctx, book, q);
     }
     return book;

@@ -215,16 +215,26 @@ function confirmAnswerForm(
       const hint = read
         ? `<p class="grade-read">사진에서 ${h(read)}(으)로 읽었습니다. 맞는지 확인해 주세요.</p>`
         : '<p class="grade-read grade-unread">사진에서 읽지 못했습니다. 직접 입력해 주세요.</p>';
-      return item.answer_type === 'choice_single'
-        ? `<fieldset class="grade-choices"><legend>${h(label)}</legend>${hint}${['①', '②', '③', '④', '⑤'].map((c) => `<label><input type="radio" name="${h(name)}" value="${c}"${read === c ? ' checked' : ''}>${c}</label>`).join('')}</fieldset>`
-        : hint +
-            input(
-              name,
-              label,
-              read ?? '',
-              'text',
-              'maxlength="200" autocomplete="off"',
-            );
+      if (item.answer_type === 'choice_single') {
+        const radios = (choices: string) =>
+          [...choices]
+            .map(
+              (c) =>
+                `<label><input type="radio" name="${h(name)}" value="${c}"${read === c ? ' checked' : ''}>${c}</label>`,
+            )
+            .join('');
+        return `<fieldset class="grade-choices"><legend>${h(label)}</legend>${hint}${radios('①②③④⑤')}<details><summary>6~9번 보기</summary>${radios('⑥⑦⑧⑨')}</details></fieldset>`;
+      }
+      return (
+        hint +
+        input(
+          name,
+          label,
+          read ?? '',
+          'text',
+          'maxlength="200" autocomplete="off"',
+        )
+      );
     })
     .join('');
   return `<form method="post" action="/grading">${hidden('action', 'answer')}${hidden('request_key', newId('request'))}${hidden('submission', submission)}<h2>${h(a.title)} · 읽은 답 확인</h2><p>사진에서 고른 보기를 읽어 미리 채웠습니다. 책과 비교해 틀린 곳을 고치고, 읽지 못한 문항은 직접 고른 뒤 제출하세요. 비워 둔 문항은 답을 쓰지 않은 것으로 처리합니다.</p>${rows}<button>확인하고 제출</button></form>`;
