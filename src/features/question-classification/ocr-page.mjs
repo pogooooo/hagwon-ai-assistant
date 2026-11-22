@@ -504,7 +504,11 @@ export async function readSheetService(source, subject) {
 export async function readSheetOcr(source) {
   const fields = await ocrImage(source);
   const lines = readingOrder(fieldsToLines(fields));
-  const printedPage = findPrintedPage(lines);
+  // 문항 번호 줄("10")이 쪽 위 여백에 걸려 쪽 번호로 잡히지 않게 번호 줄을 빼고 쪽 번호를 찾는다.
+  const numbered = new Set(
+    (pickItemNumberLines(lines)?.picked ?? []).map((c) => c.line),
+  );
+  const printedPage = findPrintedPage(lines.filter((l) => !numbered.has(l)));
   const detected = segmentItems(lines).map(({ displayNumber, text }) => ({
     displayNumber,
     text,
