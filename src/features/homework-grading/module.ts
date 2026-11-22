@@ -12,7 +12,6 @@ import { renderWorkbookForm } from '../academy-operations/workbook-form.ts';
 import { registerBook } from '../academy-operations/workbook-catalog.ts';
 import { gradingOverview, gradingStates as names } from './overview.ts';
 import { createHash } from 'node:crypto';
-import { accessibleClasses } from '../academy-operations/directory.ts';
 import {
   escapeHtml as h,
   field,
@@ -822,51 +821,9 @@ function gradingAvailability(
     return '<p>네이버 CLOVA 사진 채점 사용 가능 · 체험 학원에는 이름·학교·얼굴을 가린 연습 답안을 제출해 주세요.</p>';
   return '<p>이 과제는 선생님이 직접 확인합니다. 이 계정에서는 사진을 네이버로 전송할 수 없습니다.</p>';
 }
-function registerForm(ctx: PageContext) {
-  const count = Math.max(
-    1,
-    Math.min(50, Number(ctx.url.searchParams.get('count')) || 3),
-  );
-  const types = [
-    'choice_single',
-    'choice_multiple',
-    'text_exact',
-    'numeric',
-    'symbolic',
-    'text_semantic',
-    'structured_work',
-    'essay',
-  ];
-  const labels = {
-    choice_single: '객관식 단일 선택',
-    choice_multiple: '객관식 복수 선택',
-    text_exact: '등록 답안 단답',
-    numeric: '숫자·분수',
-    symbolic: '등록된 수식 답안',
-    text_semantic: '짧은 의미 답안',
-    structured_work: '풀이 과정 검수 보조',
-    essay: '서술·영작 검수 보조',
-  };
-  return (
-    // 새 과제는 교재 문항과 등록한 정답으로만 채점한다. AI가 문제를 푸는 과제는 더 만들지 않는다.
-    renderWorkbookForm(ctx, 'grading') +
-    `<details${ctx.url.searchParams.has('count') ? ' open' : ''}><summary>정답·배점을 직접 지정하는 과제</summary><form method="get" action="/grading" class="inline-form">${hidden('view', 'register')}${input('count', '등록할 문항 수', String(count), 'number', 'min="1" max="50"')}<button class="secondary">입력 칸 만들기</button></form>${startForm('register')}${hidden('count', count)}${input('title', '과제 이름', '', 'text', 'required maxlength="200"')}${choice(
-      'class_id',
-      '배정 반',
-      accessibleClasses(ctx.db, ctx.actor).map((c) => c.id),
-      '',
-      Object.fromEntries(
-        accessibleClasses(ctx.db, ctx.actor).map((c) => [c.id, c.name]),
-      ),
-    )}${input('rights_basis', '자료 이용 근거 — 자체 제작 또는 이용허락 기록', '', 'text', 'required maxlength="500"')}
-    ${Array.from({ length: count }, (_, n) => {
-      const p = 'q' + n + '_';
-      return `<fieldset><legend>${n + 1}번째 문항</legend><div class="form-grid">${input(p + 'no', '문항 번호', String(n + 1), 'text', 'required')}${input(p + 'page', '사진/PDF 쪽수', '1', 'number', 'min="1" max="10" required')}${choice(p + 'subject', '과목', subjects, subjects[n % 3], subjectNames)}${choice(p + 'type', '답안 종류', types, 'text_exact', labels)}${input(p + 'skill', '대표 유형', '', 'text', 'required maxlength="120"')}${input(p + 'max', '문항 배점', '1', 'text', 'required inputmode="decimal"')}${input(p + 'key', '정답 — 허용 답안은 | 로, 복수 선택은 쉼표로 구분', '', 'text', 'maxlength="12000"')}${input(p + 'units', '허용 단위 — 없으면 비워두기')}${input(p + 'tolerance', '숫자 허용 오차', '0', 'text', 'inputmode="decimal"')}${input(p + 'scores', '부분점수를 허용할 점수 목록 — 예: 0,1,2')}${choice(p + 'form', '수학 답안 형식', ['', 'integer', 'decimal', 'fraction', 'reduced_fraction'], '', { '': '제한 없음', integer: '정수', decimal: '소수', fraction: '분수', reduced_fraction: '기약분수' })}${input(p + 'form_points', '형식 평가 배점 — 내용 배점과 분리할 때', '0', 'text', 'inputmode="decimal"')}</div><label>채점 기준<textarea name="${p}rubric" maxlength="3000" placeholder="의미 답안·서술형은 필수 내용, 부정·인과 관계, 허용 점수를 구체적으로 적어 주세요."></textarea></label><label><input type="checkbox" name="${p}space" value="yes">내부 연속 공백 차이 허용</label><label><input type="checkbox" name="${p}case" value="no">영어 대소문자 차이 허용</label><label><input type="checkbox" name="${p}convert" value="yes">등록한 첫 단위를 기준으로 지원되는 단위 환산 허용</label></fieldset>`;
-    }).join(
-      '',
-    )}<label><input type="checkbox" name="approved" value="yes" required>자료 이용 근거와 정답·배점·채점 기준을 확인하고 승인합니다.</label><button>과제 등록</button></form></details>`
-  );
-}
+// 새 과제는 교재 문항과 등록한 정답으로만 만든다. AI가 문제를 풀거나 의미 답안을 채점하는
+// 과제(직접 지정 과제 포함)는 더 만들지 않는다. 이미 만든 과제와 결과는 그대로 조회한다.
+const registerForm = (ctx: PageContext) => renderWorkbookForm(ctx, 'grading');
 /** 제출 현황 목록. 확인 필요 목록에서는 교재 과제 제출을 골라 한 번에 확정할 수 있다. */
 function bulkConfirmList(
   ctx: PageContext,
