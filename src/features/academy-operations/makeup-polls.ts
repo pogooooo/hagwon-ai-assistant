@@ -1367,7 +1367,7 @@ export function makeupResultNotices(ctx: PageContext) {
     unreadMakeupResult(ctx, data),
   );
   return notices.length
-    ? `<section class="panel makeup-result-notices"><h2>보강 응답 완료 <span class="pill">${notices.length}건</span></h2><ul class="briefing-records">${notices.map(({ p, data }) => `<li><a class="briefing-record-link" href="${h(assistantPollPath(p.id))}"><span><strong>${h(data.closure.label)}</strong><small>${h(assistantStatus(p, data.assistant!))}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul></section>`
+    ? `<section class="panel makeup-result-notices"><h2>보강 응답 완료 <span class="pill">${notices.length}건</span></h2><ul class="record-card-list">${notices.map(({ p, data }) => `<li><a class="record-card-link" href="${h(assistantPollPath(p.id))}"><span><strong>${h(data.closure.label)}</strong><small>${h(assistantStatus(p, data.assistant!))}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul></section>`
     : '';
 }
 
@@ -1420,7 +1420,7 @@ export function renderMakeupAssistant(ctx: PageContext) {
       <div class="compose-actions"><button type="submit" name="action" value="makeup_request">보내기 <span aria-hidden="true">↑</span></button></div>
       <p class="chat-progress" role="status" aria-live="polite"></p>
     </form>
-    ${otherRequests.length ? `<details class="makeup-assistant-history"><summary>이전 휴·보강 요청</summary><ul class="briefing-records">${otherRequests.map(({ p, data }) => `<li><a class="briefing-record-link" href="${h(assistantPollPath(p.id))}"><span><strong>${h(data.closure.label)}</strong><small>${h(pollListStatus(p, data))}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul></details>` : ''}
+    ${otherRequests.length ? `<details class="makeup-assistant-history"><summary>이전 휴·보강 요청</summary><ul class="record-card-list">${otherRequests.map(({ p, data }) => `<li><a class="record-card-link" href="${h(assistantPollPath(p.id))}"><span><strong>${h(data.closure.label)}</strong><small>${h(pollListStatus(p, data))}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul></details>` : ''}
     </section>`;
 }
 

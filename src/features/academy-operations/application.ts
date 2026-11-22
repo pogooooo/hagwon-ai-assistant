@@ -151,6 +151,7 @@ export interface OperationsServerOptions {
   showDemoAccounts?: boolean;
   trialPasswordHashes?: string;
   assetsRoot?: URL | null;
+  formControlStyles?: string;
   fixturesRoot?: URL;
   documentsRoot?: string;
   maxDocumentBytes?: number;
@@ -167,6 +168,7 @@ export function createOperationsServer({
   showDemoAccounts = showDefaultPassword,
   trialPasswordHashes,
   assetsRoot = new URL('./', import.meta.url),
+  formControlStyles,
   fixturesRoot,
   documentsRoot,
   maxDocumentBytes = defaultMaxDocumentBytes,
@@ -229,9 +231,13 @@ export function createOperationsServer({
                     : path.endsWith('.js')
                       ? 'text/javascript; charset=utf-8'
                       : 'image/png';
+      const bytes = readFileSync(new URL(path, assetsRoot));
       staticFiles.set('/' + path, {
         contentType,
-        bytes: readFileSync(new URL(path, assetsRoot)),
+        bytes:
+          path === 'service-design.css' && formControlStyles
+            ? Buffer.concat([bytes, Buffer.from('\n' + formControlStyles)])
+            : bytes,
       });
     }
   }
@@ -373,20 +379,20 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-inline-makeup"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-control-library"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
       '" data-role="' +
       h(actor?.role ?? 'guest') +
-      '"><script src="/service-ui.js?v=ondap-inline-makeup" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
+      '"><script src="/service-ui.js?v=ondap-control-library" defer></script><a class="skip-link" href="#main-content">본문으로 이동</a>' +
       '<header class="topbar"><div class="shell topbar-inner">' +
       brand +
       (actor && academyName
         ? `<a class="academy-name academy-switch" href="/academies" aria-label="내 학원 선택 · ${h(academyName)}"><span>${h(academyName)}</span><span aria-hidden="true">⌄</span></a>`
         : '') +
       (actor
-        ? '<select class="section-jump" data-section-jump aria-label="현재 화면의 항목으로 이동" hidden><option value="">바로가기</option></select><div class="session">' +
+        ? '<div class="session">' +
           (['admin', 'guardian'].includes(actor.role)
             ? `<a class="parent-inbox-link" href="/messages" aria-label="학원 알림${unreadParentCount({ db, actor, url: new URL('http://localhost/') }) ? ' · 읽지 않은 알림 있음' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 5h16v14H4Z"/><path d="m4 6 8 7 8-7"/></svg>${unreadParentCount({ db, actor, url: new URL('http://localhost/') }) ? '<span class="unread-dot" aria-hidden="true"></span>' : ''}</a>`
             : '') +
