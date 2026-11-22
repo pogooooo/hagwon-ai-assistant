@@ -148,8 +148,12 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
         ).text();
         assert.match(makeup, /휴강 확정/);
         assert.match(makeup, /보강 투표 진행 중/);
-        assert.match(makeup, /보강 투표 현황 보기/);
-        assert.doesNotMatch(makeup, /보강 가능 시간 등록|안내문 발송 대기/);
+        assert.match(makeup, /보강 진행 상황 보기/);
+        assert.match(makeup, /id="makeup-assistant"/);
+        assert.doesNotMatch(
+          makeup,
+          /보강 가능 시간 등록|안내문 발송 대기|href="\/makeup-votes"/,
+        );
       }
     }
     if (role === 'admin') {

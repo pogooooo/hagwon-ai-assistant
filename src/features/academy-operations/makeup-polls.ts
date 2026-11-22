@@ -66,6 +66,8 @@ interface AssistantProposal {
   recipients: GuardianTarget[];
   answers: Record<string, boolean>;
   sender?: string;
+  teacher?: string;
+  notice?: { recipients: string[]; readBy: string[] };
   eventId?: string;
   resolution?: 'declined' | 'schedule_changed';
 }
@@ -684,7 +686,7 @@ export function seedDemoMakeupPolls(db: OperationsDatabase) {
   }
 }
 
-const assistantPath = '/consultation?view=assistant';
+const assistantPath = '/schedule?view=makeup';
 const votePath = (id: string) => '/makeup-votes?id=' + encodeURIComponent(id);
 const voteReceiptPath = (id: string) =>
   '/makeup-votes?submitted=' + encodeURIComponent(id) + '#vote-receipt';
@@ -815,12 +817,11 @@ function prepareAssistantPoll(ctx: PageContext, question: string) {
     'assistant:' + classId + ':' + date,
     closure.key,
   );
-  if (
-    previous &&
-    (previous.state !== 'draft' ||
-      !(JSON.parse(previous.payload) as Payload).assistant)
-  )
-    return votePath(previous.id);
+  if (previous) {
+    const existing = JSON.parse(previous.payload) as Payload;
+    if (!existing.assistant) return votePath(previous.id);
+    if (previous.state !== 'draft') return assistantPollPath(previous.id);
+  }
   const students = roster(ctx, classId);
   if (!students.length)
     throw new OperationError('등록된 수강생이 없습니다.', 422);
@@ -837,25 +838,19 @@ function prepareAssistantPoll(ctx: PageContext, question: string) {
     votes: {},
     assistant,
   };
-  const seen = new Set<string>();
-  data.options = suggestPollOptions(
+  const [slot] = suggestPollOptions(
     ctx,
     data,
     schedule.config,
     schedule.state,
     date,
-  )
-    .filter((slot) => {
-      if (seen.has(slot.date)) return false;
-      seen.add(slot.date);
-      return true;
-    })
-    .slice(0, 3);
-  if (!data.options.length)
+  );
+  if (!slot)
     throw new OperationError(
       '시간표와 예약이 겹치지 않는 보강 후보를 찾지 못했습니다.',
       422,
     );
+  data.options = [slot];
   const id = previous?.id ?? randomUUID();
   if (previous)
     ctx.db
@@ -899,34 +894,37 @@ export function submitMakeupAssistant(ctx: PageContext, form: FormData) {
         ctx,
         required(form, 'question', '휴강 요청', 500),
       );
-    if (action !== 'assistant_publish')
+    if (action !== 'assistant_publish' && action !== 'assistant_read')
       throw new OperationError('지원하지 않는 AI 비서 요청입니다.', 400);
     const { p, data } = load(ctx, required(form, 'id', '투표'));
     const proposal = data.assistant;
     if (!proposal)
       throw new OperationError('AI 비서에서 준비한 투표를 선택해 주세요.', 422);
-    if (p.state === 'open' || p.state === 'approved') return votePath(p.id);
+    if (action === 'assistant_read') {
+      const { notice } = proposal;
+      if (!notice?.recipients.includes(ctx.actor.id))
+        throw new OperationError('확인할 수 없는 보강 결과입니다.', 404);
+      if (!notice.readBy.includes(ctx.actor.id)) {
+        notice.readBy.push(ctx.actor.id);
+        persistPoll(ctx, p, data);
+      }
+      return assistantPollPath(p.id);
+    }
+    if (p.state === 'open' || p.state === 'approved')
+      return assistantPollPath(p.id);
     if (p.state !== 'draft' || field(form, 'version') !== String(p.version))
       throw new OperationError(
         '후보가 변경됐습니다. 현재 후보를 다시 확인해 주세요.',
         409,
       );
-    const selected = required(form, 'option', '보강 시간');
-    const slot = /^\d$/u.test(selected)
-      ? data.options[Number(selected)]
-      : undefined;
+    const slot = data.options[0];
     if (!slot)
       throw new OperationError(
-        '보호자에게 보낼 시간 하나를 선택해 주세요.',
+        '추천할 보강 시간이 없습니다. 새 요청을 입력해 주세요.',
         422,
       );
-    planAssistantChange(
-      ctx,
-      verifyAssistantSource(ctx, data),
-      data,
-      slot,
-      new Date().toISOString(),
-    );
+    const schedule = verifyAssistantSource(ctx, data);
+    planAssistantChange(ctx, schedule, data, slot, new Date().toISOString());
     const targets = guardianTargets(ctx, data.closure.classId);
     if (JSON.stringify(targets) !== JSON.stringify(proposal.recipients))
       throw new OperationError(
@@ -943,9 +941,14 @@ export function submitMakeupAssistant(ctx: PageContext, form: FormData) {
       );
     data.options = [slot];
     proposal.sender = ctx.actor.id;
+    proposal.teacher = classOnDate(
+      schedule.config,
+      data.closure.classId,
+      data.closure.date,
+    )?.teacher;
     p.state = 'open';
     persistPoll(ctx, p, data);
-    return votePath(p.id);
+    return assistantPollPath(p.id);
   });
 }
 
@@ -1059,6 +1062,12 @@ function assistantVote(
         p.state = 'approved';
       }
     }
+    const recipients = [
+      ...new Set(
+        [proposal.sender, proposal.teacher].filter((id): id is string => !!id),
+      ),
+    ];
+    if (recipients.length) proposal.notice = { recipients, readBy: [] };
   }
   persistPoll(ctx, p, data);
   return address;
@@ -1167,7 +1176,7 @@ function submit(ctx: PageContext, form: FormData) {
           "UPDATE op_makeup_polls SET state='cancelled',source_key=?,version=version+1 WHERE id=?",
         )
         .run('cancelled:' + p.id, p.id);
-      return '/makeup-votes?id=' + p.id;
+      return data.assistant ? assistantPollPath(p.id) : votePath(p.id);
     }
     if (data.assistant)
       throw new OperationError(
@@ -1330,6 +1339,38 @@ export function pendingMakeupNotices(ctx: PageContext): string {
     : '';
 }
 
+function staffAssistantPolls(ctx: PageContext) {
+  if (!staff(ctx) || !exists(ctx.db, 'op_makeup_polls')) return [];
+  const allowed = new Set(
+    accessibleClasses(ctx.db, ctx.actor).map(({ id }) => id),
+  );
+  return rows<Poll>(
+    ctx.db,
+    "SELECT * FROM op_makeup_polls WHERE academy_id=? AND json_type(payload,'$.assistant')='object' ORDER BY rowid DESC",
+    ctx.actor.academyId,
+  ).flatMap((p) => {
+    const data = JSON.parse(p.payload) as Payload;
+    return allowed.has(data.closure.classId) ? [{ p, data }] : [];
+  });
+}
+
+function unreadMakeupResult(ctx: PageContext, data: Payload) {
+  const notice = data.assistant?.notice;
+  return (
+    notice?.recipients.includes(ctx.actor.id) &&
+    !notice.readBy.includes(ctx.actor.id)
+  );
+}
+
+export function makeupResultNotices(ctx: PageContext) {
+  const notices = staffAssistantPolls(ctx).filter(({ data }) =>
+    unreadMakeupResult(ctx, data),
+  );
+  return notices.length
+    ? `<section class="panel makeup-result-notices"><h2>보강 응답 완료 <span class="pill">${notices.length}건</span></h2><ul class="briefing-records">${notices.map(({ p, data }) => `<li><a class="briefing-record-link" href="${h(assistantPollPath(p.id))}"><span><strong>${h(data.closure.label)}</strong><small>${h(assistantStatus(p, data.assistant!))}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul></section>`
+    : '';
+}
+
 export function renderMakeupAssistant(ctx: PageContext) {
   if (!staff(ctx))
     throw new OperationError(
@@ -1339,42 +1380,60 @@ export function renderMakeupAssistant(ctx: PageContext) {
   const id = ctx.url.searchParams.get('poll');
   const current = id ? load(ctx, id) : undefined;
   const proposal = current?.data.assistant;
-  const draft = current && proposal && current.p.state === 'draft';
-  const error = ctx.formError
-    ? `<p class="poll-conflict" role="alert">${h(ctx.formError)}</p>`
-    : '';
+  const error =
+    ctx.formError &&
+    ['makeup_request', 'assistant_publish', 'assistant_read'].includes(
+      String(ctx.submittedForm?.get('action')),
+    )
+      ? `<p class="poll-conflict" role="alert">${h(ctx.formError)}</p>`
+      : '';
   const classes = accessibleClasses(ctx.db, ctx.actor);
-  return `<div class="workspace-heading"><h1>AI 비서</h1><a class="button-link subtle-link" href="/consultation?view=inbox">상담 관리</a></div>
-    <div class="poll-workspace"><section class="panel"><h2>휴강·보강 요청</h2>
-    <p class="muted">반 이름과 휴강일을 적으면 시간표, 교실, 상담 예약을 확인해 보강 후보를 찾습니다.</p>
+  const otherRequests = staffAssistantPolls(ctx)
+    .filter(({ p }) => p.id !== id)
+    .slice(0, 8);
+  return `<section class="panel makeup-assistant" id="makeup-assistant"><div class="panel-heading"><h2>휴·보강 비서</h2>${current ? `<a class="workspace-link" href="${assistantPath}#makeup-assistant">새 요청</a>` : ''}</div>
     ${error}
     ${
-      proposal
-        ? `<div class="conversation-messages"><article class="message question"><strong>교사</strong><p>${h(proposal.question)}</p></article>
-      <article class="message answer"><strong>AI 비서</strong><p>원래 수업은 ${h(label(proposal.original))}입니다.</p>
+      proposal && current
+        ? `<div class="conversation-messages"><article class="message question" aria-label="휴강 요청"><div class="message-content"><div class="message-bubble"><p>${h(proposal.question)}</p></div></div></article>
+      <article class="message answer"><img class="message-avatar" src="/assets/app-192.png" alt="" width="36" height="36"><div class="message-content"><strong class="message-sender">휴·보강 비서</strong><div class="message-bubble">
       ${
-        draft
-          ? `<p>아래 시간 중 하나를 골라 보호자에게 투표를 보낼까요? 전원이 가능으로 응답하면 학원 일정에 반영합니다.</p>
-      <form method="post" action="${h(assistantPollPath(current.p.id))}">
+        current.p.state === 'draft'
+          ? `<p>원래 수업은 ${h(label(proposal.original))}입니다.</p><p>추천 보강 시간은 <strong>${h(label(current.data.options[0]))}</strong>입니다. 보호자에게 투표를 보낼까요?</p>
+      <form class="makeup-assistant-action" method="post" action="${h(assistantPollPath(current.p.id))}">
         <input type="hidden" name="id" value="${h(current.p.id)}"><input type="hidden" name="version" value="${current.p.version}">
-        <fieldset><legend>추천한 보강 시간</legend>${current.data.options
-          .map(
-            (slot, i) =>
-              `<label class="check-label"><input type="radio" name="option" value="${i}"${i === 0 ? ' checked' : ''} required><span>${h(label(slot))}</span></label>`,
-          )
-          .join(
-            '',
-          )}</fieldset><button type="submit" name="action" value="assistant_publish">보호자 ${guardians(proposal).length}명에게 투표 보내기</button>
+        <button type="submit" name="action" value="assistant_publish">보호자 ${guardians(proposal).length}명에게 투표 보내기</button>
       </form>`
-          : `<a class="button-link subtle-link" href="${h(votePath(current!.p.id))}">투표 상태 보기</a>`
+          : renderAssistantBallot(
+              ctx,
+              current.p,
+              current.data,
+              `<input type="hidden" name="id" value="${h(current.p.id)}"><input type="hidden" name="version" value="${current.p.version}">`,
+            )
       }
-      </article></div>`
-        : ''
+      </div></div></article></div>
+      ${unreadMakeupResult(ctx, current.data) ? `<form class="actions" method="post" action="${h(assistantPollPath(current.p.id))}"><input type="hidden" name="id" value="${h(current.p.id)}"><button class="secondary" name="action" value="assistant_read">결과 확인했어요</button></form>` : ''}`
+        : '<p class="muted">반 이름과 휴강일을 보내면 시간표와 예약을 확인해 보강 시간을 추천합니다.</p>'
     }
-    <form class="chat-composer" method="post" action="${h(assistantPath)}">
-      <label class="compose-question"><span>휴강 요청</span><textarea name="question" rows="2" maxlength="500" required placeholder="다음 주 수요일 ${h(classes[0]?.name ?? 'A반')} 휴강할게요.">${ctx.submittedForm?.get('action') === 'makeup_request' ? h(ctx.submittedForm.get('question')) : ''}</textarea></label>
-      <div class="compose-actions"><button type="submit" name="action" value="makeup_request">보강 후보 요청</button></div>
-    </form></section></div>`;
+    <form class="chat-composer" data-makeup-composer method="post" action="${h(assistantPath)}">
+      <label class="compose-question"><span>휴강 요청</span><textarea name="question" rows="2" maxlength="500" required placeholder="다음 주 수요일 ${h(classes[0]?.name ?? 'A반')} 휴강할게요.">${ctx.submittedForm?.get('action') === 'makeup_request' ? h(ctx.submittedForm.get('question')) : h((ctx.url.searchParams.get('q') ?? '').slice(0, 500))}</textarea></label>
+      <div class="compose-actions"><button type="submit" name="action" value="makeup_request">보내기 <span aria-hidden="true">↑</span></button></div>
+      <p class="chat-progress" role="status" aria-live="polite"></p>
+    </form>
+    ${otherRequests.length ? `<details class="makeup-assistant-history"><summary>이전 휴·보강 요청</summary><ul class="briefing-records">${otherRequests.map(({ p, data }) => `<li><a class="briefing-record-link" href="${h(assistantPollPath(p.id))}"><span><strong>${h(data.closure.label)}</strong><small>${h(pollListStatus(p, data))}</small></span><span aria-hidden="true">›</span></a></li>`).join('')}</ul></details>` : ''}
+    </section>`;
+}
+
+function assistantStatus(p: Poll, proposal: AssistantProposal) {
+  if (p.state === 'approved') return '보강 확정 · 학원 일정에 반영됐습니다.';
+  if (p.state === 'cancelled') return '투표가 취소됐습니다.';
+  if (proposal.resolution === 'declined')
+    return '전원 응답 완료 · 불가 응답이 있어 새 시간을 정해야 합니다.';
+  if (proposal.resolution === 'schedule_changed')
+    return '전원 응답 완료 · 일정 또는 대상 정보가 바뀌어 보강을 확정하지 못했습니다.';
+  if (responseExpired(proposal))
+    return '응답 마감 · 원래 수업 시작 전까지 동의가 모이지 않았습니다.';
+  return '보호자 응답 중 · 전원이 가능으로 응답하면 보강이 확정됩니다.';
 }
 
 function renderAssistantBallot(
@@ -1389,25 +1448,13 @@ function renderAssistantBallot(
   const yes = responses.filter((id) => proposal.answers[id]).length;
   const voted = Object.hasOwn(proposal.answers, ctx.actor.id);
   const expired = responseExpired(proposal);
-  const status =
-    p.state === 'approved'
-      ? '보강 확정 · 학원 일정에 반영됐습니다.'
-      : p.state === 'cancelled'
-        ? '투표가 취소됐습니다.'
-        : proposal.resolution === 'declined'
-          ? '전원 응답 완료 · 불가 응답이 있어 새 시간을 정해야 합니다.'
-          : proposal.resolution === 'schedule_changed'
-            ? '전원 응답 완료 · 일정 또는 대상 정보가 바뀌어 보강을 확정하지 못했습니다.'
-            : expired
-              ? '응답 마감 · 원래 수업 시작 전까지 동의가 모이지 않았습니다.'
-              : '보호자 응답 중 · 전원이 가능으로 응답하면 보강이 확정됩니다.';
   return `<dl class="assistant-vote-times"><div><dt>원래 수업</dt><dd>${h(label(proposal.original))}</dd></div><div><dt>보강 시간</dt><dd>${h(label(data.options[0]))}</dd></div></dl>
     ${voted ? `<div id="vote-receipt" class="vote-receipt" role="status" tabindex="-1"><strong>응답 저장 완료</strong><span>내 응답은 ${proposal.answers[ctx.actor.id] ? '가능' : '불가'}입니다.</span></div>` : ''}
-    <p class="poll-waiting">${status}</p>
+    <p class="poll-waiting">${h(assistantStatus(p, proposal))}</p>
     <div class="poll-response-summary"><strong>${responses.length}/${targets.length}명 응답</strong><span>가능 ${yes}명 · 불가 ${responses.length - yes}명 · 대기 ${targets.length - responses.length}명</span></div>
     ${p.state === 'open' && !expired && !staff(ctx) && !voted ? `<p class="muted">원래 수업이 시작하기 전까지 응답해 주세요.</p><form class="actions" method="post">${hidden}<input type="hidden" name="action" value="assistant_vote"><button type="submit" name="answer" value="yes">가능해요</button><button class="secondary" type="submit" name="answer" value="no">어려워요</button></form>` : ''}
     ${p.state === 'approved' ? `<a class="button-link subtle-link" href="/schedule?month=${h(data.options[0].date.slice(0, 7))}">학원 일정에서 보기</a>` : ''}
-    ${staff(ctx) && p.state !== 'cancelled' ? `<details class="poll-cancel"><summary>취소 옵션</summary><form method="post">${hidden}<button class="secondary" name="action" value="cancel">${p.state === 'approved' ? '확정한 보강 취소' : '투표 취소'}</button></form></details>` : ''}`;
+    ${staff(ctx) && p.state !== 'cancelled' ? `<details class="poll-cancel"><summary>취소 옵션</summary><form method="post" action="${h(votePath(p.id))}">${hidden}<button class="secondary" name="action" value="cancel">${p.state === 'approved' ? '확정한 보강 취소' : '투표 취소'}</button></form></details>` : ''}`;
 }
 
 function approvedSlots(ctx: PageContext, data: Payload, own: { id: string }[]) {
@@ -1438,17 +1485,24 @@ export function teamMakeupPoll(ctx: PageContext, event: ScheduleEvent) {
   if (!row) return;
   try {
     const { p, data, own } = load(ctx, row.id);
-    if (
-      (!staff(ctx) && p.state === 'draft') ||
-      data.closure.stamp !== JSON.stringify(event)
-    )
+    const stamp = data.assistant
+      ? JSON.stringify([
+          event.classSnapshot ??
+            classOnDate(team(ctx).config, event.classId, event.date),
+          event,
+        ])
+      : JSON.stringify(event);
+    if ((!staff(ctx) && p.state === 'draft') || data.closure.stamp !== stamp)
       return;
     return {
       state: p.state,
-      href: '/makeup-votes?id=' + encodeURIComponent(p.id),
+      href:
+        staff(ctx) && data.assistant ? assistantPollPath(p.id) : votePath(p.id),
       slots: p.state === 'approved' ? approvedSlots(ctx, data, own) : [],
-      responded:
-        own.length > 0 && own.every((s) => Object.hasOwn(data.votes, s.id)),
+      responded: data.assistant
+        ? Object.hasOwn(data.assistant.answers, ctx.actor.id) ||
+          responseExpired(data.assistant)
+        : own.length > 0 && own.every((s) => Object.hasOwn(data.votes, s.id)),
     };
   } catch (error) {
     if (
@@ -1530,16 +1584,7 @@ function render(ctx: PageContext) {
       }
     }
   }
-  const source = ctx.url.searchParams.get('source');
-  const selectable = isStaff
-    ? closures(ctx).filter(
-        (c) => !records.some(({ p }) => p.source_key === c.key),
-      )
-    : [];
-  const selectedSource = selectable.find((c) => c.key === source);
-  if (selectable.length)
-    html += `<section class="panel"><h2>보강 투표 준비</h2><p>휴강한 반을 고르면 시간표에 겹치지 않는 후보를 찾습니다.</p><form class="inline-form" method="post"><label>휴강한 반<select name="source" required>${selectable.map((c) => `<option value="${h(c.key)}"${selectedSource?.key === c.key ? ' selected' : ''}>${h(c.label)}</option>`).join('')}</select></label><button name="action" value="create">보강 후보 찾기</button></form></section>`;
-  const selected = chosenRecord || (selectedSource ? undefined : listing[0]);
+  const selected = chosenRecord || listing[0];
   if (listing.length > 1 || (listing.length && selected !== listing[0]))
     html += `<details class="poll-index"><summary>다른 보강 투표 보기</summary><nav class="report-library" aria-label="보강 투표 목록">${listing
       .map(
@@ -1550,11 +1595,9 @@ function render(ctx: PageContext) {
   if (!selected)
     return (
       html +
-      (selectedSource
-        ? '</div>'
-        : isStaff
-          ? '<p>진행 중인 보강 투표가 없습니다.</p></div>'
-          : '<p>응답할 보강 투표가 없습니다.</p></div>')
+      (isStaff
+        ? '<p>진행 중인 보강 투표가 없습니다.</p></div>'
+        : '<p>응답할 보강 투표가 없습니다.</p></div>')
     );
   const { p, data, own } = selected;
   const id = p.id;

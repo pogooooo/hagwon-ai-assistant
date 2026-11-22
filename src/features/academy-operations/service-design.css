@@ -1046,7 +1046,7 @@ button:hover,
   border-radius: 16px;
   background: #f0f2e8;
 }
-.message {
+.conversation-messages .message {
   --bubble-surface: #fff;
   display: flex;
   align-items: flex-start;
@@ -1055,7 +1055,7 @@ button:hover,
   max-width: min(96%, 46rem);
   gap: 8px;
 }
-.message.question {
+.conversation-messages .message.question {
   --bubble-surface: #e0e9bd;
   flex-direction: row-reverse;
   justify-self: end;
@@ -3877,7 +3877,7 @@ body[data-page='login'] {
     gap: 13px;
     padding: 12px;
   }
-  .message {
+  .conversation-messages .message {
     max-width: 100%;
     gap: 6px;
   }
@@ -4162,6 +4162,30 @@ a.briefing-record-link > span:last-child {
 }
 .briefing-secondary {
   margin-top: 12px;
+}
+.makeup-assistant {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.makeup-assistant .chat-composer {
+  margin: 0;
+  border-radius: 12px;
+}
+.makeup-assistant .makeup-assistant-action {
+  margin-top: 10px;
+}
+.makeup-assistant .message-bubble p + p {
+  margin-top: 6px;
+}
+.makeup-result-notices {
+  margin-bottom: 16px;
+}
+.makeup-result-notices h2 {
+  margin-bottom: 10px;
+}
+.makeup-assistant-history .briefing-records {
+  margin-top: 8px;
 }
 
 #notices-bookings .actions a.workspace-link {
