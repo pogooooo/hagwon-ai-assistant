@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { visionChat } from './read-image.mjs';
+import { ocrCacheDir } from '../rag-consultation/server/ingest/parsers/ocr.ts';
 
 // CLOVA OCR(General)로 쪽 사진의 글자를 읽고, 위치 정보로 단(왼쪽→오른쪽) 순서를 맞춘 뒤
 // 인쇄 번호에서 문항 경계를 나눈다. HCX-005 판독과 달리 결과가 결정적이고 JSON을 모델이
@@ -141,6 +142,9 @@ export function findPrintedPage(lines) {
 // "01", "7", "3.", "12)", "5번", "0012": 번호만 있는 줄이거나, 구두점 뒤에 발문이 이어지는 줄.
 const aloneNumber = /^\s*(\d{1,4})\s*(?:[.)．]|번)?\s*$/u;
 const leadingNumber = /^\s*(\d{1,4})\s*(?:[.)．]|번)\s*\S/u;
+// 앞에 0을 붙인 번호는 OCR이 발문과 한 줄로 읽어도("04 lim …") 번호로 본다. 같은 위치에 늘어선
+// 번호인지는 아래에서 따로 확인하므로 본문 중간의 숫자는 받지 않는다.
+const paddedLeading = /^\s*(0\d{1,3})\s+\S/u;
 export function pickItemNumberLines(lines) {
   if (!lines.length) return null;
   const left = Math.min(...lines.map((l) => l.x0));
@@ -155,8 +159,13 @@ export function pickItemNumberLines(lines) {
   const footer = bottom - (bottom - top) * 0.04;
   const columnOf = (l) => (!twoColumns ? 0 : (l.x0 + l.x1) / 2 < mid ? 0 : 1);
   const candidates = lines.flatMap((line) => {
-    const alone = aloneNumber.exec(line.text);
-    const match = alone ?? leadingNumber.exec(line.text);
+    // OCR이 번호 앞의 0을 영문 O로 읽는 경우("O4")를 바로잡는다.
+    const text = line.text.replace(
+      /^(\s*)[Oo](?=\d)/u,
+      (_, space) => space + '0',
+    );
+    const alone = aloneNumber.exec(text);
+    const match = alone ?? leadingNumber.exec(text) ?? paddedLeading.exec(text);
     // 맨 아래 쪽 번호 줄은 문항이 아니다.
     if (!match || line.y0 >= footer) return [];
     // 같은 줄 높이에서 더 왼쪽에 다른 글자가 있으면("① 3"의 3) 문항 번호가 아니다.
@@ -176,7 +185,7 @@ export function pickItemNumberLines(lines) {
         n: Number(match[1]),
         display: match[1],
         // 번호 뒤에 이어지는 발문의 시작 위치(번호만 있는 줄이면 줄 끝).
-        prefix: alone ? line.text.length : match[0].length - 1,
+        prefix: alone ? text.length : match[0].length - 1,
         padded: /^0\d/.test(match[1]),
       },
     ];
@@ -440,6 +449,73 @@ async function readItemImage(image) {
 // 쓴다. 수학은 OCR이 수식 구조를 잃으므로(√2×∛4 → V2×4) 문항 영역을 잘라 HCX-005로 다시 읽는다.
 // 다시 읽기에 실패한 수학 문항은 보류하고 OCR 글을 교사 확인용 후보로 남긴다.
 // 반환 모양은 readSheet과 같다({ detected, readingPasses, reads }).
+// 문항 번호 줄("10")이 쪽 위 여백에 걸려 쪽 번호로 잡히지 않게 번호 줄을 빼고 쪽 번호를 찾는다.
+function withoutItemNumbers(lines) {
+  const numbered = new Set(
+    (pickItemNumberLines(lines)?.picked ?? []).map((c) => c.line),
+  );
+  return lines.filter((l) => !numbered.has(l));
+}
+
+// 전체 사진 OCR이 작은 쪽수를 빠뜨렸을 때 하단의 빈 영역만 로컬에서 확대 판독한다.
+// 문항·보기나 꼬리말의 일부를 숫자로 오인하지 않도록 이미 글을 읽은 영역은 제외한다.
+async function readFooterPage(bytes, lines) {
+  let worker;
+  try {
+    const cache = ocrCacheDir();
+    await access(path.join(cache, 'eng.traineddata'));
+    const img = await loadImage(bytes);
+    const y = Math.floor(img.height * 0.88);
+    const h = img.height - y;
+    const regions = [];
+    for (let col = 0; col < 3; col++) {
+      const x = Math.floor((img.width * col) / 3);
+      const end = Math.floor((img.width * (col + 1)) / 3);
+      if (!lines.some((l) => l.y1 >= y && l.x0 < end && l.x1 > x))
+        regions.push({ x, w: end - x });
+    }
+    if (!regions.length) return;
+    const { createWorker } = await import('tesseract.js');
+    worker = await createWorker('eng', 1, {
+      cachePath: cache,
+      cacheMethod: 'readOnly',
+      langPath: cache,
+      errorHandler: () => {},
+    });
+    // SINGLE_BLOCK는 넓은 여백 안의 한 글자도 읽는다.
+    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    const pages = [];
+    for (const { x, w } of regions) {
+      const scale = Math.min(3, 1250 / w, 750 / h);
+      const canvas = createCanvas(Math.round(w * scale), Math.round(h * scale));
+      canvas
+        .getContext('2d')
+        .drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height);
+      const { data } = await worker.recognize(
+        canvas.toBuffer('image/png'),
+        {},
+        { blocks: true },
+      );
+      const word = data.blocks?.[0]?.paragraphs[0]?.lines[0]?.words[0];
+      if (
+        /^[1-9]\d{0,3}$/.test(data.text.trim()) &&
+        word?.text === data.text.trim() &&
+        word.confidence >= 85 &&
+        word.bbox.x0 > 2 &&
+        word.bbox.x1 < canvas.width - 2 &&
+        word.bbox.y0 > 2 &&
+        word.bbox.y1 < canvas.height - 2
+      )
+        pages.push(Number(word.text));
+    }
+    if (pages.length === 1) return pages[0];
+  } catch {
+    // 모델 또는 이미지 디코더를 쓸 수 없으면 교사가 쪽수를 입력한다.
+  } finally {
+    await worker?.terminate();
+  }
+}
+
 export async function readSheetService(source, subject) {
   const bytes =
     typeof source === 'string' ? await readFile(source) : source.bytes;
@@ -451,8 +527,10 @@ export async function readSheetService(source, subject) {
       : source.mime;
   const fields = await ocrImage({ bytes, mime });
   const lines = readingOrder(fieldsToLines(fields));
-  const printedPage = findPrintedPage(lines);
   const items = segmentItems(lines);
+  const printedPage =
+    findPrintedPage(withoutItemNumbers(lines)) ??
+    (items.length ? await readFooterPage(bytes, lines) : undefined);
   const regions = itemRegions(items, lines);
   const pageOf = printedPage ? { printedPage } : {};
   const detected = [];
@@ -504,11 +582,7 @@ export async function readSheetService(source, subject) {
 export async function readSheetOcr(source) {
   const fields = await ocrImage(source);
   const lines = readingOrder(fieldsToLines(fields));
-  // 문항 번호 줄("10")이 쪽 위 여백에 걸려 쪽 번호로 잡히지 않게 번호 줄을 빼고 쪽 번호를 찾는다.
-  const numbered = new Set(
-    (pickItemNumberLines(lines)?.picked ?? []).map((c) => c.line),
-  );
-  const printedPage = findPrintedPage(lines.filter((l) => !numbered.has(l)));
+  const printedPage = findPrintedPage(withoutItemNumbers(lines));
   const detected = segmentItems(lines).map(({ displayNumber, text }) => ({
     displayNumber,
     text,
