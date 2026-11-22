@@ -309,3 +309,34 @@ test('Cloudflare 배포의 canvas 대체 모듈이 판독 코드가 가져오는
   for (const name of imported)
     assert.equal(typeof stub[name], 'function', name + ' 없음');
 });
+
+test('점 없이 인쇄한 01식 번호도 같은 위치에 늘어선 번호로 찾고, 보기 값은 번호로 받지 않는다', () => {
+  // 두 단 문제지: 번호(01, 02 / 04, 05)는 각 단의 같은 왼쪽 위치에 있고, 보기 값(3, 6)은 보기 기호 옆에 있다.
+  // 분수가 있는 발문은 번호보다 조금 위에서 시작한다.
+  const lines = [
+    ...line('x2 + x - 6 의 값은?', 75, 95, 160),
+    ...line('01', 37, 101, 15),
+    ...line('①', 38, 130, 10),
+    ...line('3', 51, 131, 6),
+    ...line('② 4', 115, 130, 30),
+    ...line('02', 37, 326, 15),
+    ...line('①', 39, 359, 10),
+    ...line('3', 51, 381, 6),
+    ...line('04', 321, 101, 15),
+    ...line('상수 a, b에 대하여 a - b의 값은?', 340, 103, 200),
+    ...line('05', 321, 325, 15),
+    ...line('의 값은?', 345, 326, 100),
+    ...line('1', 549, 808, 5),
+  ];
+  const items = segmentItems(readingOrder(fieldsToLines(lines)));
+  assert.deepEqual(
+    items.map((i) => i.displayNumber),
+    ['01', '02', '04', '05'],
+  );
+  // 번호보다 조금 위에서 시작한 발문도 그 문항에 붙는다.
+  assert.match(items[0].text, /^x2 \+ x - 6 의 값은\?/);
+  assert.match(items[2].text, /상수 a, b에 대하여/);
+  // 문항 영역도 번호 위치에서 계산된다.
+  const regions = itemRegions(items, readingOrder(fieldsToLines(lines)));
+  assert.equal(regions.size, 4);
+});

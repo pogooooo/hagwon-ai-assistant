@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import {
   fieldsToLines,
+  pickItemNumberLines,
   readingOrder,
 } from '../question-classification/ocr-page.mjs';
 import { imageDimensions } from '../rag-consultation/server/ingest/parsers/image.ts';
@@ -40,90 +41,28 @@ const formats: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
 };
-// "01", "7", "3.", "12)", "5번". 번호만 있는 줄이거나, 구두점 뒤에 발문이 이어지는 줄.
-const alone = /^\s*(\d{1,3})\s*(?:[.)．]|번)?\s*$/u;
-const leading = /^\s*(\d{1,3})\s*(?:[.)．]|번)\s*\S/u;
-
 /**
- * 인쇄 문항 번호는 각 단의 같은 왼쪽 위치에 세로로 늘어서고 번호가 커진다. 보기 값("① 3"의 3)과
- * 손글씨 숫자도 번호처럼 읽히므로, 단마다 왼쪽 위치가 같은 숫자 줄 묶음 중 위에서 아래로 번호가
- * 커지는 묶음만 문항 번호로 받는다.
+ * 사진 채점용 문항 배치: 인쇄 문항 번호(교재 사진 분석과 같은 규칙, pickItemNumberLines)와
+ * 문항 영역·책 쪽수·보기 배치를 찾는다.
  */
 export function layoutFromLines(
   lines: Line[],
   size: { width: number; height: number },
   fields: unknown[] = [],
 ): OcrLayout | null {
-  if (!lines.length) return null;
-  const left = Math.min(...lines.map((l) => l.x0));
-  const right = Math.max(...lines.map((l) => l.x1));
-  const mid = (left + right) / 2;
-  const twoColumns =
-    lines.filter((l) => l.x1 <= mid).length >= 3 &&
-    lines.filter((l) => l.x0 >= mid).length >= 3;
-  const tolerance = Math.max(4, (right - left) * 0.012);
-  const top = Math.min(...lines.map((l) => l.y0));
-  const bottom = Math.max(...lines.map((l) => l.y1));
-  const footer = bottom - (bottom - top) * 0.04;
-  const columnOf = (l: Line) =>
-    !twoColumns ? 0 : (l.x0 + l.x1) / 2 < mid ? 0 : 1;
-  const candidates = lines.flatMap((line) => {
-    const match = alone.exec(line.text) ?? leading.exec(line.text);
-    // 맨 아래 쪽 번호 줄은 문항이 아니다.
-    if (!match || line.y0 >= footer) return [];
-    // 같은 줄 높이에서 더 왼쪽에 다른 글자가 있으면("① 3"의 3) 문항 번호가 아니다.
-    const crowded = lines.some(
-      (other) =>
-        other !== line &&
-        columnOf(other) === columnOf(line) &&
-        other.x1 <= line.x0 + 2 &&
-        other.x0 < line.x0 - tolerance &&
-        other.y0 < line.y1 &&
-        line.y0 < other.y1,
-    );
-    if (crowded) return [];
-    return [{ line, n: Number(match[1]), padded: /^0\d/.test(match[1]) }];
-  });
-  type Candidate = (typeof candidates)[number];
-  // 앞에 0을 붙인 번호("01")가 섞여 있으면 그 문제지는 번호를 그렇게 인쇄한 것이다. 같은 자리에
-  // 숫자 하나로 읽힌 것("4")은 펜에 덮인 보기 기호일 수 있어 뺀다.
-  const score = (group: Candidate[]) =>
-    group.length + group.filter((c) => c.padded).length * 0.5;
-  // 위에서 아래 순서로 번호가 커지는(한 번에 10 이내) 묶음 중 점수가 가장 높은 것.
-  const longestIncreasing = (all: Candidate[]) => {
-    const group = all.some((c) => c.padded) ? all.filter((c) => c.padded) : all;
-    const chain = group.map((c) => [c]);
-    for (let i = 0; i < group.length; i++)
-      for (let j = 0; j < i; j++) {
-        const step = group[i].n - group[j].n;
-        if (
-          step > 0 &&
-          step <= 10 &&
-          score([...chain[j], group[i]]) > score(chain[i])
-        )
-          chain[i] = [...chain[j], group[i]];
-      }
-    return chain.reduce<Candidate[]>(
-      (best, c) => (score(c) > score(best) ? c : best),
-      [],
-    );
-  };
-  const picked: Candidate[] = [];
-  for (const column of twoColumns ? [0, 1] : [0]) {
-    const inColumn = candidates
-      .filter((c) => columnOf(c.line) === column)
-      .sort((a, b) => a.line.y0 - b.line.y0);
-    let best: Candidate[] = [];
-    for (const anchor of inColumn) {
-      const aligned = longestIncreasing(
-        inColumn.filter(
-          (c) => Math.abs(c.line.x0 - anchor.line.x0) <= tolerance,
-        ),
-      );
-      if (score(aligned) > score(best)) best = aligned;
-    }
-    picked.push(...best);
-  }
+  const layout = pickItemNumberLines(lines);
+  if (!layout) return null;
+  const {
+    picked,
+    twoColumns,
+    columnOf,
+    left,
+    right,
+    mid,
+    top,
+    bottom,
+    footer,
+  } = layout;
   const numbers = picked.map((c) => c.n);
   if (
     !numbers.length ||
