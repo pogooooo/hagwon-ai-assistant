@@ -207,7 +207,11 @@ for (const direct of [false, true])
               readings: (exact || direct ? [2, 0, 1] : [2, 0, 2]).map((i) => ({
                 number: numbers[i],
                 answer_observed: exact ? Number(answers[i]) : answers[i],
-                answer_status: 'readable',
+                answer_status: direct
+                  ? i === 1
+                    ? 'correct'
+                    : 'incorrect'
+                  : 'readable',
                 ...(direct ? { printed_calculation: equations[i] } : {}),
                 ...(!exact ? { bbox: boxes[i] } : {}),
               })),
@@ -322,16 +326,7 @@ test('worksheet grading uses actual labels, print agreement and a separate handw
       } else if (data.verifyNumbers) {
         passes.push('verify');
         assert.deepEqual(data.verifyNumbers, numbers);
-        content = {
-          printedPage: null,
-          numbers,
-          complete: true,
-          readings: numbers.map((number, index) => ({
-            number,
-            answer_observed: ['24', 'II', '12'][index],
-            answer_status: index === 0 ? 'incorrect' : 'correct',
-          })),
-        };
+        content = { '2': '24', '5': 'II', '8': '12', '3': '9' };
       } else {
         passes.push('read');
         content = data.manifest.map(

@@ -352,6 +352,27 @@ export function createNaverGrader(
             ),
           ) as unknown,
       );
+      const answersByNumber = answerOnly
+        ? z
+            .record(
+              z.string().regex(/^[1-9]\d{0,2}$/u),
+              z.string().trim().min(1),
+            )
+            .safeParse(value)
+        : undefined;
+      const numberedAnswers = answersByNumber?.success
+        ? Object.entries(answersByNumber.data).flatMap(([number, text]) =>
+            verifyNumbers.includes(number)
+              ? [
+                  {
+                    number: Number(number),
+                    answer_observed: text,
+                    answer_status: 'readable',
+                  },
+                ]
+              : [],
+          )
+        : [];
       const parsed = z
         .object({
           printedPage: z.number().int().positive().max(9999).nullable(),
@@ -359,7 +380,16 @@ export function createNaverGrader(
           complete: z.boolean(),
           readings: z.array(z.unknown()).max(100).optional(),
         })
-        .safeParse(value);
+        .safeParse(
+          numberedAnswers.length
+            ? {
+                printedPage: null,
+                numbers: numberedAnswers.map(({ number }) => number),
+                complete: true,
+                readings: numberedAnswers,
+              }
+            : value,
+        );
       if (!parsed.success || (!parsed.data.complete && !verifyNumbers.length))
         throw new GradingError('PHOTO_SCOPE_UNCLEAR');
       const { readings, ...manifest } = parsed.data;
