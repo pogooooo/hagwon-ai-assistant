@@ -700,6 +700,15 @@ export function ensureResultReport(
   );
   const observations = subjectObservations(s);
   for (const f of s.facts.filter(
+    (fact) => fact.primary_skill_id && fact.n_evaluable,
+  )) {
+    observations.push({
+      claim_type: 'observed_rate',
+      fact_ids: [f.fact_id],
+      template_key: 'rate',
+    });
+  }
+  for (const f of s.facts.filter(
     (f) => f.primary_skill_id && f.n_incorrect + f.n_partial + f.n_blank > 0,
   )) {
     observations.push({

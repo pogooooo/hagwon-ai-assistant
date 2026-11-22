@@ -4,6 +4,7 @@ import {
 } from '../academy-operations/demo-homework-materials.ts';
 import { renderStudentReports } from '../academy-operations/student-reports.ts';
 import { renderReportDocument } from '../academy-operations/report-document.ts';
+import { buildLearningNarrative } from '../academy-operations/report-narrative.ts';
 import { photoItem } from './assigned-work.ts';
 import { gradingOverview, gradingStates as names } from './overview.ts';
 import { createHash } from 'node:crypto';
@@ -853,43 +854,40 @@ async function render(ctx: PageContext) {
       const basis = readSnapshot(ctx, report.snapshot_id);
       const cited = new Set(report.observations.flatMap((o) => o.fact_ids));
       const stats = basis.facts.filter(
-        (f) =>
-          cited.has(f.fact_id) &&
-          f.period_role === 'primary' &&
-          f.n_evaluable > 0,
+        (f) => cited.has(f.fact_id) && f.period_role === 'primary',
       );
-      const sections = [
-        ...(stats.length
-          ? [
-              '## 성취도',
-              [
-                '| 학습 유형 | 정답 | 전체 |',
-                '| --- | ---: | ---: |',
-                ...stats.map(
-                  (f) =>
-                    '| ' +
-                    (f.skill_label || subjectNames[f.subject_id])
-                      .replaceAll('|', '｜')
-                      .replace(/\s+/g, ' ') +
-                    ' | ' +
-                    f.n_correct +
-                    ' | ' +
-                    f.n_evaluable +
-                    ' |',
-                ),
-              ].join('\n'),
-            ]
-          : []),
-        '## 학습 분석',
-        report.rendered_text.split('\n').join('\n\n'),
-      ].join('\n\n');
+      const overall = stats.filter((f) => f.primary_skill_id === null);
+      const narrative = buildLearningNarrative({
+        total: overall.reduce((sum, f) => sum + f.n_evaluable, 0),
+        correct: overall.reduce((sum, f) => sum + f.n_correct, 0),
+        excluded: overall.reduce(
+          (sum, f) => sum + f.n_ungradable + f.n_excluded,
+          0,
+        ),
+        unknown: basis.availability
+          .filter((a) => a.period_role === 'primary')
+          .reduce(
+            (sum, a) => sum + a.n_pending_items + a.n_unavailable_items,
+            0,
+          ),
+        sourceCount: basis.result_refs.length,
+        types: stats
+          .filter((f) => f.primary_skill_id)
+          .map((f) => ({
+            id: f.fact_id,
+            name: f.skill_label ?? subjectNames[f.subject_id],
+            total: f.n_evaluable,
+            wrong: f.n_incorrect + f.n_partial + f.n_blank,
+          })),
+      });
       detail += renderReportDocument(
         report.assignment_title || '학습 리포트',
-        sections,
+        narrative.body,
         (report.status === 'approved' ? '공개' : '검토 대기') +
           ' · ' +
           report.generated_at.slice(0, 10),
         '과제-학습-리포트',
+        report.rendered_text,
       );
       if (staff && report.status === 'draft')
         detail += `<section class="panel">${startForm('approve_report')}${hidden('report', report.report_id)}${hidden('revision', report.revision)}${hidden('generation', report.source_generation)}${hidden('hash', report.facts_hash)}<label><input type="checkbox" name="review_complete" value="yes" required>근거와 내용을 검수했습니다.</label><button>학생·보호자에게 공개</button></form></section>`;
