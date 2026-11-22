@@ -748,7 +748,7 @@ function render(ctx: PageContext) {
     : configuredStudents
         .map(
           (s) =>
-            `<section class="panel"><h2>${h(s.name)} · 앞으로 한 달</h2><ul class="item-list">${studentSchedule(
+            `<section class="panel makeup-upcoming"><h2>${h(s.name)} · 앞으로 한 달</h2><ul class="item-list">${studentSchedule(
               academy,
               state,
               s.id,
@@ -757,7 +757,7 @@ function render(ctx: PageContext) {
             )
               .map(
                 (x) =>
-                  `<li>${h(x.date)} · ${h(x.start)}~${h(x.end)} ${h(x.className)} <span class="pill">${{ regular: '정규 수업', canceled: '휴강', absent: '결석', makeup: '보강' }[x.kind]}</span>${x.kind === 'makeup' ? `<a class="workspace-link" href="/schedule?view=makeup#event-${h(x.eventId)}">${h(state.events.find((e) => e.eventId === x.eventId)?.date)} 보강 상세 <span aria-hidden="true">›</span></a>` : ''}</li>`,
+                  `<li><time datetime="${h(x.date)}">${h(x.date)}<small>${h(x.start)}–${h(x.end)}</small></time><strong>${h(x.className)}</strong><span class="pill">${{ regular: '정규 수업', canceled: '휴강', absent: '결석', makeup: '보강' }[x.kind]}</span>${x.kind === 'makeup' ? `<a class="workspace-link" href="/schedule?view=makeup#event-${h(x.eventId)}">${h(state.events.find((e) => e.eventId === x.eventId)?.date)} 보강 상세 <span aria-hidden="true">›</span></a>` : ''}</li>`,
               )
               .join('')}</ul></section>`,
         )
@@ -771,12 +771,13 @@ function render(ctx: PageContext) {
     <div class="page-heading"><h2>휴·보강 일정</h2><p class="muted">${staff(ctx) ? '보호자 전원이 동의하면 비서가 보강 일정을 반영합니다.' : '휴강과 확정된 보강 시간·교실을 확인하세요.'}</p></div>
     ${ctx.actor.role === 'admin' ? `<details class="panel" ${config.classes.length ? '' : 'open'}><summary>정규 시간표 설정 · ${config.classes.length}개 반 등록</summary><p class="muted">모든 반의 정규 수업을 등록하면 강사·교실·원생의 시간 겹침을 함께 확인할 수 있습니다.</p><ul>${academy.classes.map((c) => `<li>${h(c.name)} · ${c.days.map((d) => '일월화수목금토'[d]).join('·')} · ${h(c.start)}~${h(c.end)} · ${h(c.room)}</li>`).join('')}</ul><form method="post">${hidden}<input type="hidden" name="action" value="class-config"><div class="fields"><label>반<select name="classId">${options(classes)}</select></label><label>담당 강사<select name="teacher">${options(teachers)}</select></label><label>교실<input name="room" maxlength="60" required value="1강의실"></label><label>시작<input name="start" type="time" required></label><label>적용일<input name="effectiveFrom" type="date"></label><label>종료<input name="end" type="time" required></label><label>학원 동시 수용 인원<input name="capacity" type="number" min="1" max="1000" value="${config.capacity}" required></label><label>학원 수업 종료 한도<input name="closeTime" type="time" value="${h(config.closeTime)}" required></label></div><fieldset><legend>정규 수업 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><button>시간표 저장</button></form></details>` : ''}
     ${staff(ctx) ? `<details class="panel makeup-registration"${ctx.formError && ctx.submittedForm?.get('action') === 'create' ? ' open' : ''}><summary>휴강·결석 일정 등록</summary><form method="post">${hidden}<input type="hidden" name="action" value="create"><div class="fields"><label>반<select name="classId" required>${options(classes.filter((c) => academy.classes.some((x) => x.classId === c.id)))}</select></label><label>등록 유형<select name="scope"><option value="class">반 전체 휴강</option><option value="student">개별 학생 결석</option></select></label><label>휴강·결석일<input type="date" name="date" required></label><label>결석 학생<select name="studentId"><option value="">개별 결석일 때 선택</option>${students.map((s) => `<option value="${h(s.id)}" data-class-ids="${h(JSON.stringify(s.classIds))}">${h(s.name)}</option>`).join('')}</select></label></div><label>사유<input name="reason" maxlength="500"></label><div class="actions">${ctx.actor.role === 'admin' ? '<button name="confirm" value="yes">휴강·결석 확정</button><button class="secondary" type="submit">초안 저장</button>' : '<button>원장 검토로 보내기</button>'}</div></form></details>` : ''}
-    ${sessions}<div class="makeup-events">${
+    <div class="makeup-events">${
       state.events
         .filter((e) => visible(ctx, e))
         .map(eventCard)
         .join('') || '<p class="empty">등록된 일정이 없습니다.</p>'
     }</div>
+    ${sessions}
     ${ctx.actor.role !== 'teacher' && configuredStudents.length && (ctx.url.searchParams.get('saved') === 'availability' || ctx.url.searchParams.get('manage') === 'availability') ? `<details class="panel" ${ctx.url.searchParams.get('saved') === 'availability' ? 'open' : ''}><summary>${ctx.actor.role === 'admin' ? '학생별 정기 가능 시간(관리자 설정)' : '보강 가능 시간 등록'}</summary><form method="post">${hidden}<input type="hidden" name="action" value="availability"><label>학생<select name="studentId">${options(configuredStudents)}</select></label><fieldset><legend>가능 요일</legend><div class="actions">${[...'일월화수목금토'].map((d, i) => `<label class="check-label"><input type="checkbox" name="days" value="${i}">${d}</label>`).join('')}</div></fieldset><div class="fields"><label>시작<input name="start" type="time"></label><label>종료<input name="end" type="time"></label></div><p class="muted">저장하면 기존 가능 시간을 선택한 요일·시간으로 바꿉니다.</p><div class="actions"><button>가능 시간 저장</button><button class="secondary" name="clearAvailability" value="yes">가능 시간 초기화</button></div></form><ul>${configuredStudents.map((s) => `<li>${h(s.name)} · ${h(formatWindows(state.availability?.[s.id] ?? [])) || '미등록'}</li>`).join('')}</ul></details>` : ''}
     `;
 }

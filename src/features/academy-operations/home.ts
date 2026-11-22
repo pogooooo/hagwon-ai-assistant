@@ -44,6 +44,26 @@ function panel(
   </section>`;
 }
 
+function staffSummary(
+  reviewPath: string,
+  review: number,
+  pending: number,
+  day: string,
+  events: number,
+) {
+  const items = [
+    { path: reviewPath, label: '숙제 확인', value: review },
+    { path: '/consultation?view=inbox', label: '답변할 상담', value: pending },
+    { path: '/schedule?day=' + day, label: '오늘 일정', value: events },
+  ];
+  return `<nav class="ondap-metrics" aria-label="오늘의 업무">${items
+    .map(
+      ({ path, label, value }) =>
+        `<a href="${h(path)}">${serviceIcon(path)}<span>${label}<strong>${value}건</strong></span><span class="metric-arrow" aria-hidden="true">›</span></a>`,
+    )
+    .join('')}</nav>`;
+}
+
 function schedulePanel(ctx: PageContext, from: string) {
   const end = new Date(Date.parse(from + 'T00:00:00Z') + 13 * 86_400_000)
     .toISOString()
@@ -123,14 +143,10 @@ export function renderHome(ctx: PageContext) {
     );
 
   const shortcuts = `<nav class="home-shortcuts" aria-label="자주 사용하는 서비스">${[
-    ...(showChat ? [['/consultation', '학원 상담']] : []),
     ...(!visitor
       ? [
-          ['/schedule', '수업 일정'],
           ['/homework', staff ? '숙제 관리' : '숙제 확인'],
-          guardian
-            ? ['/student-reports', '학습 리포트']
-            : ['/learning', '학습 기록'],
+          ...(!guardian ? [['/learning', '학습 기록']] : []),
         ]
       : []),
     ['/documents', '학원 자료'],
@@ -147,6 +163,7 @@ export function renderHome(ctx: PageContext) {
   </section>`;
   if (staff && homework) {
     const board = homeworkDashboard(ctx);
+    const reviewPath = '/homework?view=review';
     const dayEntries = visibleCalendarEntries(ctx, today, today);
     const dayPanel = panel(
       '오늘 일정',
@@ -184,6 +201,22 @@ export function renderHome(ctx: PageContext) {
       '처리할 상담이 없습니다.',
     );
     const work = (review.length ? queue : '') + (pending.length ? inbox : '');
+    const headingText = review.length
+      ? `숙제 제출 ${review.length}건을 확인해 주세요`
+      : pending.length
+        ? `답변을 기다리는 상담이 ${pending.length}건 있어요`
+        : '지금 확인할 숙제나 상담이 없어요';
+    const next = review.length
+      ? reviewPath
+      : pending.length
+        ? '/consultation?view=inbox'
+        : '/schedule?day=' + today;
+    const nextLabel = review.length
+      ? '제출 내용 확인하기'
+      : pending.length
+        ? '상담에 답변하기'
+        : '오늘 일정 보기';
+    const hero = `<section class="ondap-hero"><div><h2>${headingText}</h2><a class="button-link" href="${h(next)}">${nextLabel}<span aria-hidden="true">›</span></a></div><img src="/assets/owl.png" alt=""></section>`;
     const upcoming = dayEntries.length
       ? schedulePanel(
           ctx,
@@ -192,7 +225,7 @@ export function renderHome(ctx: PageContext) {
             .slice(0, 10),
         )
       : agenda;
-    return `${heading}${makeupResultNotices(ctx)}<div class="ondap-board"><div class="ondap-column">
+    return `${heading}${hero}${staffSummary(reviewPath, review.length, pending.length, today, dayEntries.length)}${makeupResultNotices(ctx)}<div class="ondap-board"><div class="ondap-column">
        ${work || '<p class="home-clear">지금 확인할 제출과 상담이 없습니다.</p>'}
        ${board.table}
        </div><div class="ondap-column">${dayEntries.length ? dayPanel : ''}${links(
@@ -257,19 +290,21 @@ export function renderHome(ctx: PageContext) {
         );
   const messages = guardian ? visibleParentMessages(ctx) : [];
   const familyHero = guardian
-    ? `<section class="family-highlight"><img src="/assets/ondap-report-mascot.png" alt=""><div><h2>학습 리포트</h2><p>과제별 결과와 월간 학습 기록을 확인하세요.</p><a class="button-link assessment-entry" href="/student-reports">학습 리포트 보기 <span aria-hidden="true">›</span></a></div></section>${panel(
-        '학원 알림',
+    ? `<section class="family-highlight"><img src="/assets/ondap-report-mascot.png" alt=""><div><h2>학습 리포트</h2><p>과제별 결과와 월간 학습 기록을 확인하세요.</p><a class="button-link assessment-entry" href="/student-reports">학습 리포트 보기 <span aria-hidden="true">›</span></a></div></section>`
+    : '';
+  const notices = guardian
+    ? panel(
+        '학원 공지',
         '/messages',
         messages.slice(0, 3).map((m) => ({
           title: m.title,
           href: '/messages?id=' + encodeURIComponent(m.id),
         })),
-        '도착한 알림이 없습니다.',
-      )}`
+        '도착한 공지가 없습니다.',
+      )
     : '';
-  return `${heading}${pendingMakeupNotices(ctx)}${familyHero}${shortcuts}<div class="home-columns${visitor ? '' : ' home-family'}">
-    <div class="home-primary">${visitor ? documentList() : `${agenda}${homeworkPanel || ''}${learning}`}</div>
-    ${showChat ? `<div class="home-help">${search}</div>` : ''}
-    <div class="home-secondary">${visitor ? '' : documentList()}${showChat ? recentConsultations() : ''}</div>
+  return `${heading}<div class="home-flow${visitor ? ' home-flow-visitor' : ''}">
+    <div class="home-flow-primary">${homeworkPanel || ''}${pendingMakeupNotices(ctx)}${familyHero}${learning}${visitor ? documentList() : agenda}</div>
+    <div class="home-flow-secondary">${notices}${showChat ? search : ''}${shortcuts}${showChat ? recentConsultations() : ''}${visitor ? '' : documentList()}</div>
   </div>`;
 }
