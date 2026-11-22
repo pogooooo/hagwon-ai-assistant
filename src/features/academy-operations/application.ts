@@ -45,6 +45,7 @@ import {
   seedDemoConsultationInbox,
 } from './consultation.ts';
 import {
+  accessibleStudents,
   authenticate,
   directoryModule,
   getActor,
@@ -65,13 +66,13 @@ import {
   gradingModule,
   gradingPhoto,
   gradingService,
+  visibleGradingReports,
 } from '../homework-grading/module.ts';
 import { setupLearning, renderLearningPublication } from './learning.ts';
 import { parentMessagesModule } from './parent-messages.ts';
 import { unreadParentCount } from './parent-messages-model.ts';
 import { calendarModule } from './calendar.ts';
 import { seedDemoMakeupPolls, makeupPollsModule } from './makeup-polls.ts';
-import { gradingOverview } from '../homework-grading/overview.ts';
 import {
   renderStudentReports,
   studentReportsModule,
@@ -125,14 +126,28 @@ const modules: OperationModule[] = [
   {
     ...studentReportsModule,
     render: (ctx) =>
-      renderStudentReports(ctx, () =>
-        gradingOverview(ctx).results.map((result) => ({
-          href: result.href,
-          title: result.title,
-          studentName: result.studentName,
-          date: result.assessment_date,
-        })),
-      ),
+      renderStudentReports(ctx, () => {
+        const names = new Map(
+          accessibleStudents(ctx.db, ctx.actor).map((student) => [
+            student.id,
+            student.name,
+          ]),
+        );
+        return visibleGradingReports(ctx, new Set(names.keys())).flatMap(
+          (report) =>
+            report.assignment_title
+              ? [
+                  {
+                    href:
+                      '/grading?report=' + encodeURIComponent(report.report_id),
+                    title: report.assignment_title,
+                    studentName: names.get(report.student) ?? '',
+                    date: report.generated_at.slice(0, 10),
+                  },
+                ]
+              : [],
+        );
+      }),
   },
   documentsModule,
   examBuilderModule,
@@ -402,7 +417,7 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-mascot"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-reports"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
@@ -884,9 +899,12 @@ export function createOperationsServer({
           redirect(response, target ?? url.pathname + url.search);
         } catch (error) {
           if (
-            ![calendarModule, parentMessagesModule, examBuilderModule].includes(
-              operation,
-            ) ||
+            (![
+              calendarModule,
+              parentMessagesModule,
+              examBuilderModule,
+            ].includes(operation) &&
+              operation.path !== studentReportsModule.path) ||
             !(error instanceof OperationError) ||
             ![400, 409, 422, 502, 503].includes(error.status)
           )

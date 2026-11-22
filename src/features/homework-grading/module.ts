@@ -93,6 +93,33 @@ export function configureGrading(
 ) {
   services.set(db, service);
 }
+export function visibleGradingReports(
+  ctx: PageContext,
+  students: ReadonlySet<string>,
+) {
+  const staff = ['teacher', 'admin'].includes(ctx.actor.role);
+
+  return rows<{ id: string; student: string; status: string }>(
+    ctx.db,
+    "SELECT id,student,status FROM grading_v3_reports WHERE tenant=? AND status<>'stale' ORDER BY rowid DESC",
+    ctx.actor.academyId,
+  )
+    .filter(
+      (r) => students.has(r.student) && (staff || r.status === 'approved'),
+    )
+    .flatMap((r) => {
+      try {
+        return [{ ...readReport(ctx, r.id), student: r.student }];
+      } catch (error) {
+        if (
+          error instanceof GradingError &&
+          [403, 404, 409].includes(error.status)
+        )
+          return [];
+        throw error;
+      }
+    });
+}
 const errorNames: Record<string, string> = {
   VALIDATION_FAILED: '입력값을 확인해 주세요.',
   PRACTICE_SCOPE: '이 계정과 과제에서는 체험용 사진 전송을 사용할 수 없습니다.',
@@ -1033,27 +1060,10 @@ async function render(ctx: PageContext) {
         }
         pending.push(...missing.slice(5));
       }
-      const visible = new Set(students.map((s) => s.id));
-      const reports = rows<{ id: string; student: string; status: string }>(
-        ctx.db,
-        "SELECT id,student,status FROM grading_v3_reports WHERE tenant=? AND status<>'stale' ORDER BY rowid DESC",
-        ctx.actor.academyId,
-      )
-        .filter(
-          (r) => visible.has(r.student) && (staff || r.status === 'approved'),
-        )
-        .flatMap((r) => {
-          try {
-            return [{ ...readReport(ctx, r.id), student: r.student }];
-          } catch (error) {
-            if (
-              error instanceof GradingError &&
-              [403, 404, 409].includes(error.status)
-            )
-              return [];
-            throw error;
-          }
-        });
+      const reports = visibleGradingReports(
+        ctx,
+        new Set(students.map((student) => student.id)),
+      );
       const list =
         '<section class="panel"><h2>과제별 채점 리포트</h2>' +
         (reports
@@ -1066,6 +1076,9 @@ async function render(ctx: PageContext) {
       return (
         intro +
         (ctx.actor.role === 'guardian' ? renderStudentReports(ctx) : '') +
+        (staff
+          ? '<div class="report-kind-actions"><a class="button-link subtle-link" href="/student-reports">월간 리포트 열기</a></div>'
+          : '') +
         list +
         (pending.length
           ? '<section class="panel"><h2>리포트 초안 준비 중</h2>' +
