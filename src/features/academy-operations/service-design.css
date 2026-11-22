@@ -3971,16 +3971,6 @@ a.assessment-entry.button-link {
 }
 
 @media (max-width: 600px) {
-  .report-library[aria-label='월간 리포트 목록'] {
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    padding-bottom: 8px;
-  }
-  .report-library[aria-label='월간 리포트 목록'] > a {
-    flex: 0 0 min(80%, 220px);
-    scroll-snap-align: start;
-  }
   .voice-heading {
     flex-wrap: wrap;
   }
@@ -4097,14 +4087,12 @@ a.assessment-entry.button-link {
 .poll-index,
 .poll-people,
 .poll-cancel,
-.report-periods,
 .report-save {
   border-top: 1px solid var(--border);
 }
 .poll-index summary,
 .poll-people summary,
 .poll-cancel summary,
-.report-periods summary,
 .report-save summary {
   width: fit-content;
   padding: 9px 0;
@@ -4163,13 +4151,6 @@ a.assessment-entry.button-link {
 .poll-approve label {
   gap: 10px;
 }
-.report-periods {
-  max-width: 920px;
-}
-.report-periods .report-library {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
-}
 .report-save {
   padding: 0 clamp(16px, 3vw, 32px) 8px;
 }
@@ -4180,8 +4161,13 @@ a.assessment-entry.button-link {
   display: grid;
   gap: 12px;
   margin: 0;
-  padding: 14px clamp(16px, 3vw, 32px);
-  border-bottom: 1px solid var(--border);
+  padding: clamp(16px, 3vw, 28px) clamp(16px, 3vw, 32px) 0;
+}
+.report-highlights > div {
+  padding: 12px 15px;
+  background: #f4f5eb;
+  border: 1px solid #e7ebdb;
+  border-radius: 13px;
 }
 .report-highlights dt {
   color: var(--muted);
@@ -4199,6 +4185,298 @@ a.assessment-entry.button-link {
   .report-highlights {
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
+  }
+}
+.report-workspace {
+  display: grid;
+  grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(12px, 2vw, 24px);
+  margin-block: 16px;
+}
+.report-preview,
+.report-create-fields > * {
+  min-width: 0;
+}
+.report-index,
+.report-create,
+.report-manage,
+.report-assignment-index {
+  max-width: 920px;
+}
+.report-create-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 155px), 1fr));
+  align-items: end;
+  gap: 10px;
+}
+.report-create-fields label,
+.report-comment-editor label {
+  margin: 0;
+}
+.report-create-fields :is(select, input, button) {
+  width: 100%;
+  min-height: 44px;
+}
+.report-attendance-editor {
+  margin-top: 10px;
+}
+.report-attendance-editor summary,
+.report-comment-editor summary {
+  padding-block: 7px;
+  width: fit-content;
+  cursor: pointer;
+}
+.report-index h2 {
+  font-size: 1.05rem;
+  margin: 0 0 12px;
+}
+.report-index-list {
+  display: grid;
+  gap: 12px;
+  max-height: 38rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.report-mobile-picker {
+  display: none;
+}
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.report-filters a {
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--muted);
+}
+.report-filters a[aria-current='page'] {
+  border-color: var(--border);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 700;
+}
+.report-month h3 {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+.report-month ul,
+.report-meters {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.report-month + .report-month {
+  margin-top: 10px;
+}
+.report-kind-actions {
+  margin-block: 0 12px;
+}
+.report-index-list .report-month + .report-month {
+  margin-top: 0;
+}
+.report-month .grade-report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--ink);
+}
+.report-month .grade-report-row[aria-current='page'],
+.report-month .grade-report-row:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.report-month small {
+  display: block;
+  font-size: 0.77rem;
+  overflow-wrap: anywhere;
+}
+.report-month .pill,
+.report-month time {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.76rem;
+}
+.report-meters {
+  gap: 0;
+  margin-block: 10px 14px;
+  border-block: 1px solid var(--border);
+}
+.report-values summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+.report-meters li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(55px, 28%) auto;
+  align-items: center;
+  gap: 5px 12px;
+  padding: 9px 0;
+  line-height: 1.45;
+}
+.report-meters li + li {
+  border-top: 1px solid var(--border);
+}
+.report-meter-label {
+  align-self: end;
+  font-weight: 650;
+}
+.report-meters strong {
+  grid-area: 2 / 1;
+  color: var(--muted);
+  font-size: 0.79rem;
+}
+.report-document meter {
+  width: 100%;
+  height: 12px;
+  appearance: none;
+}
+.report-highlights meter {
+  display: block;
+  margin-top: 7px;
+}
+.report-meters meter {
+  grid-area: 1 / 2 / span 2;
+}
+.report-document meter::-webkit-meter-bar {
+  border: 0;
+  border-radius: 20px;
+  background: #e8eadf;
+}
+.report-document meter::-webkit-meter-optimum-value {
+  background: var(--accent);
+}
+.report-document meter::-moz-meter-bar {
+  border-radius: 20px;
+  background: var(--accent);
+}
+.report-meter-rate {
+  grid-area: 1 / 3 / span 2;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+.report-attendance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+.report-attendance > div {
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-align: center;
+}
+.report-attendance dt {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.report-attendance dd {
+  margin: 0;
+  font-weight: 750;
+}
+.report-teacher-note {
+  margin-top: 20px;
+  padding: 13px 15px;
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  background: #f4f5eb;
+}
+.report-teacher-note h3 {
+  border: 0;
+  padding: 0;
+}
+.report-teacher-note p {
+  white-space: pre-line;
+}
+.report-teacher-note p:last-child {
+  margin-bottom: 0;
+}
+.report-manage header p,
+.report-comment-editor p {
+  margin-block: 0 5px;
+  color: var(--muted);
+}
+.report-comment-editor {
+  display: grid;
+  gap: 7px;
+  margin-block: 16px;
+}
+.report-comment-editor label span,
+.report-review-actions small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.report-comment-editor button {
+  justify-self: start;
+}
+.report-comment-editor textarea {
+  width: 100%;
+}
+.report-review-actions {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.report-review-actions form,
+.report-review-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.report-review-check input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.report-alert {
+  color: #784320;
+}
+@media (max-width: 780px) {
+  .report-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .report-mobile-picker {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+  }
+  .report-mobile-picker + .report-index-list {
+    display: none;
+  }
+  .report-mobile-picker :is(select, button) {
+    min-width: 0;
+    min-height: 42px;
+  }
+}
+@media (max-width: 500px) {
+  .report-create > .report-create-fields {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .report-create > .report-create-fields label:first-child {
+    grid-column: 1 / -1;
+  }
+  .report-create-fields button {
+    padding-inline: 10px;
   }
 }
 .grade-assignment h2 {
