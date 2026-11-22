@@ -3,52 +3,18 @@ import { validateGeneratedOutput } from '../rag-consultation/server/generation/v
 import {
   escapeHtml as h,
   field,
-  one,
-  transaction,
   OperationError,
   type OperationModule,
-  type PageContext,
 } from './shared.ts';
 
-export const characters = {
-  walnut: '호두',
-  water: '온천 물방울',
-  owl: '수리부엉이',
-} as const;
-export function selectedCharacter(
-  ctx: Pick<PageContext, 'db' | 'actor'>,
-): keyof typeof characters {
-  const value = one<{ character: string }>(
-    ctx.db,
-    'SELECT character FROM op_preferences WHERE account_id = ?',
-    ctx.actor.id,
-  )?.character;
-  return value && Object.hasOwn(characters, value)
-    ? (value as keyof typeof characters)
-    : 'walnut';
-}
 export const preferencesModule: OperationModule = {
   path: '/settings',
   label: '설정',
-  roles: ['admin', 'teacher', 'student', 'guardian', 'visitor'],
-  setup(db) {
-    db.exec(
-      'CREATE TABLE IF NOT EXISTS op_preferences (account_id TEXT PRIMARY KEY REFERENCES accounts(id), character TEXT NOT NULL)',
-    );
-  },
+  roles: ['admin'],
+  setup() {},
   render(ctx) {
     const generation = operationsGeneration();
-    const choice = selectedCharacter(ctx);
-    return `<div class="page-heading"><h1>설정</h1></div><section class="panel"><h2>상담 캐릭터</h2><form method="post"><input type="hidden" name="action" value="character"><div class="character-options">${Object.entries(
-      characters,
-    )
-      .map(
-        ([id, name]) =>
-          `<label><input type="radio" name="character" value="${id}"${choice === id ? ' checked' : ''}><img src="/assets/${id}.png" alt=""><strong>${name}</strong></label>`,
-      )
-      .join(
-        '',
-      )}</div><button>선택 저장</button></form></section>${ctx.actor.role === 'admin' ? `<section class="panel"><h2>상담 AI 연결</h2><p>공급자: <strong>${h(generation.providerId)}</strong> · ${h(generation.availability(Date.now()))}</p><p>확정 수치·일정 조회는 직접 답하고, 근거가 있는 학습 제안에 AI를 사용합니다. 학생 자료 외부 처리 설정: ${generation.personalDataApproved ? '허용' : '차단'}.</p><p>연결 키와 공급자는 서버 설정 파일에서 관리합니다. 키는 화면에 표시하지 않습니다.</p><form method="post"><button name="action" value="probe">가상 안내로 연결 확인</button></form>${ctx.url.searchParams.has('probe') ? `<p role="status">연결 확인: ${h(ctx.url.searchParams.get('probe'))}</p>` : ''}</section>` : ''}`;
+    return `<div class="page-heading"><h1>설정</h1></div><section class="panel"><h2>상담 AI 연결</h2><p>공급자: <strong>${h(generation.providerId)}</strong> · ${h(generation.availability(Date.now()))}</p><p>확정 수치·일정 조회는 직접 답하고, 근거가 있는 학습 제안에 AI를 사용합니다. 학생 자료 외부 처리 설정: ${generation.personalDataApproved ? '허용' : '차단'}.</p><p>연결 키와 공급자는 서버 설정 파일에서 관리합니다. 키는 화면에 표시하지 않습니다.</p><form method="post"><button name="action" value="probe">가상 안내로 연결 확인</button></form>${ctx.url.searchParams.has('probe') ? `<p role="status">연결 확인: ${h(ctx.url.searchParams.get('probe'))}</p>` : ''}</section>`;
   },
   async submit(ctx, form) {
     if (field(form, 'action') === 'probe') {
@@ -98,17 +64,6 @@ export const preferencesModule: OperationModule = {
         )
       );
     }
-    const character = field(form, 'character');
-    if (!Object.hasOwn(characters, character))
-      throw new OperationError('캐릭터를 선택해 주세요.', 422);
-    transaction(ctx.db, () => {
-      ctx.assertCurrentAccess?.();
-      ctx.db
-        .prepare(
-          'INSERT INTO op_preferences VALUES (?, ?) ON CONFLICT(account_id) DO UPDATE SET character=excluded.character',
-        )
-        .run(ctx.actor.id, character);
-    });
-    return '/settings';
+    throw new OperationError('지원하지 않는 설정 요청입니다.', 400);
   },
 };

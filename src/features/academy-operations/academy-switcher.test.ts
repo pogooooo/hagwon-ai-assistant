@@ -104,17 +104,14 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
     );
     assert.match(home, /내 학원 선택 · \[가상\] 온답 어학원/);
     assert.doesNotMatch(home, /테스트 교습소/);
+    assert.equal((await choose(id, id)).status, 409);
     assert.equal(
       (
-        await send('/settings', cookie, {
-          _academyAccount: id,
-          character: 'water',
+        await send('/academies', cookie, {
+          action: 'switch',
+          profile: id,
         })
       ).status,
-      409,
-    );
-    assert.equal(
-      (await send('/settings', cookie, { character: 'water' })).status,
       409,
     );
     if (role === 'student' || role === 'guardian') {
