@@ -1447,29 +1447,6 @@ button:hover,
   background: #f3ecfa;
   color: #69458b;
 }
-.character-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.character-options label {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  padding: 11px 5px;
-  cursor: pointer;
-}
-.character-options label:has(:checked) {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-.character-options img {
-  width: min(100%, 115px);
-  height: clamp(58px, 12vw, 100px);
-  object-fit: contain;
-}
 .document-filters {
   display: flex;
   flex-wrap: wrap;

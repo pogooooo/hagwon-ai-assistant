@@ -4,7 +4,6 @@ import { visibleCalendarEntries } from './calendar.ts';
 import { canAskConsultation, consultationOverview } from './consultation.ts';
 import { recentPublishedDocuments } from './documents.ts';
 import { pendingMakeupNotices } from './makeup-polls.ts';
-import { selectedCharacter } from './preferences.ts';
 import { serviceIcon } from './service-navigation.ts';
 import { escapeHtml as h, type PageContext } from './shared.ts';
 
@@ -147,7 +146,7 @@ export function renderHome(ctx: PageContext) {
     )
     .join('')}</nav>`;
   const search = `<section class="home-search" aria-label="학원에 물어보기">
-    <div class="home-search-heading"><div><p class="home-search-kicker">우리 학원 상담</p><h2>궁금한 건<br>편하게 물어보세요.</h2><p>학원에서 확인한 자료로 안내해 드려요.</p></div><img src="/assets/${selectedCharacter(ctx)}.png" alt=""></div>
+    <div class="home-search-heading"><div><p class="home-search-kicker">우리 학원 상담</p><h2>궁금한 건<br>편하게 물어보세요.</h2><p>학원에서 확인한 자료로 안내해 드려요.</p></div><img src="/assets/owl.png" alt=""></div>
     <form action="/consultation" method="get"><label class="visually-hidden" for="home-question">상담할 질문</label><input id="home-question" name="q" maxlength="500" required placeholder="궁금한 내용을 입력하세요" autocomplete="off"><button aria-label="상담 시작"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></form>
     <div class="home-search-bottom"><span>일정 · 수강료 · 학원 안내</span><a class="home-consultation-link" href="/consultation">상담 내역 <span aria-hidden="true">↗</span></a></div>
   </section>`;
@@ -278,7 +277,7 @@ export function renderHome(ctx: PageContext) {
       : '';
   const messages = guardian ? visibleParentMessages(ctx) : [];
   const familyHero = guardian
-    ? `<section class="family-highlight"><img src="/assets/ondap-report.png" alt=""><div><h2>학습 리포트</h2><p>과제별 결과와 월간 학습 기록을 확인하세요.</p><a class="button-link assessment-entry" href="/student-reports">학습 리포트 보기 <span aria-hidden="true">›</span></a></div></section>${panel(
+    ? `<section class="family-highlight"><img src="/assets/ondap-report-mascot.png" alt=""><div><h2>학습 리포트</h2><p>과제별 결과와 월간 학습 기록을 확인하세요.</p><a class="button-link assessment-entry" href="/student-reports">학습 리포트 보기 <span aria-hidden="true">›</span></a></div></section>${panel(
         '학원 알림',
         '/messages',
         messages.slice(0, 3).map((m) => ({
