@@ -370,8 +370,9 @@ export function createOperationsServer({
     const navigation = serviceNavigation(pages, current, staff);
     const consultationShortcut =
       current !== '/consultation' &&
+      !staff &&
       pages.some(({ path }) => path === '/consultation')
-        ? `<a class="consultation-shortcut" href="${staff ? '/consultation?view=inbox' : '/consultation'}" aria-label="${staff ? '상담함 바로가기' : '챗봇 상담 바로가기'}"><div class="consultation-shortcut-content">${serviceIcon('/consultation')}<span>${staff ? '상담함' : '챗봇 상담'}</span></div></a>`
+        ? `<a class="consultation-shortcut" href="/consultation"><div class="consultation-shortcut-content">${serviceIcon('/consultation')}<span>챗봇 대화하기</span></div></a>`
         : '';
     const brand = `<a class="brand" href="/"><img src="/assets/ondap-logo.png" alt="온답"></a>`;
     const title =
@@ -386,7 +387,7 @@ export function createOperationsServer({
     return (
       '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>' +
       h(title) +
-      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-shortcuts"></head><body data-account="' +
+      ' · 온답</title><meta name="theme-color" content="#fbfbf6"><link rel="manifest" href="/app.webmanifest"><link rel="apple-touch-icon" href="/assets/app-192.png"><link rel="icon" href="/assets/app-192.png"><link rel="stylesheet" href="/operations.css?v=10"><link rel="stylesheet" href="/service-design.css?v=ondap-conversation-design"></head><body data-account="' +
       h(actor?.id ?? '') +
       '" data-page="' +
       h(current ?? 'login') +
