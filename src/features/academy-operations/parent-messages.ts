@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { accessibleClasses } from './directory.ts';
 import { pendingMakeupNotices } from './makeup-polls.ts';
+import { renderOutputMarkdown } from './report-document.ts';
 import { createParentTemplate } from './parent-message-template.ts';
 import {
   assertParentAdmin,
@@ -55,7 +56,7 @@ function parentContent(
     revision: number;
     title: string;
   }[];
-  return `<p class="preserve parent-message-body">${h(m.body)}</p>${sources.length ? `<details class="source-details"><summary>학습 근거 ${sources.length}개</summary><ul>${sources.map((s) => `<li><a href="${s.kind === 'student-report' ? '/student-reports?id=' : '/learning?publication='}${encodeURIComponent(s.documentId)}">${h(s.title)}</a> · v${s.revision}</li>`).join('')}</ul></details>` : ''}`;
+  return `<div class="formatted-output parent-message-body">${renderOutputMarkdown(m.body)}</div>${sources.length ? `<details class="source-details"><summary>학습 근거 ${sources.length}개</summary><ul>${sources.map((s) => `<li><a href="${s.kind === 'student-report' ? '/student-reports?id=' : '/learning?publication='}${encodeURIComponent(s.documentId)}">${h(s.title)}</a> · v${s.revision}</li>`).join('')}</ul></details>` : ''}`;
 }
 function renderParentMessages(ctx: PageContext) {
   const all =
