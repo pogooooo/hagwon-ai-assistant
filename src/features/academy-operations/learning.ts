@@ -1,3 +1,4 @@
+import { renderOutputMarkdown } from './report-document.ts';
 import { createHash } from 'node:crypto';
 import {
   isWorkbookPublication,
@@ -693,9 +694,9 @@ export function renderLearningPublication(
     facts: ApprovedFactInput[];
   };
   return (
-    '<section class="panel source-record"><h1>상담에 사용된 확정 학습 기록</h1><p class="preserve">' +
-    h(payload.documents[0].text) +
-    '</p><p>분석 버전 ' +
+    '<section class="panel source-record"><h1>상담에 사용된 확정 학습 기록</h1><div class="formatted-output">' +
+    renderOutputMarkdown(payload.documents[0].text) +
+    '</div><p>분석 버전 ' +
     publication.revision +
     '</p><p class="learning-record-actions">' +
     (ctx.actor.role === 'student'

@@ -98,7 +98,144 @@ function learningBars(lines: string[]) {
   );
 }
 
-/** A small Markdown subset. Report fields and edited content are always escaped. */
+function inlineMarkdown(text: string) {
+  return text
+    .split(/(\*\*[^*\r\n]+\*\*|`[^`\r\n]+`)/u)
+    .map((part, index) =>
+      index % 2 === 0
+        ? h(part)
+        : part.startsWith('**')
+          ? '<strong>' + h(part.slice(2, -2)) + '</strong>'
+          : '<code>' + h(part.slice(1, -1)) + '</code>',
+    )
+    .join('');
+}
+
+function markdownTable(lines: string[], showLearningBars: boolean) {
+  const row = (line: string, tag: 'th' | 'td') =>
+    '<tr>' +
+    cells(line)
+      .map(
+        (cell) =>
+          '<' +
+          tag +
+          (tag === 'th' ? ' scope="col"' : '') +
+          '>' +
+          inlineMarkdown(cell) +
+          '</' +
+          tag +
+          '>',
+      )
+      .join('') +
+    '</tr>';
+  const table =
+    '<div class="report-table"><table><thead>' +
+    row(lines[0], 'th') +
+    '</thead><tbody>' +
+    lines
+      .slice(2)
+      .map((line) => row(line, 'td'))
+      .join('') +
+    '</tbody></table></div>';
+  const visual = showLearningBars ? learningBars(lines) : '';
+  return visual
+    ? visual +
+        '<details class="report-values"><summary>수치 표로 보기</summary>' +
+        table +
+        '</details>'
+    : table;
+}
+
+/** Render a Markdown subset with all user and model text escaped. */
+export function renderOutputMarkdown(text: string, report = false) {
+  const lines = text.split(/\r?\n/u).map((line) => line.trim());
+  const divider = /^\|(?:\s*:?-{3,}:?\s*\|)+$/u;
+  const tableRow = /^\|.*\|$/u;
+  const bullet = /^[-*+]\s+/u;
+  const numbered = /^(\d{1,9})[.)]\s+/u;
+  const quote = /^>\s?/u;
+  const html: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line) continue;
+    if (
+      tableRow.test(line) &&
+      divider.test(lines[i + 1] ?? '') &&
+      tableRow.test(lines[i + 2] ?? '')
+    ) {
+      const start = i;
+      i += 2;
+      while (tableRow.test(lines[i + 1] ?? '')) i++;
+      html.push(markdownTable(lines.slice(start, i + 1), report));
+      continue;
+    }
+    const counts = report
+      ? /^(?:출결 기록:\s*)?출석 (\d+)(?:건|회) · 지각 (\d+)(?:건|회) · 결석 (\d+)(?:건|회)$/u.exec(
+          line,
+        )
+      : null;
+    if (counts) {
+      html.push(
+        '<dl class="report-attendance">' +
+          ['출석', '지각', '결석']
+            .map(
+              (label, index) =>
+                '<div><dt>' +
+                label +
+                '</dt><dd>' +
+                counts[index + 1] +
+                '회</dd></div>',
+            )
+            .join('') +
+          '</dl>',
+      );
+      continue;
+    }
+    const group = [bullet, numbered, quote].find((pattern) =>
+      pattern.test(line),
+    );
+    if (group) {
+      const start = i;
+      while (group.test(lines[i + 1] ?? '')) i++;
+      const tag =
+        group === bullet ? 'ul' : group === numbered ? 'ol' : 'blockquote';
+      const item = group === quote ? 'p' : 'li';
+      html.push(
+        '<' +
+          tag +
+          '>' +
+          lines
+            .slice(start, i + 1)
+            .map(
+              (value) =>
+                '<' +
+                item +
+                (group === numbered
+                  ? ' value="' + numbered.exec(value)?.[1] + '"'
+                  : '') +
+                '>' +
+                inlineMarkdown(value.replace(group, '')) +
+                '</' +
+                item +
+                '>',
+            )
+            .join('') +
+          '</' +
+          tag +
+          '>',
+      );
+      continue;
+    }
+    html.push(
+      /^#{1,6} /u.test(line)
+        ? '<h3>' + inlineMarkdown(line.replace(/^#{1,6} /u, '')) + '</h3>'
+        : '<p>' + inlineMarkdown(line) + '</p>',
+    );
+  }
+  return html.join('');
+}
+
+/** Add report metadata, key figures, charts, and the Markdown download. */
 export function renderReportDocument(
   title: string,
   body: string,
@@ -128,83 +265,12 @@ export function renderReportDocument(
     highlights.push({ label, text });
     blocks.splice(index, 2, ...(heading ? [heading] : []));
   }
-  const content = blocks
-    .filter((block, index) => index !== 0 || block !== subtitle)
-    .map((block) => {
-      const lines = block.split(/\r?\n/);
-      const divider = /^\|(?:\s*:?-{3,}:?\s*\|)+$/;
-      if (
-        lines.length > 2 &&
-        divider.test(lines[1]) &&
-        lines.every((line) => line.startsWith('|') && line.endsWith('|'))
-      ) {
-        const visual = learningBars(lines);
-        const row = (line: string, tag: 'th' | 'td') =>
-          '<tr>' +
-          cells(line)
-            .map(
-              (cell) =>
-                '<' +
-                tag +
-                (tag === 'th' ? ' scope="col"' : '') +
-                '>' +
-                h(cell.trim()) +
-                '</' +
-                tag +
-                '>',
-            )
-            .join('') +
-          '</tr>';
-        const table =
-          '<div class="report-table"><table><thead>' +
-          row(lines[0], 'th') +
-          '</thead><tbody>' +
-          lines
-            .slice(2)
-            .map((line) => row(line, 'td'))
-            .join('') +
-          '</tbody></table></div>';
-        return visual
-          ? visual +
-              '<details class="report-values"><summary>수치 표로 보기</summary>' +
-              table +
-              '</details>'
-          : table;
-      }
-      const counts =
-        /^(?:출결 기록:\s*)?출석 (\d+)(?:건|회) · 지각 (\d+)(?:건|회) · 결석 (\d+)(?:건|회)$/u.exec(
-          block,
-        );
-      if (counts)
-        return (
-          '<dl class="report-attendance">' +
-          ['출석', '지각', '결석']
-            .map(
-              (label, i) =>
-                '<div><dt>' +
-                label +
-                '</dt><dd>' +
-                counts[i + 1] +
-                '회</dd></div>',
-            )
-            .join('') +
-          '</dl>'
-        );
-      if (lines.every((line) => line.startsWith('- ')))
-        return (
-          '<ul>' +
-          lines.map((line) => '<li>' + h(line.slice(2)) + '</li>').join('') +
-          '</ul>'
-        );
-      return lines
-        .map((line) =>
-          /^#{1,3} /.test(line)
-            ? '<h3>' + h(line.replace(/^#{1,3} /, '')) + '</h3>'
-            : '<p>' + h(line) + '</p>',
-        )
-        .join('');
-    })
-    .join('');
+  const content = renderOutputMarkdown(
+    blocks
+      .filter((block, index) => index !== 0 || block !== subtitle)
+      .join('\n\n'),
+    true,
+  );
   return (
     '<article class="report-document"><header class="report-document-header"><div><h2>' +
     h(title) +
@@ -226,7 +292,7 @@ export function renderReportDocument(
           .join('') +
         '</dl>'
       : '') +
-    '<div class="report-document-body">' +
+    '<div class="report-document-body formatted-output">' +
     content +
     (reference
       ? '<details class="report-values"><summary>집계 근거와 기준</summary>' +
