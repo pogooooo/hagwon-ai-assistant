@@ -21,8 +21,9 @@ composer?.addEventListener('submit', (event) => {
   // Keep the submitter enabled so its action=ask value is sent by the browser.
   const status = composer.querySelector('.chat-progress');
   if (status)
-    status.textContent =
-      '학원 자료에서 답변을 확인하고 있어요. 잠시 기다려 주세요.';
+    status.textContent = composer.hasAttribute('data-makeup-composer')
+      ? '겹치지 않는 보강 시간을 찾고 있어요.'
+      : '학원 자료에서 답변을 확인하고 있어요. 잠시 기다려 주세요.';
 });
 window.addEventListener('pageshow', () => {
   composer?.removeAttribute('aria-busy');
@@ -356,6 +357,18 @@ if (
 ) {
   transcript.scrollTop = transcript.scrollHeight;
 }
+
+document
+  .querySelector('[data-briefing-filters]')
+  ?.addEventListener('change', (event) => {
+    const form = event.currentTarget;
+    if (event.target.name === 'class') {
+      form.elements.namedItem('student').value = '';
+      const assignment = form.elements.namedItem('workbook');
+      if (assignment) assignment.value = '';
+    }
+    if (['class', 'student'].includes(event.target.name)) form.requestSubmit();
+  });
 
 document
   .querySelector('[data-print-exam]')

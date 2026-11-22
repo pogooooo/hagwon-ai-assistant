@@ -219,7 +219,26 @@ test('HTTP photo upload → teacher review → purge → approved report with li
     instructor,
   );
   assert.equal(briefing.status, 200);
-  assert.ok((await briefing.text()).includes(location));
+  const classBriefing = await briefing.text();
+  assert.ok(classBriefing.includes(location));
+  assert.match(classBriefing, /class="briefing-record-link"/);
+  assert.match(classBriefing, /<select name="student">/);
+  const filteredBriefing = await send(
+    '/briefing?class=TA_E_MATH&month=2026-11&student=TA_STU_001',
+    instructor,
+  );
+  assert.equal(filteredBriefing.status, 200);
+  const filteredHtml = await filteredBriefing.text();
+  assert.ok(filteredHtml.includes(location));
+  assert.equal(
+    (filteredHtml.match(/class="briefing-student-card"/g) ?? []).length,
+    1,
+  );
+  assert.equal(
+    (await send('/briefing?class=TA_E_MATH&student=TA_STU_002', instructor))
+      .status,
+    404,
+  );
   const publicResult = await send(location, student);
   assert.equal(publicResult.status, 200);
   assert.match(await publicResult.text(), /원문은 삭제되었습니다/);

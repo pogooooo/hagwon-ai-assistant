@@ -1,5 +1,5 @@
 import { teamScheduleModule, calendarSessions } from './team-schedule.ts';
-import { pollCalendarEntries } from './makeup-polls.ts';
+import { pollCalendarEntries, submitMakeupAssistant } from './makeup-polls.ts';
 import { scheduleModule, calendarNotices } from './schedule.ts';
 import {
   escapeHtml as h,
@@ -101,6 +101,11 @@ const teamActions = new Set([
   'class-config',
 ]);
 const bookingEditFields = ['edit_notice', 'edit_slot', 'edit_booking'];
+const assistantActions = new Set([
+  'makeup_request',
+  'assistant_publish',
+  'assistant_read',
+]);
 export const calendarModule: OperationModule = {
   path: '/schedule',
   label: '일정·예약',
@@ -111,9 +116,11 @@ export const calendarModule: OperationModule = {
   },
   async render(ctx) {
     const search = ctx.url.searchParams;
+    const action = ctx.submittedForm ? field(ctx.submittedForm, 'action') : '';
+    const assistant = assistantActions.has(action);
     const view =
       (ctx.submittedForm
-        ? teamActions.has(field(ctx.submittedForm, 'action'))
+        ? assistant || teamActions.has(action)
           ? 'makeup'
           : 'bookings'
         : search.get('view')) ??
@@ -124,7 +131,7 @@ export const calendarModule: OperationModule = {
     const makeupMessages: Record<string, string> = {
       create: '초안을 저장했습니다. 원장 승인 후 학원 일정에 표시됩니다.',
       confirm:
-        '휴강·결석이 확정되어 학원 일정에 표시됩니다. 보강이 미정이면 해당 일정에서 투표를 준비할 수 있습니다.',
+        '휴강·결석이 확정되어 학원 일정에 표시됩니다. 반 보강은 휴·보강 비서에게 요청할 수 있습니다.',
       change: '보강 시간과 교실을 저장했습니다.',
       clear:
         '보강이 취소됐습니다. 휴강·결석 상태는 각 일정에서 확인할 수 있습니다.',
@@ -134,8 +141,8 @@ export const calendarModule: OperationModule = {
       view === 'makeup' && saved
         ? (makeupMessages[saved] ?? '저장했습니다.')
         : '저장했습니다.';
-    return `<div class="page-heading schedule-heading"><h1>일정·예약</h1><a class="workspace-link" href="/makeup-votes">${ctx.actor.role === 'admin' || ctx.actor.role === 'teacher' ? '보강 일정·투표 관리' : '보강 일정 투표'} <span aria-hidden="true">›</span></a></div>
-      ${ctx.formError ? `<p class="notice" role="alert">${h(ctx.formError)}</p><div hidden data-restore-schedule="${h(JSON.stringify([...ctx.submittedForm!.entries()].filter(([, v]) => typeof v === 'string')))}"></div>` : ''}
+    return `<div class="page-heading schedule-heading"><h1>일정·예약</h1></div>
+      ${ctx.formError && !assistant ? `<p class="notice" role="alert">${h(ctx.formError)}</p><div hidden data-restore-schedule="${h(JSON.stringify([...ctx.submittedForm!.entries()].filter(([, v]) => typeof v === 'string')))}"></div>` : ''}
       ${saved && !ctx.formError ? '<p class="notice" role="status">' + h(confirmation) + '</p>' : ''}
       <nav class="view-tabs page-tabs" aria-label="일정 보기">
         <a href="/schedule"${view !== 'makeup' && view !== 'bookings' ? ' aria-current="page"' : ''}>월간 달력</a>
@@ -150,12 +157,13 @@ export const calendarModule: OperationModule = {
       }`;
   },
   async submit(ctx, form) {
-    const makeup = teamActions.has(field(form, 'action'));
+    const action = field(form, 'action');
+    if (assistantActions.has(action)) return submitMakeupAssistant(ctx, form);
+    const makeup = teamActions.has(action);
     if (makeup) await teamScheduleModule.submit(ctx, form);
     else await scheduleModule.submit(ctx, form);
     const target = new URL(ctx.url);
     target.searchParams.set('view', makeup ? 'makeup' : 'bookings');
-    const action = field(form, 'action');
     target.searchParams.set(
       'saved',
       action === 'create' && field(form, 'confirm') === 'yes'
