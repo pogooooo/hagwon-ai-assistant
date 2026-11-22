@@ -204,10 +204,10 @@ for (const direct of [false, true])
               numbers,
               readings: (exact || direct ? [2, 0, 1] : [2, 0, 2]).map((i) => ({
                 number: numbers[i],
-                answer_observed: answers[i],
+                answer_observed: exact ? Number(answers[i]) : answers[i],
                 answer_status: 'readable',
                 ...(direct ? { printed_calculation: equations[i] } : {}),
-                bbox: boxes[i],
+                ...(!exact ? { bbox: boxes[i] } : {}),
               })),
             };
           } else if (data.manifest[0]?.ref) {
@@ -280,11 +280,13 @@ for (const direct of [false, true])
       );
       assert.deepEqual(
         draft.items.map((entry) => entry.proposed.outcome),
-        ['correct', 'incorrect', 'correct'],
+        direct
+          ? ['correct', 'incorrect', 'correct']
+          : ['ungradable', 'ungradable', 'ungradable'],
       );
       assert.deepEqual(
         draft.items.map((entry) => entry.solution?.answer),
-        ['12', '9', '9'],
+        direct ? ['12', '9', '9'] : [undefined, undefined, undefined],
       );
     },
   );
