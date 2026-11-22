@@ -299,102 +299,130 @@ for (const direct of [false, true])
     },
   );
 
-test('worksheet grading uses actual labels, print agreement and a separate handwriting check', async (t) => {
-  const passes: string[] = [];
-  const numbers = ['2', '5', '8'];
-  const observed = ['24', '8', '12'];
-  const provider = createNaverGrader(
-    {
-      CLOVA_STUDIO_API_KEY: 'fixture',
-      AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
-      AXR_GRADING_INPUT_POLICY_REF: 'fixture',
+for (const envelope of ['number map', 'wrapped readings'])
+  test(
+    'worksheet grading checks matching handwriting from a ' + envelope,
+    async (t) => {
+      const passes: string[] = [];
+      const numbers = ['2', '5', '8'];
+      const observed = ['24', '8', '12'];
+      const provider = createNaverGrader(
+        {
+          CLOVA_STUDIO_API_KEY: 'fixture',
+          AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
+          AXR_GRADING_INPUT_POLICY_REF: 'fixture',
+        },
+        undefined,
+        async (_url, init) => {
+          const request = JSON.parse(String(init?.body));
+          const data = JSON.parse(request.messages[1].content[1].text);
+          let content;
+          if (data.example) {
+            passes.push('print');
+            content = [
+              { number: passes.length === 1 ? 2.4 : '2.', expression: '4 x 6' },
+              { number: '5번', expression: '15 - 4' },
+              {
+                number: '8)',
+                expression: passes.length === 1 ? '8 + 4' : '9 + 3',
+              },
+              { number: 3, expression: '17 + 2' },
+              { number: 3 },
+            ];
+          } else if (data.verifyNumbers && data.format.readings[0].bbox) {
+            passes.push('locate');
+            assert.deepEqual(data.verifyNumbers, numbers);
+            content = {
+              format: {
+                readings: numbers.map((number, index) => ({
+                  number,
+                  answer_observed: observed[index],
+                  bbox: [0.1, 0.1, 0.3, 0.2],
+                })),
+              },
+            };
+          } else if (data.verifyNumbers) {
+            passes.push('verify');
+            assert.deepEqual(data.verifyNumbers, numbers);
+            content =
+              envelope === 'number map'
+                ? { answers: { '2': '24', '5': 'II', '8': '12', '3': null } }
+                : {
+                    format: {
+                      readings: [
+                        {
+                          number: '2.',
+                          answer_observed: '24',
+                          answer_status: 'correct',
+                        },
+                        { number: '5번', answer_observed: 'II' },
+                        { number: '8)', answer_observed: '12' },
+                        { number: '3', answer_observed: '9' },
+                      ],
+                    },
+                  };
+          } else {
+            passes.push('read');
+            content = data.manifest.map(
+              ({ item_ref }: { item_ref: string }, index: number) => ({
+                item_ref,
+                answer_observed: observed[index],
+                unit_observed: '',
+                answer_status: 'readable',
+                association_status: 'matched',
+                ambiguity_codes: [],
+                regions: [{ page_no: 1, bbox: [0.1, 0.1, 0.3, 0.2] }],
+              }),
+            );
+          }
+          return Response.json({
+            result: { message: { content: JSON.stringify(content) } },
+          });
+        },
+      );
+      const f = fixture(t, { provider });
+      const assignment = f.service.register(
+        f.ctx(),
+        {
+          title: '번호가 연속되지 않은 계산 학습지',
+          class_id: 'TA_E_MATH',
+          rights_ref: 'rights_synthetic',
+          scope: { kind: 'worksheet', subject: 'MATH', skill: '계산' },
+          items: [],
+        },
+        newId('request'),
+      );
+      const student = f.ctx('TA_STUDENT_001');
+      const { submission_id } = f.service.create(
+        student,
+        { ...assignment, student_ref: 'TA_STU_001', expected_page_count: 1 },
+        newId('request'),
+      );
+      const canvas = createCanvas(600, 800);
+      await f.service.upload(student, submission_id, [
+        {
+          bytes: new Uint8Array(canvas.toBuffer('image/png')),
+          mime: 'image/png',
+        },
+      ]);
+      await f.service.process(student, submission_id);
+      const draft = await f.service.draft(f.ctx(), submission_id);
+      assert.deepEqual(passes, ['print', 'print', 'print', 'locate', 'verify']);
+      assert.deepEqual(
+        draft.items.map((item) => item.proposed.outcome),
+        ['correct', 'ungradable', 'ungradable'],
+      );
+      assert.deepEqual(
+        draft.items.map((item) => item.solution?.answer),
+        ['24', '11', undefined],
+      );
+      assert.ok(
+        draft.items[1].extraction.ambiguity_codes.includes(
+          'MODEL_DISAGREEMENT',
+        ),
+      );
     },
-    undefined,
-    async (_url, init) => {
-      const request = JSON.parse(String(init?.body));
-      const data = JSON.parse(request.messages[1].content[1].text);
-      let content;
-      if (data.example) {
-        passes.push('print');
-        content = [
-          { number: passes.length === 1 ? 2.4 : '2.', expression: '4 x 6' },
-          { number: '5번', expression: '15 - 4' },
-          { number: '8)', expression: passes.length === 1 ? '8 + 4' : '9 + 3' },
-          { number: 3, expression: '17 + 2' },
-          { number: 3 },
-        ];
-      } else if (data.verifyNumbers && data.format.readings[0].bbox) {
-        passes.push('locate');
-        assert.deepEqual(data.verifyNumbers, numbers);
-        content = {
-          format: {
-            readings: numbers.map((number, index) => ({
-              number,
-              answer_observed: observed[index],
-              bbox: [0.1, 0.1, 0.3, 0.2],
-            })),
-          },
-        };
-      } else if (data.verifyNumbers) {
-        passes.push('verify');
-        assert.deepEqual(data.verifyNumbers, numbers);
-        content = { '2': '24', '5': 'II', '8': '12', '3': '9' };
-      } else {
-        passes.push('read');
-        content = data.manifest.map(
-          ({ item_ref }: { item_ref: string }, index: number) => ({
-            item_ref,
-            answer_observed: observed[index],
-            unit_observed: '',
-            answer_status: 'readable',
-            association_status: 'matched',
-            ambiguity_codes: [],
-            regions: [{ page_no: 1, bbox: [0.1, 0.1, 0.3, 0.2] }],
-          }),
-        );
-      }
-      return Response.json({
-        result: { message: { content: JSON.stringify(content) } },
-      });
-    },
   );
-  const f = fixture(t, { provider });
-  const assignment = f.service.register(
-    f.ctx(),
-    {
-      title: '번호가 연속되지 않은 계산 학습지',
-      class_id: 'TA_E_MATH',
-      rights_ref: 'rights_synthetic',
-      scope: { kind: 'worksheet', subject: 'MATH', skill: '계산' },
-      items: [],
-    },
-    newId('request'),
-  );
-  const student = f.ctx('TA_STUDENT_001');
-  const { submission_id } = f.service.create(
-    student,
-    { ...assignment, student_ref: 'TA_STU_001', expected_page_count: 1 },
-    newId('request'),
-  );
-  const canvas = createCanvas(600, 800);
-  await f.service.upload(student, submission_id, [
-    { bytes: new Uint8Array(canvas.toBuffer('image/png')), mime: 'image/png' },
-  ]);
-  await f.service.process(student, submission_id);
-  const draft = await f.service.draft(f.ctx(), submission_id);
-  assert.deepEqual(passes, ['print', 'print', 'print', 'locate', 'verify']);
-  assert.deepEqual(
-    draft.items.map((item) => item.proposed.outcome),
-    ['correct', 'ungradable', 'ungradable'],
-  );
-  assert.deepEqual(
-    draft.items.map((item) => item.solution?.answer),
-    ['24', '11', undefined],
-  );
-  assert.ok(
-    draft.items[1].extraction.ambiguity_codes.includes('MODEL_DISAGREEMENT'),
-  );
-});
 
 test('printed calculation agreement preserves decimals, notation and operands', () => {
   assert.equal(
