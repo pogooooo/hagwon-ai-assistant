@@ -153,3 +153,48 @@ test('consented demo submission with two photos creates one assignment report, v
     .run(parent.actor.id);
   assert.throws(() => readReport(parent, rid), /RESOURCE_NOT_FOUND/);
 });
+
+test('the report list repairs a missing draft without waiting for unrelated queued reports', async (t) => {
+  const f = fixture(t);
+  const id = await f.upload(f.register());
+  const result = await f.confirm(id, false);
+  f.db.exec(
+    "CREATE TRIGGER fail_test_report BEFORE INSERT ON grading_v3_reports BEGIN SELECT RAISE(FAIL,'injected'); END;",
+  );
+  assert.equal(await f.service.purge(id), true);
+  const teacher = f.ctx('TA_TEACHER');
+  const parent = f.ctx('TA_GUARDIAN_E_MATH');
+  const detailUrl = new URL('/grading?submission=' + id, teacher.url);
+  assert.match(
+    await gradingModule.render({ ...teacher, url: detailUrl }),
+    /과제 리포트 초안 다시 만들기/,
+  );
+  const retryForm = new FormData();
+  retryForm.set('action', 'retry_report');
+  retryForm.set('submission', id);
+  await assert.rejects(async () => gradingModule.submit(parent, retryForm));
+
+  f.db.exec('DROP TRIGGER fail_test_report');
+  f.db
+    .prepare('DELETE FROM grading_v3_report_queue WHERE result=?')
+    .run(result.result_set_id);
+  for (let i = 0; i < 6; i++)
+    f.db
+      .prepare('INSERT INTO grading_v3_report_queue VALUES(?,?,0)')
+      .run('unrelated', newId('result'));
+  const reportsUrl = new URL('/grading?view=reports', teacher.url);
+  const staffList = await gradingModule.render({ ...teacher, url: reportsUrl });
+  const link = staffList.match(/href="\/grading\?report=([^"]+)"/);
+  assert.ok(link);
+  assert.equal(readReport(teacher, link[1]).status, 'draft');
+  assert.throws(() => readReport(parent, link[1]));
+  assert.equal(
+    await gradingModule.submit(teacher, retryForm),
+    '/grading?report=' + link[1],
+  );
+  assert.equal(
+    f.db.prepare('SELECT COUNT(*) AS n FROM grading_v3_result_reports').get()!
+      .n,
+    1,
+  );
+});

@@ -163,3 +163,106 @@ test('CLOVA page discovery reads the printed page and requires a complete number
     else await assert.rejects(result, /PHOTO_SCOPE_UNCLEAR/);
   }
 });
+
+test('one worksheet photo binds several answers to their printed numbers and reads only the missing item again', async (t) => {
+  const calls: string[] = [];
+  const boxes = [
+    [0.1, 0.15, 0.35, 0.25],
+    [0.1, 0.4, 0.35, 0.5],
+    [0.1, 0.65, 0.35, 0.75],
+  ];
+  const numbers = ['2', '5', '8'];
+  const answers = ['12', '7', '9'];
+  const expressions = ['Calculate 7 + 5.', '계산하세요: 14 − 5', '3 × 3 ='];
+  const provider = createNaverGrader(
+    {
+      CLOVA_STUDIO_API_KEY: 'fixture',
+      AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
+      AXR_GRADING_INPUT_POLICY_REF: 'fixture',
+    },
+    undefined,
+    async (url, init) => {
+      assert.match(String(url), /HCX-005$/);
+      const request = JSON.parse(String(init?.body));
+      const data = JSON.parse(request.messages[1].content[1].text);
+      let content: unknown;
+      if (data.format) {
+        calls.push('discovery');
+        content = {
+          printedPage: null,
+          complete: true,
+          numbers,
+          readings: [2, 0, 2].map((i) => ({
+            number: numbers[i],
+            answer_observed: answers[i],
+            answer_status: 'readable',
+            bbox: boxes[i],
+          })),
+        };
+      } else if (data.manifest[0]?.ref) {
+        calls.push('printed');
+        content = {
+          items: data.manifest.map(
+            ({ ref, no }: { ref: string; no: string }) => ({
+              ref,
+              no,
+              complete: true,
+              problem: expressions[numbers.indexOf(no)],
+            }),
+          ),
+        };
+      } else {
+        const literal = request.messages[0].content.includes('문자 검증');
+        calls.push(literal ? 'verify' : 'missing');
+        assert.deepEqual(
+          data.manifest.map(({ item_no }: { item_no: string }) => item_no),
+          literal ? numbers : ['5', '8'],
+        );
+        content = data.manifest.map(
+          ({ item_ref, item_no }: { item_ref: string; item_no: string }) => {
+            const i = numbers.indexOf(item_no);
+            return {
+              item_ref,
+              answer_observed: answers[i],
+              unit_observed: '',
+              answer_status: 'readable',
+              association_status: 'matched',
+              regions: [{ page_no: 1, bbox: boxes[i] }],
+              ambiguity_codes: [],
+            };
+          },
+        );
+      }
+      return Response.json({
+        result: { message: { content: JSON.stringify(content) } },
+      });
+    },
+  );
+  const f = fixture(t, { provider });
+  const a = f.service.register(
+    f.ctx(),
+    {
+      title: '한 장에 여러 문항',
+      class_id: 'TA_E_MATH',
+      rights_ref: 'rights_synthetic',
+      scope: { kind: 'worksheet', subject: 'MATH', skill: '계산' },
+      items: [],
+    },
+    newId('request'),
+  );
+  const id = await f.upload(a);
+  const draft = await f.service.draft(f.ctx(), id);
+  assert.deepEqual(calls, ['discovery', 'missing', 'verify', 'printed']);
+  assert.deepEqual(
+    draft.items.map((entry) => entry.extraction.answer_observed),
+    answers,
+  );
+  assert.deepEqual(
+    draft.items.map((entry) => entry.proposed.outcome),
+    ['correct', 'incorrect', 'correct'],
+  );
+  assert.deepEqual(
+    draft.items.map((entry) => entry.solution?.answer),
+    ['12', '9', '9'],
+  );
+});
