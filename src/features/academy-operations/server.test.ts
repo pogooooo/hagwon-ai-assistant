@@ -900,6 +900,7 @@ test('통합 일정 경로와 관리자 설정은 로그인·동일 출처와 �
   assert.match(calendar.text, /calendar-grid/);
   const home = await s.send('/', parent);
   assert.match(home.text, /\/assets\/owl\.png/);
+  assert.doesNotMatch(home.text, /data-section-jump/);
   assert.match(home.text, /\/assets\/ondap-report-mascot\.png/);
   assert.doesNotMatch(home.text, /\/assets\/(?:walnut|water)\.png/);
   const consultation = await s.send('/consultation', parent);

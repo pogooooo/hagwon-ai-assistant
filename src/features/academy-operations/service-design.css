@@ -3196,16 +3196,6 @@ td {
   width: auto;
   height: 44px;
 }
-.section-jump {
-  width: 6rem;
-  min-width: 0;
-  min-height: 44px;
-  padding: 4px;
-  font-size: 14px;
-}
-.section-jump[hidden] {
-  display: none;
-}
 .workspace form.inline-form,
 .workspace
   form[method='get']:has(> label:only-of-type > select):has(> button):not(
@@ -3231,11 +3221,6 @@ td {
   flex: none;
   margin: 0;
 }
-@media (max-width: 780px) {
-  .topbar .section-jump {
-    display: none;
-  }
-}
 .workspace :where(a[href]) {
   color: var(--accent, #526035);
   text-decoration-color: #91a078;
@@ -3245,7 +3230,7 @@ td {
   outline: 2px solid #667b42;
   outline-offset: 3px;
 }
-.workspace :is(h2, [id], [data-jump-label]) {
+.workspace :is(h2, [id]) {
   scroll-margin-top: 76px;
 }
 .suggestion-list summary {
@@ -3818,14 +3803,14 @@ a.workspace-link:focus-visible {
   color: var(--muted);
   font-size: 13px;
 }
-.briefing-records {
+.record-card-list {
   display: grid;
   gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
-a.briefing-record-link {
+a.record-card-link {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3839,17 +3824,28 @@ a.briefing-record-link {
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-a.briefing-record-link:hover {
+a.record-card-link:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
-a.briefing-record-link > span:last-child {
+a.record-card-link > span:last-child {
   flex: none;
   color: var(--accent);
 }
-.briefing-record-link small {
+.record-card-link small {
   display: block;
   color: var(--muted);
+}
+.learning-records > h2,
+.learning-record-actions {
+  margin-bottom: 12px;
+}
+.learning-record-actions {
+  margin-top: 12px;
+}
+a.record-card-link[aria-current='page'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 .briefing-secondary {
   margin-top: 12px;
@@ -3875,7 +3871,7 @@ a.briefing-record-link > span:last-child {
 .makeup-result-notices h2 {
   margin-bottom: 10px;
 }
-.makeup-assistant-history .briefing-records {
+.makeup-assistant-history .record-card-list {
   margin-top: 8px;
 }
 

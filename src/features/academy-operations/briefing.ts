@@ -274,7 +274,7 @@ function render(ctx: PageContext) {
     assignments
       .map(
         (a) =>
-          `<li><a class="briefing-record-link" href="/briefing?assignment=${encodeURIComponent(a.assignment_id)}"><span><strong>${h(a.title)}</strong><small>${h(className(a.class_id))} · ${h(a.period)}</small></span><span aria-hidden="true">›</span></a></li>`,
+          `<li><a class="record-card-link" href="/briefing?assignment=${encodeURIComponent(a.assignment_id)}"><span><strong>${h(a.title)}</strong><small>${h(className(a.class_id))} · ${h(a.period)}</small></span><span aria-hidden="true">›</span></a></li>`,
       )
       .join('') || '<li>등록된 분류 숙제가 없습니다.</li>'
   }</ul></section>`;
