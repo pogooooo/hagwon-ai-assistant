@@ -1,6 +1,8 @@
 import { photoReportStats } from './report-adapter.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createCanvas } from '@napi-rs/canvas';
+import { solveVerifiedCalculation } from './photo-solution.ts';
 import { fixture, photo, reading } from './test-fixtures.ts';
 import { gradingModule } from './module.ts';
 import {
@@ -205,7 +207,11 @@ for (const direct of [false, true])
               readings: (exact || direct ? [2, 0, 1] : [2, 0, 2]).map((i) => ({
                 number: numbers[i],
                 answer_observed: exact ? Number(answers[i]) : answers[i],
-                answer_status: 'readable',
+                answer_status: direct
+                  ? i === 1
+                    ? 'correct'
+                    : 'incorrect'
+                  : 'readable',
                 ...(direct ? { printed_calculation: equations[i] } : {}),
                 ...(!exact ? { bbox: boxes[i] } : {}),
               })),
@@ -254,7 +260,9 @@ for (const direct of [false, true])
           });
         },
       );
-      const f = fixture(t, { provider });
+      const f = fixture(t, {
+        provider: { ...provider, readWorksheetPrint: undefined },
+      });
       const a = f.service.register(
         f.ctx(),
         {
@@ -290,3 +298,114 @@ for (const direct of [false, true])
       );
     },
   );
+
+test('worksheet grading uses actual labels, print agreement and a separate handwriting check', async (t) => {
+  const passes: string[] = [];
+  const numbers = ['2', '5', '8'];
+  const observed = ['24', '8', '12'];
+  const provider = createNaverGrader(
+    {
+      CLOVA_STUDIO_API_KEY: 'fixture',
+      AXR_GRADING_EXTERNAL_DATA_APPROVED: 'true',
+      AXR_GRADING_INPUT_POLICY_REF: 'fixture',
+    },
+    undefined,
+    async (_url, init) => {
+      const request = JSON.parse(String(init?.body));
+      const data = JSON.parse(request.messages[1].content[1].text);
+      let content;
+      if (data.example) {
+        passes.push('print');
+        content = [
+          { number: passes.length === 1 ? 2.4 : '2.', expression: '4 x 6' },
+          { number: '5번', expression: '15 - 4' },
+          { number: '8)', expression: passes.length === 1 ? '8 + 4' : '9 + 3' },
+          { number: 3, expression: '17 + 2' },
+          { number: 3 },
+        ];
+      } else if (data.verifyNumbers && data.format.readings[0].bbox) {
+        passes.push('locate');
+        assert.deepEqual(data.verifyNumbers, numbers);
+        content = {
+          format: {
+            readings: numbers.map((number, index) => ({
+              number,
+              answer_observed: observed[index],
+              bbox: [0.1, 0.1, 0.3, 0.2],
+            })),
+          },
+        };
+      } else if (data.verifyNumbers) {
+        passes.push('verify');
+        assert.deepEqual(data.verifyNumbers, numbers);
+        content = { '2': '24', '5': 'II', '8': '12', '3': '9' };
+      } else {
+        passes.push('read');
+        content = data.manifest.map(
+          ({ item_ref }: { item_ref: string }, index: number) => ({
+            item_ref,
+            answer_observed: observed[index],
+            unit_observed: '',
+            answer_status: 'readable',
+            association_status: 'matched',
+            ambiguity_codes: [],
+            regions: [{ page_no: 1, bbox: [0.1, 0.1, 0.3, 0.2] }],
+          }),
+        );
+      }
+      return Response.json({
+        result: { message: { content: JSON.stringify(content) } },
+      });
+    },
+  );
+  const f = fixture(t, { provider });
+  const assignment = f.service.register(
+    f.ctx(),
+    {
+      title: '번호가 연속되지 않은 계산 학습지',
+      class_id: 'TA_E_MATH',
+      rights_ref: 'rights_synthetic',
+      scope: { kind: 'worksheet', subject: 'MATH', skill: '계산' },
+      items: [],
+    },
+    newId('request'),
+  );
+  const student = f.ctx('TA_STUDENT_001');
+  const { submission_id } = f.service.create(
+    student,
+    { ...assignment, student_ref: 'TA_STU_001', expected_page_count: 1 },
+    newId('request'),
+  );
+  const canvas = createCanvas(600, 800);
+  await f.service.upload(student, submission_id, [
+    { bytes: new Uint8Array(canvas.toBuffer('image/png')), mime: 'image/png' },
+  ]);
+  await f.service.process(student, submission_id);
+  const draft = await f.service.draft(f.ctx(), submission_id);
+  assert.deepEqual(passes, ['print', 'print', 'print', 'locate', 'verify']);
+  assert.deepEqual(
+    draft.items.map((item) => item.proposed.outcome),
+    ['correct', 'ungradable', 'ungradable'],
+  );
+  assert.deepEqual(
+    draft.items.map((item) => item.solution?.answer),
+    ['24', '11', undefined],
+  );
+  assert.ok(
+    draft.items[1].extraction.ambiguity_codes.includes('MODEL_DISAGREEMENT'),
+  );
+});
+
+test('printed calculation agreement preserves decimals, notation and operands', () => {
+  assert.equal(
+    solveVerifiedCalculation('Calculate 4 x 6.', '4 × 6 = ?')?.answer,
+    '24',
+  );
+  assert.equal(
+    solveVerifiedCalculation('1.25 + 3.5', '1.25+3.5')?.answer,
+    '19/4',
+  );
+  assert.equal(solveVerifiedCalculation('8+4', '9+3'), undefined);
+  assert.equal(solveVerifiedCalculation('2. 18 + 1', '2.18+1'), undefined);
+  assert.equal(solveVerifiedCalculation('1² + 4', '1² + 4'), undefined);
+});

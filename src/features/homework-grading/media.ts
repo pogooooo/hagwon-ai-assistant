@@ -170,6 +170,31 @@ export async function maskStudentAnswers(
     ? { ...page, bytes: await media.mask(page.bytes, boxes) }
     : null;
 }
+export async function verificationTiles(page: ImagePage): Promise<ImagePage[]> {
+  const size = imageDimensions(page.bytes);
+  if (!size || size.height < 450) return [page];
+  const height = Math.ceil(size.height * 0.62);
+  const tiles: ImagePage[] = [];
+  try {
+    for (const y of [0, size.height - height]) {
+      tiles.push({
+        ...page,
+        bytes: await media.crop(page.bytes, {
+          x: 0,
+          y,
+          width: size.width,
+          height,
+        }),
+        mime: 'image/png',
+      });
+    }
+    return tiles;
+  } catch (error) {
+    for (const tile of tiles) tile.bytes.fill(0);
+    throw error;
+  }
+}
+
 export async function cropAnswer(
   page: ImagePage,
   reading: Reading,
