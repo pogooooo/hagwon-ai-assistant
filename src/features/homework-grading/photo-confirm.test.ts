@@ -184,6 +184,11 @@ test('workbook photos are matched to book pages, prefill marked choices, and are
     url: new URL('/grading?submission=' + submission, teacher.url),
   });
   assert.match(review, /사진에서 읽은 답 · 학생 확인/);
+  // 정답 비교로 채점했으므로 AI 초안이 아니라 자동 채점으로 표시하고, 못 읽은 문항을 먼저 알린다.
+  assert.match(review, /자동 채점 · 정답/);
+  assert.doesNotMatch(review, /AI 초안/);
+  assert.match(review, /사진에서 못 읽은 문항 10쪽 2번, 11쪽 3번/);
+  assert.match(review, /class="grade-attention"/);
 });
 
 test('a student who changes a photo-read answer is flagged for the teacher', async (t) => {
@@ -262,5 +267,132 @@ test('a student who changes a photo-read answer is flagged for the teacher', asy
       url: new URL('/grading?submission=' + submission, teacher.url),
     }),
     /학생이 고친 답 · 사진에서 읽은 답과 다름/,
+  );
+  assert.match(
+    await gradingModule.render({
+      ...teacher,
+      url: new URL('/grading?submission=' + submission, teacher.url),
+    }),
+    /학생이 고친 문항 5쪽 1번/,
+  );
+});
+
+test('teachers can confirm several checked workbook submissions at once', async (t) => {
+  const marked = sheet(120);
+  const provider: GradeProvider = {
+    modelId: 'fixture',
+    inputAllowed: true,
+    async locateItems() {
+      return {
+        printedPage: 5,
+        numbers: [1],
+        regions: new Map([[1, [0, 0, 1, 1]]]),
+        choices: new Map([[1, row([3])]]),
+      };
+    },
+    async read() {
+      throw new Error('workbook photos must not be read by AI');
+    },
+  };
+  const f = fixture(t, { provider });
+  homeworkModule.setup(f.db);
+  const teacher = f.ctx('TA_TEACHER');
+  const book = String(
+    await gradingModule.submit!(
+      teacher,
+      form({ action: 'register-book', subject: 'M', book: '일괄 확정 교재' }),
+    ),
+  );
+  const assigned = String(
+    await gradingModule.submit!(
+      teacher,
+      form({
+        action: 'assign-workbook',
+        request_key: newId('request'),
+        subject: 'M',
+        bookId: new URL(book, teacher.url).searchParams.get('book')!,
+        items: JSON.stringify([
+          { page: 5, number: '1', tagIds: [], answer: '③' },
+        ]),
+        title: '일괄 확정 과제',
+        classId: 'TA_E_MATH',
+        rights_basis: '직접 만든 자료',
+        approved: 'yes',
+      }),
+    ),
+  );
+  const id = new URL(assigned, teacher.url).searchParams.get('assignment')!;
+  const a = assignmentFor(f.db, teacher.actor.academyId, id, 1);
+  const submissions: string[] = [];
+  // 같은 학생이 두 번 제출한다(교사 대리 제출).
+  for (let n = 0; n < 2; n++) {
+    const upload = form({
+      action: 'upload',
+      request_key: newId('request'),
+      assignment: id,
+      student: 'TA_STU_001',
+    });
+    upload.append(
+      'photos',
+      new File([Buffer.from(marked.bytes)], 'page.png', { type: 'image/png' }),
+    );
+    const next = String(await gradingModule.submit!(teacher, upload));
+    const submission = new URL(next, teacher.url).searchParams.get(
+      'submission',
+    )!;
+    await gradingModule.submit!(
+      teacher,
+      form({
+        action: 'answer',
+        request_key: newId('request'),
+        submission,
+        ['ans_' + a.items[0].item_ref]: '③',
+      }),
+    );
+    submissions.push(submission);
+  }
+  const queue = await gradingModule.render({
+    ...teacher,
+    url: new URL('/grading?queue=review', teacher.url),
+  });
+  assert.match(queue, /name="submissions"/);
+  assert.match(queue, /선택한 제출 확정/);
+  await assert.rejects(
+    async () =>
+      gradingModule.submit!(
+        teacher,
+        form({
+          action: 'confirm_many',
+          request_key: newId('request'),
+          submissions,
+        }),
+      ),
+    /확인 항목/,
+  );
+  const done = String(
+    await gradingModule.submit!(
+      teacher,
+      form({
+        action: 'confirm_many',
+        request_key: newId('request'),
+        review_complete: 'yes',
+        submissions,
+      }),
+    ),
+  );
+  assert.match(done, /confirmed=2&skipped=0/);
+  for (const submission of submissions)
+    assert.equal(readSubmission(teacher, submission, true).current_revision, 1);
+  // 학생은 일괄 확정을 쓸 수 없다.
+  await assert.rejects(async () =>
+    gradingModule.submit!(
+      f.ctx('TA_STUDENT_001'),
+      form({
+        action: 'confirm_many',
+        request_key: newId('request'),
+        review_complete: 'yes',
+        submissions,
+      }),
+    ),
   );
 });
