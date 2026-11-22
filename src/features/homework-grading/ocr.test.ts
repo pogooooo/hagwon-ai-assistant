@@ -362,3 +362,26 @@ test('OCR-located worksheet items use the detected mark and leave the rest to pa
   assert.equal(first.extraction.answer_status, 'readable');
   assert.equal(first.proposed.outcome, 'correct');
 });
+
+test('without a pixel reader (Cloudflare Workers) the mark detector leaves answers to the student', async (t) => {
+  const { registerHooks } = await import('node:module');
+  const hooks = registerHooks({
+    load(url, ctx, next) {
+      if (!url.endsWith('.wasm')) return next(url, ctx);
+      return {
+        shortCircuit: true,
+        format: 'module',
+        source:
+          "import {readFileSync} from 'node:fs'; export default new WebAssembly.Module(readFileSync(new URL(import.meta.url)));",
+      };
+    },
+  });
+  t.after(() => hooks.deregister());
+  const { workerGradingMedia } =
+    await import('../../../deploy/cloudflare/grading-media.mjs');
+  const { configureGradingMedia } = await import('./media.ts');
+  assert.equal('darkPixels' in workerGradingMedia, false);
+  configureGradingMedia(workerGradingMedia);
+  // 펜 표시가 분명해도 픽셀을 읽을 수 없으면 확정하지 않는다(학생이 직접 고른다).
+  assert.equal(await detectMarkedChoice(markedPage(120), fiveInRow([3])), null);
+});

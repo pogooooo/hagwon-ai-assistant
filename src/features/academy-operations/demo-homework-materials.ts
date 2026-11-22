@@ -16,6 +16,14 @@ export const demoHomeworkMaterials = [
     rights: 'rights_ondap_fractions_original',
     requestKey: 'ondap-demo-fractions-homework-v1',
     workbookId: '2cdd42f5-2504-4c35-bafd-75b92accdf22',
+    // 교재 과제의 문항·대표 유형·정답. 활동지 PDF(assets/demo-homework-fractions.pdf)와 같다.
+    items: [
+      { number: '1', tagIds: ['math-02'], answer: '3/4' },
+      { number: '2', tagIds: ['math-02'], answer: '1/2' },
+      { number: '3', tagIds: ['math-02'], answer: '5/6' },
+      { number: '4', tagIds: ['math-02'], answer: '7/12' },
+      { number: '5', tagIds: ['math-11'], answer: '5/6 L' },
+    ],
   },
   {
     academyId: 'AC_ONDAP_LANGUAGE_DEMO',
@@ -31,6 +39,19 @@ export const demoHomeworkMaterials = [
     rights: 'rights_ondap_language_original',
     requestKey: 'ondap-demo-language-homework-v1',
     workbookId: 'bd58e497-c80f-4cc9-8fc2-06ac513d33e5',
+    // 영어 기준서는 수능형 숙제에만 적용하므로 이 회화 활동지에는 유형을 붙이지 않는다.
+    items: [
+      { number: '1', tagIds: [], answer: 'at' },
+      { number: '2', tagIds: [], answer: 'on' },
+      { number: '3', tagIds: [], answer: 'in' },
+      { number: '4', tagIds: [], answer: "Let's meet on Saturday." },
+      {
+        number: '5',
+        tagIds: [],
+        answer:
+          "I go home at 4 p.m.|I go home at four p.m.|I go home at 4 pm|I go home at 4 o'clock",
+      },
+    ],
   },
 ] as const;
 
