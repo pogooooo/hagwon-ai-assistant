@@ -130,6 +130,14 @@ type Options = {
   inputPolicyRef?: string;
   restoredBackup?: boolean;
 };
+/** 교재 과제 사진에서 읽은 답(문항별 보기와 표시 위치). 제출 전 확인 화면에 채운다. */
+export interface PhotoPrefill {
+  reordered: boolean;
+  items: Record<
+    string,
+    { answer: string; bbox: [number, number, number, number] }
+  >;
+}
 const activeStores = new WeakMap<OperationsDatabase, RawStore>();
 export function setupGrading(db: OperationsDatabase) {
   // 과제 등록 탭이 학원 공용 교재 목록(쪽·번호·유형·정답)을 쓴다.
@@ -725,9 +733,131 @@ export class GradingService {
       throw error;
     }
   }
+  /** 교재 과제(정답이 등록된 문항만)인지. 사진 자동 읽기와 직접 입력 제출은 이 과제에서만 쓴다. */
+  private workbookAssignment(s: Submission) {
+    const a = submissionAssignment(this.db, s);
+    if (
+      a.scope ||
+      !a.items.length ||
+      a.items.some(
+        (item) => item.grading_mode === 'photo_solution' || !item.key,
+      )
+    )
+      throw new GradingError('VALIDATION_FAILED');
+    return a;
+  }
   /**
-   * 사진 없이 학생이 문항마다 직접 입력한 답으로 제출한다. 등록한 정답과 바로 비교해 초안을 만들고
-   * 교사 검수로 넘긴다. AI를 호출하지 않으므로 정답이 등록된 문항으로만 이루어진 과제에서만 쓴다.
+   * 교재 과제 사진에서 학생이 표시한 보기를 읽어 제출 전 확인 화면에 채울 답을 만든다. OCR로 각 사진의
+   * 책 쪽수를 찾아 과제의 쪽 순서와 다르면 사진 순서를 맞추고, 객관식은 체크 감지기로 표시한 보기를
+   * 찾는다. 확정하지 못한 문항은 비워 두고 학생이 직접 고른다. AI 풀이·판독은 호출하지 않는다.
+   */
+  async readWorkbookPhotos(ctx: PageContext, id: string) {
+    const current = readSubmission(ctx, id);
+    if (!current.uploaded || current.processing !== 'PROCESSING')
+      throw new GradingError('STATE_CONFLICT', 409);
+    const a = this.workbookAssignment(current);
+    const practice = this.db
+      .prepare(
+        'SELECT policy FROM grading_v3_practice_consent WHERE submission=?',
+      )
+      .get(id);
+    const provider = practice ? this.practiceProvider! : this.provider;
+    const prefill: PhotoPrefill = { reordered: false, items: {} };
+    await this.lease(id, async (s) => {
+      const pages: ImagePage[] = [];
+      for (let n = 1; n <= s.expected_pages; n++) {
+        const p = await this.raw.get(s.scope, 'page_' + n);
+        if (!p) throw new GradingError('RAW_EXPIRED', 410);
+        pages.push({ bytes: p.bytes, mime: p.mime, page_no: n });
+      }
+      try {
+        const layouts: (OcrLayout | null)[] = [];
+        for (const page of pages) {
+          readSubmission(ctx, id);
+          layouts.push(
+            provider.inputAllowed && provider.locateItems
+              ? await provider.locateItems(page).catch(() => null)
+              : null,
+          );
+        }
+        // 사진마다 OCR이 찾은 책 쪽수로 과제의 쪽 순서(사진 번호)를 정한다. 모든 사진이 서로 다른
+        // 과제 쪽으로 확정될 때만 순서를 바꾸고, 아니면 학생이 올린 순서를 그대로 쓴다.
+        const bookPages = [
+          ...new Set(a.items.map((i) => i.book_page ?? i.expected_page_no)),
+        ].sort((x, y) => x - y);
+        // 인쇄된 쪽수를 못 읽었으면 사진에서 찾은 문항 번호가 가장 많이 겹치는 과제 쪽으로 정한다.
+        const targets = layouts.map((layout) => {
+          if (!layout) return 0;
+          const printed = layout.printedPage
+            ? bookPages.indexOf(layout.printedPage) + 1
+            : 0;
+          if (printed) return printed;
+          const overlap = bookPages.map(
+            (page) =>
+              a.items.filter(
+                (i) =>
+                  (i.book_page ?? i.expected_page_no) === page &&
+                  layout.numbers.includes(Number(i.item_no)),
+              ).length,
+          );
+          const best = Math.max(...overlap);
+          return best > 0 && overlap.filter((n) => n === best).length === 1
+            ? overlap.indexOf(best) + 1
+            : 0;
+        });
+        const order =
+          targets.every((t) => t > 0) &&
+          new Set(targets).size === targets.length &&
+          targets.some((t, i) => t !== i + 1)
+            ? targets
+            : pages.map((_, i) => i + 1);
+        if (order.some((t, i) => t !== i + 1)) {
+          for (const [i, page] of pages.entries())
+            await this.write(s, 'page_' + order[i], page.bytes, page.mime);
+          prefill.reordered = true;
+        }
+        for (const item of a.items) {
+          if (item.answer_type !== 'choice_single') continue;
+          const photo = order.indexOf(item.expected_page_no);
+          const layout = photo >= 0 ? layouts[photo] : null;
+          const grid = layout?.choices.get(Number(item.item_no));
+          if (!grid) continue;
+          const mark = await detectMarkedChoice(pages[photo], grid).catch(
+            () => null,
+          );
+          if (mark)
+            prefill.items[item.item_ref] = {
+              answer: mark.answer_observed,
+              bbox: mark.regions[0].bbox,
+            };
+        }
+      } finally {
+        for (const page of pages) page.bytes.fill(0);
+      }
+      await this.write(
+        s,
+        'prefill',
+        new TextEncoder().encode(JSON.stringify(prefill)),
+        'application/json',
+      );
+    });
+    return prefill;
+  }
+  /** 사진 자동 읽기 결과(제출 전 확인 화면용). */
+  async photoPrefill(ctx: PageContext, id: string): Promise<PhotoPrefill> {
+    const s = readSubmission(ctx, id);
+    this.open(s);
+    const object = await this.raw.get(s.scope, 'prefill');
+    if (!object) return { reordered: false, items: {} };
+    try {
+      return JSON.parse(new TextDecoder().decode(object.bytes)) as PhotoPrefill;
+    } finally {
+      object.bytes.fill(0);
+    }
+  }
+  /**
+   * 학생이 문항마다 고른 답으로 제출한다. 사진 없이 직접 입력하거나, 사진에서 읽은 답을 확인·수정해
+   * 제출한다. 등록한 정답과 바로 비교해 초안을 만들고 교사 검수로 넘긴다. AI를 호출하지 않는다.
    */
   async submitAnswers(
     ctx: PageContext,
@@ -735,36 +865,45 @@ export class GradingService {
     answers: Record<string, string>,
   ) {
     const current = readSubmission(ctx, id);
-    if (current.uploaded || current.processing !== 'RECEIVED')
+    const fromPhotos =
+      !!current.uploaded && current.processing === 'PROCESSING';
+    if (!fromPhotos && (current.uploaded || current.processing !== 'RECEIVED'))
       throw new GradingError('STATE_CONFLICT', 409);
     this.open(current);
-    const a = submissionAssignment(this.db, current);
-    if (
-      !a.items.length ||
-      a.items.some(
-        (item) => item.grading_mode === 'photo_solution' || !item.key,
-      )
-    )
-      throw new GradingError('VALIDATION_FAILED');
+    const a = this.workbookAssignment(current);
     if (
       Object.keys(answers).some(
         (ref) => !a.items.some((i) => i.item_ref === ref),
       )
     )
       throw new GradingError('ITEM_SET_MISMATCH');
+    const prefill: PhotoPrefill = fromPhotos
+      ? await this.photoPrefill(ctx, id)
+      : { reordered: false, items: {} };
     const items: DraftItem[] = a.items.map((item) => {
       const text = (answers[item.item_ref] ?? '').normalize('NFC').trim();
       if (text.length > 12000) throw new GradingError('VALIDATION_FAILED');
+      const read = prefill.items[item.item_ref];
+      const source = !read
+        ? ('typed' as const)
+        : read.answer === text
+          ? ('photo' as const)
+          : ('photo_edited' as const);
       const reading = normalizeNumericReading(item, {
         item_ref: item.item_ref,
         answer_observed: text,
         unit_observed: '',
         answer_status: text ? 'readable' : 'blank',
         association_status: 'matched',
-        // 사진이 없으므로 문항 전체를 답 위치로 둔다(교사가 위치를 확인했을 때와 같은 표시).
-        regions: [{ page_no: item.expected_page_no, bbox: [0, 0, 1, 1] }],
+        // 사진에서 표시를 찾았으면 그 위치를, 아니면 문항 전체를 답 위치로 둔다.
+        regions: [
+          {
+            page_no: item.expected_page_no,
+            bbox: read ? read.bbox : [0, 0, 1, 1],
+          },
+        ],
         ambiguity_codes: [],
-        source: 'typed',
+        source,
       });
       const proposed = propose(item, reading);
       return {
@@ -790,6 +929,17 @@ export class GradingService {
       );
       transaction(this.db, () => {
         this.open(this.current(id));
+        if (fromPhotos) {
+          if (
+            !this.db
+              .prepare(
+                "UPDATE grading_v3_submissions SET draft_revision=?,processing='REVIEW_REQUIRED',error_code=NULL WHERE id=? AND uploaded=1 AND processing='PROCESSING' AND raw_state='OPEN' AND fence=?",
+              )
+              .run(draft.draft_revision, id, s.fence).changes
+          )
+            throw new GradingError('STATE_CONFLICT', 409);
+          return;
+        }
         const attempt =
           s.purpose === 'assessment'
             ? (one<{ n: number }>(

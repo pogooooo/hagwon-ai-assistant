@@ -301,7 +301,7 @@ test('students can submit typed answers without a photo and they are graded agai
     ...teacher,
     url: new URL('/grading?submission=' + submission, teacher.url),
   });
-  assert.match(review, /학생이 입력한 답/);
+  assert.match(review, /학생이 직접 입력한 답/);
   assert.doesNotMatch(review, /AI 추정 답안 영역/);
   // 교사가 확인하면 결과로 확정된다.
   const reviewed = await f.service.patch(

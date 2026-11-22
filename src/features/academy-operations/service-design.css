@@ -3314,6 +3314,14 @@ td {
   background: #dfe8c6;
   font-weight: 700;
 }
+.grade-read {
+  width: 100%;
+  margin: 0;
+  color: #4a5a2a;
+}
+.grade-unread {
+  color: #8a4b12;
+}
 .grade-subjects {
   display: flex;
   flex-wrap: wrap;
