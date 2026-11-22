@@ -66,8 +66,8 @@ export interface GradeProvider {
 }
 const printedItemNumber = z.preprocess(
   (value) =>
-    typeof value === 'string' && /^\d{1,3}$/.test(value)
-      ? Number(value)
+    typeof value === 'string' && /^\d{1,3}(?:[.)]|번)?$/u.test(value.trim())
+      ? Number(value.trim().replace(/(?:[.)]|번)$/u, ''))
       : value,
   z.number().int().min(1).max(999),
 );
@@ -357,7 +357,7 @@ export function createNaverGrader(
             complete: false,
             readings: [
               {
-                number: 0,
+                number: mode ? '실제 인쇄 문항 번호' : 0,
                 answer_observed: '',
                 unit_observed: '',
                 answer_status: 'readable',
@@ -384,29 +384,36 @@ export function createNaverGrader(
             ),
           ) as unknown,
       );
+      const answerMap = z.record(
+        z.string().regex(/^[1-9]\d{0,2}$/u),
+        z.unknown(),
+      );
       const answersByNumber =
         mode === 'answer'
           ? z
-              .record(
-                z.string().regex(/^[1-9]\d{0,2}$/u),
-                z.string().trim().min(1),
-              )
-              .safeParse(value)
+              .union([
+                answerMap,
+                z
+                  .object({ answers: answerMap })
+                  .transform(({ answers }) => answers),
+              ])
+              .safeParse(value).data
           : undefined;
-      const numberedAnswers = answersByNumber?.success
-        ? Object.entries(answersByNumber.data).flatMap(([number, text]) =>
-            verifyNumbers.includes(number)
-              ? [
-                  {
-                    number: Number(number),
-                    answer_observed: text,
-                    answer_status: 'readable',
-                  },
-                ]
-              : [],
-          )
-        : [];
-      const located = z.union([
+      const numberedAnswers = Object.entries(answersByNumber ?? {}).flatMap(
+        ([number, text]) =>
+          verifyNumbers.includes(number) &&
+          ((typeof text === 'string' && text.trim()) ||
+            (typeof text === 'number' && Number.isSafeInteger(text)))
+            ? [
+                {
+                  number: Number(number),
+                  answer_observed: String(text),
+                  answer_status: 'readable',
+                },
+              ]
+            : [],
+      );
+      const worksheetReadings = z.union([
         z.array(z.unknown()),
         z
           .object({ readings: z.array(z.unknown()) })
@@ -415,15 +422,6 @@ export function createNaverGrader(
           .object({ format: z.object({ readings: z.array(z.unknown()) }) })
           .transform(({ format }) => format.readings),
       ]);
-      const locatedAnswers =
-        mode === 'located_answer'
-          ? {
-              printedPage: null,
-              numbers: verifyNumbers,
-              complete: true,
-              readings: located.safeParse(value).data,
-            }
-          : value;
       const parsed = z
         .object({
           printedPage: z.number().int().positive().max(9999).nullable(),
@@ -432,14 +430,16 @@ export function createNaverGrader(
           readings: z.array(z.unknown()).max(100).optional(),
         })
         .safeParse(
-          numberedAnswers.length
+          mode
             ? {
                 printedPage: null,
-                numbers: numberedAnswers.map(({ number }) => number),
+                numbers: verifyNumbers,
                 complete: true,
-                readings: numberedAnswers,
+                readings: numberedAnswers.length
+                  ? numberedAnswers
+                  : worksheetReadings.safeParse(value).data,
               }
-            : locatedAnswers,
+            : value,
         );
       if (!parsed.success || (!parsed.data.complete && !verifyNumbers.length))
         throw new GradingError('PHOTO_SCOPE_UNCLEAR');
