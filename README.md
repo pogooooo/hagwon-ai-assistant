@@ -1,102 +1,65 @@
-# hagwon-ai-assistant
+# 온답 · 학원 AI 비서
 
-학원 운영 서비스(Node.js·SQLite·RAG)와 Next.js·Capacitor 프로토타입을 포함합니다. 기본 실행은 통합 운영 서비스입니다.
+학원의 기존 안내문과 학습 기록을 활용해 학생·학부모의 질문에 출처를 붙여 답하고, 숙제 사진 제출부터 교사 검수와 학습 리포트 공개까지 연결하는 학원 운영 서비스입니다.
 
-## 시작
+2인 팀 프로젝트로 시작했습니다. 제 작업은 **문서 기반 RAG 상담과 평가**, **사진 채점·교사 검수 결과를 학습 리포트와 상담에 연결하는 흐름**입니다.
 
-Node.js **24.19.0**, npm **11.x**를 두 사람 모두 사용합니다. 버전 관리 도구를 쓴다면 `.nvmrc` 또는 `.node-version`을 읽어 주세요.
+## 대표 기능
+
+### 문서에 근거한 학원 상담
+
+관리자가 학원 자료를 등록하고 승인하면 학생과 보호자가 상담에서 질문할 수 있습니다. 문서를 검색 단위로 나눌 때 원본 페이지, 절, 표의 행·열 등 인용에 필요한 위치를 보존합니다.
+
+- 학원·학생 권한과 문서 승인 상태를 먼저 확인한 뒤, 한국어 단어와 2글자 토큰을 사용하는 BM25로 근거를 찾습니다.
+- 수강료나 시간표처럼 대상·기간이 중요한 질문은 해당 반과 적용 시점, 표 셀이 모두 일치하는지 확인합니다. 복합 질문은 요구 항목별로 근거를 확인해 답할 수 있는 내용과 확인이 필요한 내용을 구분합니다.
+- 확정된 값은 근거에서 바로 답하고, 공개 안내문의 해석이 필요한 경우 CLOVA Studio를 사용합니다. 최종 답변에 문서와 인용 위치를 표시합니다.
+
+[답변 예시](src/features/rag-consultation/DEMO.md) · [상담 엔진 구조](src/features/rag-consultation/README.md)
+
+### 숙제 사진에서 학습 리포트까지
+
+1. 교사가 반을 지정해 교재 범위와 문항을 과제로 등록하고, 학생이 답안 사진 또는 PDF를 제출합니다.
+2. 교재 과제는 CLOVA OCR로 페이지와 문항의 위치를 찾아 학생이 읽힌 답을 확인할 수 있게 합니다. 확인한 답을 등록 정답과 비교해 점수를 계산합니다.
+3. 교사가 답안과 점수를 검수해 확정합니다. 확정 결과를 유형별 오답과 학습 기록에 집계하고, 교사가 승인한 리포트를 해당 학생과 연결된 보호자가 볼 수 있습니다.
+
+[교재 사진 채점 방식](docs/workbook-answer-grading.md) · [서비스 화면과 역할별 흐름](src/features/academy-operations/README.md)
+
+## 측정 결과와 기술 선택
+
+| 평가                        | 결과          | 조건                                              |
+| --------------------------- | ------------- | ------------------------------------------------- |
+| 상담 엔진 개선 전후         | 40/60 → 57/60 | 동일 합성 질문 60개, 문서 등록부터 최종 인용까지  |
+| 새 공개 안내문 상담 첫 실행 | 38/40         | 새 합성 자료와 사전에 고정한 질문, 반복 실행 제외 |
+| 공개 393문항 회귀 평가      | 384/393       | 계획 엔진, 기본 OCR, 고정된 공개 문항과 모의 생성 |
+
+초기 검색 비교에서 BM25, 하이브리드 검색, 재정렬은 모두 207/393문항을 맞혔습니다. p95 지연은 각각 7.8ms, 117ms, 2,156ms였습니다. 기본 검색은 BM25로 유지하고 반·기간·표 셀을 잘못 연결하는 오류와 복합 질문의 근거 누락을 먼저 개선했습니다.
+
+상담 수치는 합성 자료를 사용한 자동 평가입니다. 실제 학원 자료에서 목표 정확도 95%에 도달했는지, 다양한 학생 답안에서 채점이 얼마나 정확한지는 별도 검증이 필요합니다.
+
+[운영 상담 검증과 문항별 결과](docs/naver-consultation-verification-2026-11-17/README.md) · [적용·제외한 검색 기술](src/features/rag-consultation/RAG_TECHNIQUES.md) · [평가 기준](src/features/rag-consultation/EVALUATION_CRITERIA.md) · [전체 회귀 결과](src/features/rag-consultation/TEST_REPORT.md)
+
+## 로컬 실행
+
+Node.js `24.19.0`과 npm `11.x`가 필요합니다.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-[http://127.0.0.1:8791](http://127.0.0.1:8791)에서 확인합니다. 가상 계정 `TA_DIRECTOR` / `axr-demo`를 사용합니다. `.env.example`을 `.env.local`로 복사해 네이버 CLOVA 키와 포트를 설정할 수 있습니다. `.env.local`은 Git에서 제외됩니다.
+[로컬 서비스](http://127.0.0.1:8791)에서 체험 계정으로 들어갑니다. 학생·보호자 계정으로 상담과 공개 학습 기록을, 교사 계정으로 사진 채점의 제출 검수와 리포트를 확인할 수 있습니다. 계정 정보는 [운영 서비스 실행 안내](src/features/academy-operations/README.md#실행과-경로)를 참고하세요.
 
-운영 경로·팀 결과 수신·AI 변경 방법·검증 결과는 [운영 서비스 안내](src/features/academy-operations/README.md)를 참조합니다. Next 프로토타입은 `npm run dev:prototype`으로 3000번 포트에서 실행합니다. `build`/`start`/Capacitor는 그 프로토타입 전용이며 운영 서버·DB를 정적 파일에 포함하지 않습니다.
+실제 AI 호출을 체험하려면 [환경 변수 예시](.env.example)를 참고해 로컬 `.env.local`에 CLOVA Studio·OCR 설정을 넣고 가상 안내문이나 예제 답안으로 확인합니다.
 
-학원 운영 화면은 `npm run academy:dev`로 실행합니다. 접속 주소와 가상 계정은 [학원 운영 실행 안내](src/features/academy-operations/README.md)를 참고하세요.
+## 코드 구성
 
-현재 네이버 AI 연결, 복합 질문 개선, 새 문항 결과와 화면 검증은 [네이버 상담 검증](docs/naver-consultation-verification-2026-11-17/README.md)에 정리했습니다. 개선 전 결과는 [서비스 검증 체크리스트](docs/service-verification-2026-11-17/README.md)에 보존합니다. 운영 웹은 홈 화면 설치용 manifest와 모바일 메뉴를 제공합니다. 아래 Capacitor 설정은 기존 프로토타입이며, 운영 모바일 웹앱과 별개입니다.
+통합 서비스는 TypeScript, Node.js, SQLite로 실행합니다. Cloudflare Workers용 실행 구성과 모바일 브라우저용 PWA가 포함되어 있습니다.
 
-운영 모바일 웹을 여는 Android 테스트 APK의 빌드·서명·검증 범위는 [Android 안내](docs/android-preview.md)를 참고하세요.
+| 경로                                                                   | 내용                                   |
+| ---------------------------------------------------------------------- | -------------------------------------- |
+| [`src/features/academy-operations/`](src/features/academy-operations/) | 역할별 화면·권한, 상담함, 학습 리포트  |
+| [`src/features/rag-consultation/`](src/features/rag-consultation/)     | 문서 파싱, 검색, 답변·인용 검증과 평가 |
+| [`src/features/homework-grading/`](src/features/homework-grading/)     | 사진 판독, 채점, 교사 검수와 결과 집계 |
+| [`deploy/cloudflare/`](deploy/cloudflare/)                             | Cloudflare Workers 배포 구성           |
 
-## 준비한 라이브러리
-
-| 용도             | 라이브러리                           | 현재 상태                                          |
-| ---------------- | ------------------------------------ | -------------------------------------------------- |
-| 웹               | Next.js, React, TypeScript           | 빈 App Router 페이지                               |
-| 앱 패키징        | Capacitor core / CLI / Android / iOS | 설정 및 플랫폼 생성 명령 준비                      |
-| 스타일           | styled-components                    | 컴파일러 및 SSR 스타일 레지스트리 연결             |
-| 클라이언트 상태  | Zustand                              | 설치만 완료                                        |
-| 서버 데이터 캐시 | TanStack Query                       | 설치만 완료, 사용 시 QueryClientProvider 연결 필요 |
-| HTTP             | Axios                                | 설치만 완료                                        |
-| 데이터 검증      | Zod                                  | 설치만 완료                                        |
-| 아이콘           | Lucide React                         | 설치만 완료                                        |
-| 협업             | ESLint, Prettier, Husky, lint-staged | 포맷 / 커밋 전 검사 / CI 준비                      |
-
-모든 패키지는 정확한 버전과 `package-lock.json`으로 관리합니다.
-
-Capacitor는 CLI의 간접 의존성 보안 공지를 피하기 위해 전체 패키지를 8.4.3으로 맞췄습니다. ESLint는 Next.js의 React/Import 플러그인과 호환되는 9.x를 사용합니다. 업그레이드할 때는 관련 패키지의 호환성과 `npm audit`을 함께 확인합니다.
-
-## 폴더
-
-```text
-src/
-  app/          # 라우트, 공통 레이아웃, 최소 전역 CSS
-  components/   # 여러 기능에서 공유하는 UI
-  features/     # 기능별 UI, 로직, API, 타입을 함께 배치
-  hooks/        # 공통 훅
-  lib/          # 공통 라이브러리 설정
-  stores/       # 공통 클라이언트 상태
-  styles/       # 공통 스타일과 테마
-  types/        # 공통 타입
-public/         # 정적 파일
-```
-
-`@/`는 `src/`를 가리킵니다. 빈 디렉터리의 `.gitkeep`은 파일이 생기면 삭제해도 됩니다. 스타일이나 상태 관리의 예제 코드는 넣지 않았습니다.
-
-## 명령어
-
-| 명령어                     | 역할                                         |
-| -------------------------- | -------------------------------------------- |
-| `npm run dev`              | 통합 운영 서비스(기본 8791)                  |
-| `npm run build`            | `out/`에 정적 웹 빌드                        |
-| `npm start`                | 빌드한 `out/` 미리보기                       |
-| `npm run check`            | ESLint + 타입 + 포맷 검사                    |
-| `npm run format`           | 포맷 정리                                    |
-| `npm run lint:fix`         | 린트 자동 수정                               |
-| `npm run cap:add:android`  | 빌드 후 Android 기본 프로젝트 생성, 최초 1회 |
-| `npm run cap:add:ios`      | 빌드 후 iOS 기본 프로젝트 생성, 최초 1회     |
-| `npm run cap:sync`         | 웹 빌드 및 생성된 네이티브 프로젝트 동기화   |
-| `npm run cap:open:android` | Android Studio로 열기                        |
-| `npm run cap:open:ios`     | Xcode로 열기                                 |
-
-## Capacitor
-
-현재는 플랫폼 SDK 패키지와 `capacitor.config.ts`만 준비했으며, `android/`, `ios/`는 만들지 않았습니다. 앱 이름과 ID를 정한 뒤 필요한 플랫폼만 생성합니다. 현재 `appId: com.axr.prototype`은 임시값입니다.
-
-```sh
-npm run cap:add:android
-npm run cap:open:android
-```
-
-Android 실행·빌드에는 Android Studio와 해당 SDK가 필요합니다. iOS 프로젝트 생성·빌드는 macOS와 Xcode 환경에서 진행합니다. 플랫폼을 생성한 다음에는 `android/`, `ios/`의 소스와 설정을 Git에 커밋하고, 웹 변경을 반영할 때 `npm run cap:sync`를 실행합니다. 생성된 웹 자산과 로컬 SDK 경로는 커밋하지 않습니다.
-
-Next.js는 `output: 'export'`, Capacitor는 `webDir: 'out'`으로 연결되어 있습니다. 런타임 서버가 없으므로 API Routes, Server Actions, 요청 시 SSR, 서버 cookies 같은 기능은 사용할 수 없습니다. API가 필요해지면 별도 백엔드를 사용하고, 동적 라우트는 빌드 시 `generateStaticParams`로 경로를 확정해야 합니다. 브라우저·네이티브 API는 클라이언트 컴포넌트의 이벤트나 effect에서 사용합니다.
-
-## 2인 협업
-
-자세한 작업 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고합니다. 원격 저장소는 [Hj802/hagwon-ai-assistant](https://github.com/Hj802/hagwon-ai-assistant)이며, 기본 브랜치는 `main`입니다.
-
-- 한 작업은 한 브랜치와 한 PR로 나눕니다. 다른 한 사람이 확인한 뒤 `main`에 합칩니다.
-- 작업 전에 담당할 기능 폴더를 나누고, 공통 레이아웃·설정·패키지는 변경 전에 공유합니다.
-- 커밋 시 변경 파일에 ESLint/Prettier가 실행됩니다. PR과 `main` push에서는 전체 검사와 정적 빌드가 실행됩니다.
-- GitHub에 올린 뒤 `main` 보호 규칙에서 CI 통과와 리뷰 1인을 직접 설정하면 됩니다.
-- Windows/macOS 간 줄바꿈은 LF로 통일합니다.
-
-## 공식 참고
-
-- [Next.js 정적 내보내기](https://nextjs.org/docs/app/guides/static-exports)
-- [Next.js styled-components 설정](https://nextjs.org/docs/app/guides/css-in-js)
-- [Capacitor 설치와 플랫폼 생성](https://capacitorjs.com/docs/getting-started)
+`npm run check`로 린트·타입·서식을 검사하고, `npm test`로 자동 테스트를 실행합니다. Next.js·Capacitor 프로토타입은 `npm run dev:prototype`으로 실행하며, `npm run build`는 해당 프로토타입의 정적 빌드입니다.
