@@ -92,7 +92,7 @@ export async function classifyAssignment(
           encodeURIComponent(model),
         {
           method: 'POST',
-          redirect: 'error',
+          redirect: 'manual',
           signal: AbortSignal.timeout(120000),
           headers: {
             'Content-Type': 'application/json',

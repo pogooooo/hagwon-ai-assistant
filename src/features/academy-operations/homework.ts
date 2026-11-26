@@ -1,8 +1,3 @@
-import {
-  homeworkMaterial,
-  renderHomeworkMaterial,
-} from './demo-homework-materials.ts';
-import { renderStudentReports } from './student-reports.ts';
 import { randomUUID } from 'node:crypto';
 import {
   assignWorkbook,
@@ -613,7 +608,7 @@ function renderStudentForm(ctx: PageContext, id: string): string {
     <form method="post" action="/homework" data-wrong-form><input type="hidden" name="action" value="report"><input type="hidden" name="assignmentId" value="${escapeHtml(id)}">
     <h3>틀린 문항을 선택해 주세요</h3>${pages.size > 1 ? `<label hidden data-page-picker>쪽수<select>${[...pages.keys()].map((page, i) => `<option value="${i}">${escapeHtml(page)}</option>`).join('')}</select></label>` : ''}
     ${[...pages].map(([page, qs], i) => `<fieldset data-question-page="${i}"><legend>${escapeHtml(page)}</legend><div class="question-tiles">${qs.map((q) => `<label><input type="checkbox" name="wrong" value="${escapeHtml(q.id)}" data-answer-label="${escapeHtml(page + ' ' + q.label)}"><span>${escapeHtml(q.label)}</span></label>`).join('')}</div></fieldset>`).join('')}
-    <p class="selection-summary" aria-live="polite" hidden></p><label class="all-correct"><input type="checkbox" name="allCorrect" value="yes"> 모두 맞았어요</label><div class="submission-actions"><button type="submit">결과 제출</button></div><p class="form-hint">제출 후 선생님이 확인해요.</p></form></section>`;
+    <p class="selection-summary" aria-live="polite" hidden></p><label class="all-correct"><input type="checkbox" name="allCorrect" value="yes"> 모두 맞았어요</label><p class="form-hint">제출 후 선생님이 확인해요.</p><button type="submit">결과 제출</button></form></section>`;
   }
   return `<section class="panel">
     <h2>${escapeHtml(assignment.title)}</h2>${renderPhoto(ctx, id)}
@@ -811,7 +806,7 @@ export function homeworkOverview(ctx: PageContext) {
       ),
     results: staff
       ? []
-      : submissions.filter(({ confirmed_at }) => confirmed_at),
+      : submissions.filter(({ confirmed_at }) => confirmed_at).slice(0, 4),
   };
 }
 
@@ -902,22 +897,6 @@ export const homeworkModule: OperationModule = {
     const { actor, url } = ctx;
     const view = url.searchParams.get('view'),
       detail = url.searchParams.get('detail');
-    const familyTabs =
-      actor.role === 'guardian'
-        ? '<nav class="view-tabs page-tabs" aria-label="숙제 보기">' +
-          '<a href="/homework"' +
-          (view !== 'reports' ? ' aria-current="page"' : '') +
-          '>과제별 결과</a>' +
-          '<a href="/homework?view=reports"' +
-          (view === 'reports' ? ' aria-current="page"' : '') +
-          '>학습 리포트</a></nav>'
-        : '';
-    if (view === 'reports' && actor.role === 'guardian')
-      return (
-        '<div class="workspace-heading"><h1>숙제</h1></div>' +
-        familyTabs +
-        renderStudentReports(ctx)
-      );
     if (view === 'source')
       return renderWorkbookSource(
         ctx,
@@ -951,16 +930,6 @@ export const homeworkModule: OperationModule = {
     const pending = staff && url.searchParams.get('view') === 'review';
     const { assignments, submissions } = visibleHomework(ctx, pending);
     const catalog = workbookRecipients(ctx);
-    const material = homeworkMaterial(ctx);
-    const worksheet =
-      material &&
-      one(
-        ctx.db,
-        'SELECT 1 FROM homework_assignments WHERE id=? AND class_id=? AND academy_id=?',
-        material.workbookId,
-        material.classId,
-        material.academyId,
-      );
     const needsReview = new Set(
       catalog
         .filter((r) => r.submission_id && !r.confirmed_at)
@@ -974,14 +943,6 @@ export const homeworkModule: OperationModule = {
         '</div>',
       staff
         ? `<nav class="view-tabs page-tabs" aria-label="숙제 보기"><a href="/homework"${!pending ? ' aria-current="page"' : ''}>전체 숙제</a><a href="/homework?view=review"${pending ? ' aria-current="page"' : ''}>확인할 제출물</a></nav>`
-        : familyTabs,
-      material && worksheet
-        ? renderHomeworkMaterial(
-            material,
-            catalog.some((r) => r.id === material.workbookId)
-              ? '/homework?detail=' + encodeURIComponent(material.workbookId)
-              : undefined,
-          )
         : '',
       staff
         ? '<nav class="actions"><a href="/homework?view=books">교재 목록</a><a href="/homework?view=analysis">학생별 분석</a><a href="/briefing">반 브리핑</a></nav>'

@@ -241,6 +241,7 @@ export function renderReportDocument(
   body: string,
   subtitle: string,
   filename: string,
+  reference?: string,
 ) {
   const markdown = body.startsWith('# ') ? body : '# ' + title + '\n\n' + body;
   const { body: reportBody, comment } = reportTeacherComment(markdown);
@@ -293,6 +294,14 @@ export function renderReportDocument(
       : '') +
     '<div class="report-document-body formatted-output">' +
     content +
+    (reference
+      ? '<details class="report-values"><summary>집계 근거와 기준</summary>' +
+        reference
+          .split(/\r?\n\s*\r?\n/u)
+          .map((line) => '<p>' + h(line) + '</p>')
+          .join('') +
+        '</details>'
+      : '') +
     (comment
       ? '<section class="report-teacher-note"><h3>교사 코멘트</h3>' +
         comment
@@ -304,7 +313,11 @@ export function renderReportDocument(
     '</div><details class="report-save"><summary>리포트 저장</summary><a class="button-link subtle-link" download="' +
     h(filename) +
     '.md" href="data:text/markdown;charset=utf-8,' +
-    encodeURIComponent(markdown) +
+    encodeURIComponent(
+      reference
+        ? markdown + '\n\n## 집계 근거와 기준\n\n' + reference
+        : markdown,
+    ) +
     '">Markdown 저장</a></details></article>'
   );
 }

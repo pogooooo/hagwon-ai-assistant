@@ -10,6 +10,17 @@ import {
 } from '../../src/features/academy-operations/runtime-generation.ts';
 import { configurePdfRuntime } from '../../src/features/rag-consultation/server/ingest/parsers/pdf.ts';
 import { runParentMessageJobs } from '../../src/features/academy-operations/parent-messages-model.ts';
+import { gradingService } from '../../src/features/homework-grading/module.ts';
+
+import { configureGradingMedia } from '../../src/features/homework-grading/media.ts';
+import { configureWorkbookPhotoCrop } from '../../src/features/question-classification/ocr-page.mjs';
+import {
+  workerGradingMedia,
+  workerWorkbookPhotoCrop,
+} from './grading-media.mjs';
+
+configureGradingMedia(workerGradingMedia);
+configureWorkbookPhotoCrop(workerWorkbookPhotoCrop);
 
 const fixtureRoot = '/bundle/academies/';
 
@@ -70,13 +81,13 @@ export class AcademyDemo extends DurableObject {
     this.parentMessageDb = database(ctx.storage);
     if (!env.AXR_HOSTED_DEMO_PASSWORD) throw new Error('Missing demo password');
     configureOperationsGeneration(
-      createOperationsGeneration(env, fetch, database(ctx.storage)),
+      createOperationsGeneration(env, fetch, this.parentMessageDb),
     );
     const server = createOperationsServer({
       services: createExternalServices(env, fetch, database(ctx.storage)),
       scanVision: createOperationsScanVision(env, fetch, database(ctx.storage)),
       scanPdfAvailable: false,
-      db: database(ctx.storage),
+      db: this.parentMessageDb,
       publicOrigin: new URL(env.AXR_OPERATIONS_PUBLIC_ORIGIN),
       demoPassword: env.AXR_HOSTED_DEMO_PASSWORD,
       showDemoAccounts: true,
@@ -86,6 +97,7 @@ export class AcademyDemo extends DurableObject {
       documentsRoot: fixtureRoot,
       maxDocumentBytes: 5 * 1024 * 1024,
     });
+    gradingService(this.parentMessageDb, env);
     server.listen(0);
     this.port = server.address().port;
     ctx.blockConcurrencyWhile(async () => {
@@ -102,11 +114,12 @@ export class AcademyDemo extends DurableObject {
   }
   async alarm() {
     try {
+      await gradingService(this.parentMessageDb).sweep();
       runParentMessageJobs(this.parentMessageDb);
     } finally {
       const active = this.parentMessageDb
         .prepare(
-          "SELECT academy_id FROM op_parent_policies WHERE enabled=1 UNION ALL SELECT academy_id FROM op_parent_messages WHERE state='queued' LIMIT 1",
+          "SELECT academy_id FROM op_parent_policies WHERE enabled=1 UNION ALL SELECT academy_id FROM op_parent_messages WHERE state='queued' UNION ALL SELECT tenant FROM grading_v3_submissions WHERE raw_state<>'VERIFIED' LIMIT 1",
         )
         .get();
       await this.messageStorage.setAlarm(

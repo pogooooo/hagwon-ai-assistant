@@ -8,10 +8,14 @@
     rows = section.querySelector('#workbook-rows');
   const catalog = JSON.parse(section.dataset.items),
     tags = JSON.parse(section.dataset.tags);
+  // 사진 채점의 과제 등록 탭에서는 /grading으로 보내고 문항마다 정답을 받는다.
+  const base = section.dataset.base || '/homework',
+    done = section.dataset.done || 'detail',
+    requireAnswer = section.dataset.requireAnswer === '1';
   const states = new Map();
   async function request(action, data) {
     data.set('_academyAccount', document.body.dataset.account);
-    const res = await fetch('/homework?' + action + '=1', {
+    const res = await fetch(base + '?' + action + '=1', {
       method: 'POST',
       body: data,
     });
@@ -40,6 +44,31 @@
     find('[data-page]').value = item.page || '';
     find('[data-number]').value = item.number || '';
     find('[data-select]').checked = !!item.selected;
+    const answer = find('[data-answer]');
+    if (answer) {
+      const choice = find('[data-is-choice]');
+      const options = (item.answer || '').split('|').map((s) => s.trim());
+      const legacyChoice = options.every((s) => /^[①-⑨]$|^[1-9]번$/u.test(s));
+      choice.checked =
+        item.is_choice == null
+          ? !item.answer || legacyChoice
+          : !!item.is_choice;
+      answer.value =
+        choice.checked && legacyChoice
+          ? options
+              .map((s) => String('①②③④⑤⑥⑦⑧⑨'.indexOf(s) + 1 || parseInt(s, 10)))
+              .join(' | ')
+          : item.answer || '';
+      const updateAnswer = () => {
+        find('[data-answer-label]').textContent = choice.checked
+          ? '정답 보기 번호'
+          : '주관식 정답';
+        answer.placeholder = choice.checked ? '예: 3' : '예: 5/6 L';
+        answer.inputMode = choice.checked ? 'numeric' : 'text';
+      };
+      choice.onchange = updateAnswer;
+      updateAnswer();
+    }
     const area = find('[data-area]'),
       minor = find('[data-minor]'),
       chosen = find('[data-chosen]');
@@ -156,9 +185,28 @@
     for (const [row, tags] of states) {
       if (!row.querySelector('[data-select]').checked) continue;
       const page = Number(row.querySelector('[data-page]').value),
-        number = row.querySelector('[data-number]').value.trim();
+        number = row.querySelector('[data-number]').value.trim(),
+        answer = row.querySelector('[data-answer]')?.value.trim() ?? '';
       if (!Number.isInteger(page) || page < 1 || page > 100000 || !number) {
         status.textContent = '선택한 문항의 쪽수와 번호를 입력해 주세요.';
+        return;
+      }
+      if (requireAnswer && !answer) {
+        status.textContent =
+          page + '쪽 ' + number + '번의 정답을 입력해 주세요.';
+        return;
+      }
+      const isChoice = !!row.querySelector('[data-is-choice]')?.checked;
+      if (
+        isChoice &&
+        !answer.split('|').every((s) => /^[1-9]$/.test(s.trim()))
+      ) {
+        status.textContent =
+          page +
+          '쪽 ' +
+          number +
+          '번의 정답 보기 번호를 1~9 사이 숫자로 입력해 주세요.';
+        row.querySelector('[data-answer]').focus();
         return;
       }
       const key = JSON.stringify([page, number]);
@@ -175,6 +223,7 @@
         number,
         tagIds: [...tags],
         version: master?.version ?? null,
+        ...(requireAnswer ? { answer, isChoice } : {}),
       });
     }
     if (!items.length || items.length > 300) {
@@ -215,8 +264,8 @@
     const data = new FormData(save);
     save.inert = true;
     try {
-      const res = await fetch('/homework', { method: 'POST', body: data });
-      if (!res.ok || !new URL(res.url).searchParams.has('detail')) {
+      const res = await fetch(base, { method: 'POST', body: data });
+      if (!res.ok || !new URL(res.url).searchParams.has(done)) {
         const doc = new DOMParser().parseFromString(
           await res.text(),
           'text/html',

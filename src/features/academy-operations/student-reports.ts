@@ -13,8 +13,7 @@ import {
   withTeacherComment,
 } from './report-document.ts';
 import { accessibleClasses, accessibleStudents } from './directory.ts';
-import { parseClassification, tagById } from './classification.ts';
-import { readWorkbookAnalysis } from './workbook-analysis.ts';
+import { photoReportStats } from '../homework-grading/report-adapter.ts';
 import {
   escapeHtml as h,
   field,
@@ -32,28 +31,6 @@ const staff = (ctx: PageContext) =>
   ['admin', 'teacher'].includes(ctx.actor.role);
 const hash = (v: unknown) =>
   createHash('sha256').update(JSON.stringify(v)).digest('hex');
-export interface AdditionalReportEvidence {
-  sources: unknown[];
-  total: number;
-  correct: number;
-  unknown: number;
-  types: { id: string; name: string; total: number; wrong: number }[];
-}
-const additionalEvidence = new WeakMap<
-  OperationsDatabase,
-  (student: string, classId: string, period: string) => AdditionalReportEvidence
->();
-/** Optional adapter; the experimental grader stays out of the common main implementation. */
-export function registerStudentReportEvidence(
-  db: OperationsDatabase,
-  read: (
-    student: string,
-    classId: string,
-    period: string,
-  ) => AdditionalReportEvidence,
-) {
-  additionalEvidence.set(db, read);
-}
 interface Report {
   id: string;
   academy_id: string;
@@ -93,103 +70,37 @@ export function studentReportEvidence(
   scope(ctx, studentId, classId);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period))
     throw new OperationError('분석 월을 확인해 주세요.');
-  const sources: unknown[] = [];
-  const types = new Map<
-    string,
-    { name: string; wrong: number; total: number }
-  >();
-  let total = 0,
-    correct = 0,
-    unknown = 0;
-  const add = (tags: { tagId: string; name: string }[], ok: boolean) => {
-    for (const t of tags) {
-      const v = types.get(t.tagId) ?? { name: t.name, wrong: 0, total: 0 };
-      v.total++;
-      if (!ok) v.wrong++;
-      types.set(t.tagId, v);
-    }
-  };
-  const confirmed = rows<{
-    assignment_id: string;
-    revision: number;
-    classification: string;
-    outcomes: string;
-    created_at: string;
-  }>(
+  return reportEvidence(
     ctx.db,
-    `SELECT a.assignment_id,a.revision,a.classification,r.outcomes,r.created_at FROM op_learning_assignments a JOIN op_learning_results r ON r.academy_id=a.academy_id AND r.assignment_id=a.assignment_id WHERE a.academy_id=? AND a.class_id=? AND a.period=? AND r.student_id=? AND r.state='confirmed' AND r.classification_revision=a.revision AND r.revision=(SELECT MAX(x.revision) FROM op_learning_results x WHERE x.academy_id=r.academy_id AND x.assignment_id=r.assignment_id AND x.student_id=r.student_id) ORDER BY a.assignment_id`,
     ctx.actor.academyId,
+    studentId,
     classId,
     period,
-    studentId,
   );
-  for (const r of confirmed) {
-    const c = parseClassification(JSON.parse(r.classification)),
-      outcomes = JSON.parse(r.outcomes) as Record<string, string>;
-    sources.push(r);
-    for (const item of c.items) {
-      const result = outcomes[item.itemId];
-      if (result !== 'correct' && result !== 'incorrect') {
-        unknown++;
-        continue;
-      }
-      total++;
-      if (result === 'correct') correct++;
-      add(
-        item.tags
-          .filter((t) => t.status === 'adopted')
-          .flatMap((t) => {
-            const tag = tagById.get(t.tagId);
-            return tag ? [{ tagId: t.tagId, name: tag.name }] : [];
-          }),
-        result === 'correct',
-      );
-    }
-  }
-  for (const r of readWorkbookAnalysis(
-    ctx.db,
-    ctx.actor.academyId,
-  ).results.filter(
-    (r) =>
-      r.studentId === studentId &&
-      r.dueDate.startsWith(period) &&
-      r.classes.some((c) => c.id === classId),
-  )) {
-    sources.push(r);
-    for (const q of r.questions) {
-      total++;
-      if (q.correct) correct++;
-      add(
-        q.tags.map((t) => ({ tagId: t.tagId, name: t.name })),
-        !!q.correct,
-      );
-    }
-  }
-  const extra = additionalEvidence.get(ctx.db)?.(studentId, classId, period);
-  if (extra) {
-    sources.push(...extra.sources);
-    total += extra.total;
-    correct += extra.correct;
-    unknown += extra.unknown;
-    for (const t of extra.types) {
-      const prior = types.get(t.id) ?? { name: t.name, total: 0, wrong: 0 };
-      prior.total += t.total;
-      prior.wrong += t.wrong;
-      types.set(t.id, prior);
-    }
-  }
+}
+function reportEvidence(
+  db: OperationsDatabase,
+  academyId: string,
+  studentId: string,
+  classId: string,
+  period: string,
+) {
+  const { sources, types, total, correct, unknown, excluded } =
+    photoReportStats(db, academyId, studentId, classId, period);
   const attendance = rows<{ date: string; status: string; actor_id: string }>(
-    ctx.db,
+    db,
     'SELECT date,status,actor_id FROM op_student_attendance WHERE academy_id=? AND student_id=? AND class_id=? AND date LIKE ? ORDER BY date',
-    ctx.actor.academyId,
+    academyId,
     studentId,
     classId,
     period + '-%',
   );
-  const repeated = [...types.values()]
+  const repeated = types
+    .slice()
     .filter((t) => t.wrong >= 2)
     .sort((a, b) => b.wrong - a.wrong || a.name.localeCompare(b.name));
-  const suggestions = [...types.values()]
+  const suggestions = types
+    .slice()
     .filter((t) => t.wrong > 0)
     .sort((a, b) => b.wrong - a.wrong || a.name.localeCompare(b.name))
     .slice(0, 3);
@@ -197,13 +108,58 @@ export function studentReportEvidence(
     total,
     correct,
     unknown,
-    types: [...types].map(([id, type]) => ({ ...type, id })),
+    excluded,
+    types,
     repeated,
     suggestions,
     attendance,
-    fingerprint: hash({ sources, attendance }),
+    fingerprint: hash(
+      sources.length || unknown
+        ? { sources, total, correct, unknown, types, attendance }
+        : { sources, attendance },
+    ),
     sourceCount: sources.length,
   };
+}
+/** Used for guardian notifications. Recheck current enrollment, approval, and the same evidence as the report page. */
+export function approvedPhotoReports(
+  db: OperationsDatabase,
+  academy: string,
+  student: string,
+  period: string,
+  classId: string,
+) {
+  return rows<
+    Pick<
+      Report,
+      'id' | 'version' | 'period' | 'body' | 'class_id' | 'fingerprint'
+    >
+  >(
+    db,
+    `SELECT r.id,r.version,r.period,r.body,r.class_id,r.fingerprint FROM op_student_reports r
+    JOIN student_class_memberships m ON m.academy_id=r.academy_id AND m.student_id=r.student_id AND m.class_id=r.class_id AND m.ended_at IS NULL
+    WHERE r.academy_id=? AND r.student_id=? AND r.period=? AND r.state='approved' AND r.approved_by IS NOT NULL
+    AND (?='' OR r.class_id=?) ORDER BY r.class_id,r.id`,
+    academy,
+    student,
+    period,
+    classId,
+    classId,
+  ).filter((r) => {
+    const current = reportEvidence(db, academy, student, r.class_id, period);
+    return (
+      current.sourceCount > 0 &&
+      reportMatchesEvidence(r.fingerprint, current.fingerprint, () => {
+        const comparison = previousReportComparison(
+          period,
+          current.types,
+          (previous) =>
+            reportEvidence(db, academy, student, r.class_id, previous).types,
+        );
+        return comparison && hash(comparison);
+      })
+    );
+  });
 }
 function priorComparison(
   ctx: PageContext,
@@ -515,7 +471,6 @@ function groupedReports<T>(
 export function renderStudentReports(
   ctx: PageContext,
   readAssignments: () => AssignmentResult[] = () => [],
-  readPublishedLearning: () => { href: string; title: string }[] = () => [],
 ) {
   const family = ctx.actor.role === 'guardian';
   const embedded = ['/grading', '/homework'].includes(ctx.url.pathname);
@@ -541,7 +496,7 @@ export function renderStudentReports(
     : `<div class="workspace-heading"><h1>학습 리포트</h1></div>
     <nav class="page-tabs view-tabs" aria-label="리포트 종류">
       <a href="/student-reports"${!assignmentView ? ' aria-current="page"' : ''}>월간 리포트</a>
-      <a href="${family ? '/student-reports?view=assignments' : '/learning'}"${assignmentView ? ' aria-current="page"' : ''}>${family ? '과제별 결과' : '학습 기록'}</a>
+      <a href="${family ? '/student-reports?view=assignments' : '/grading?view=reports'}"${assignmentView ? ' aria-current="page"' : ''}>과제별 결과</a>
     </nav>`;
   if (assignmentView) {
     const entries = readAssignments();
@@ -574,24 +529,6 @@ export function renderStudentReports(
     (ctx.formError
       ? `<p class="panel report-alert" role="alert">${h(ctx.formError)}</p>`
       : '');
-  const previous =
-    family && !embedded && !ctx.url.searchParams.has('id')
-      ? readPublishedLearning()
-      : [];
-  if (previous.length)
-    html +=
-      '<section class="panel report-assignment-index"><h2>공개 학습 기록</h2><nav class="report-links">' +
-      previous
-        .map(
-          (record) =>
-            '<a class="workspace-link" href="' +
-            h(record.href) +
-            '">' +
-            h(record.title) +
-            '</a>',
-        )
-        .join('') +
-      '</nav></section>';
   if (staff(ctx)) {
     const today = new Date(Date.now() + 32400000).toISOString().slice(0, 10);
     const enrollments = students.flatMap((student) =>

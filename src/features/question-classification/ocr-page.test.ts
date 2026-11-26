@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createCanvas } from '@napi-rs/canvas';
+import { ocrCacheDir } from '../rag-consultation/server/ingest/parsers/ocr.ts';
 import {
   fieldsToLines,
   findPrintedPage,
@@ -107,6 +110,25 @@ test('본문 속 숫자나 거꾸로 가는 번호는 문항 번호로 받지 �
   assert.deepEqual(
     items.map((i) => i.displayNumber),
     ['0012', '0013'],
+  );
+});
+
+test('네 자리 번호가 발문과 다른 줄에 있어도 문항으로 나누고, 숫자만 있는 쪽 번호는 받지 않는다', () => {
+  const lines = [
+    ...line('II. 함수와 미분 | 01 유형 연습', 100, 40),
+    ...line('0001', 100, 100, 60),
+    ...line('f(x) = x2 - 9일 때 f(4)를 구하시오.', 100, 140),
+    ...line('0002', 100, 200, 60),
+    ...line('극한값을 구하시오.', 100, 240),
+    ...line('24', 100, 900, 30),
+  ];
+  const items = segmentItems(readingOrder(fieldsToLines(lines)));
+  assert.deepEqual(
+    items.map((i) => [i.displayNumber, i.text]),
+    [
+      ['0001', 'f(x) = x2 - 9일 때 f(4)를 구하시오.'],
+      ['0002', '극한값을 구하시오.\n24'],
+    ],
   );
 });
 
@@ -290,3 +312,142 @@ test('Cloudflare 배포의 canvas 대체 모듈이 판독 코드가 가져오는
   for (const name of imported)
     assert.equal(typeof stub[name], 'function', name + ' 없음');
 });
+
+test('점 없이 인쇄한 01식 번호도 같은 위치에 늘어선 번호로 찾고, 보기 값은 번호로 받지 않는다', () => {
+  // 두 단 문제지: 번호(01, 02 / 04, 05)는 각 단의 같은 왼쪽 위치에 있고, 보기 값(3, 6)은 보기 기호 옆에 있다.
+  // 분수가 있는 발문은 번호보다 조금 위에서 시작한다.
+  const lines = [
+    ...line('x2 + x - 6 의 값은?', 75, 95, 160),
+    ...line('01', 37, 101, 15),
+    ...line('①', 38, 130, 10),
+    ...line('3', 51, 131, 6),
+    ...line('② 4', 115, 130, 30),
+    ...line('02', 37, 326, 15),
+    ...line('①', 39, 359, 10),
+    ...line('3', 51, 381, 6),
+    ...line('04', 321, 101, 15),
+    ...line('상수 a, b에 대하여 a - b의 값은?', 340, 103, 200),
+    ...line('05', 321, 325, 15),
+    ...line('의 값은?', 345, 326, 100),
+    ...line('1', 549, 808, 5),
+  ];
+  const items = segmentItems(readingOrder(fieldsToLines(lines)));
+  assert.deepEqual(
+    items.map((i) => i.displayNumber),
+    ['01', '02', '04', '05'],
+  );
+  // 번호보다 조금 위에서 시작한 발문도 그 문항에 붙는다.
+  assert.match(items[0].text, /^x2 \+ x - 6 의 값은\?/);
+  assert.match(items[2].text, /상수 a, b에 대하여/);
+  // 문항 영역도 번호 위치에서 계산된다.
+  const regions = itemRegions(items, readingOrder(fieldsToLines(lines)));
+  assert.equal(regions.size, 4);
+});
+
+test('발문과 한 줄로 읽힌 0을 붙인 번호와 O로 읽힌 번호도 문항으로 받는다', () => {
+  // 두 단 문제지(1500px 폭): 오른쪽 단 첫 문항 04가 발문과 한 줄로, 05는 O5로 읽혔다.
+  const lines = [
+    ...line('01', 171, 291, 32),
+    ...line('lim 의 값은?', 210, 276, 240),
+    ...line('① 3', 174, 356, 40),
+    ...line('02', 171, 794, 34),
+    ...line('03', 171, 1296, 34),
+    ...line('04 lim x2+ax+b = 5일 때, 상수 a, b에 대하여', 806, 290, 500),
+    ...line('O5', 807, 791, 34),
+    ...line('06', 807, 1302, 34),
+    ...line('시연용 예시 문제지', 171, 1860, 300),
+  ];
+  const items = segmentItems(readingOrder(fieldsToLines(lines)));
+  assert.deepEqual(
+    items.map((i) => i.displayNumber),
+    ['01', '02', '03', '04', '05', '06'],
+  );
+  assert.match(items[3].text, /^lim x2\+ax\+b = 5일 때/);
+});
+
+test('숙제 등록 판독은 쪽 위 여백의 문항 번호(10)를 쪽 번호로 잡지 않는다', async (t) => {
+  process.env.CLOVA_OCR_INVOKE_URL = 'https://ocr.example.test/general';
+  process.env.CLOVA_OCR_SECRET = 'test-secret';
+  t.after(() => {
+    delete process.env.CLOVA_OCR_INVOKE_URL;
+    delete process.env.CLOVA_OCR_SECRET;
+  });
+  const fields = [
+    ...line('숙제 ① 함수의 연속', 171, 180, 300),
+    ...line('07', 171, 290, 34),
+    ...line('연속일 때, 상수 a의 값은?', 175, 385, 300),
+    ...line('08', 171, 806, 34),
+    ...line('09', 171, 1290, 34),
+    ...line('10', 806, 288, 34),
+    ...line('다음 중 모든 실수에서 연속인 함수는?', 850, 288, 400),
+    ...line('11', 806, 791, 34),
+    ...line('12', 806, 1290, 34),
+    ...line('시연용 예시 문제지', 171, 1860, 300),
+    ...line('2', 1316, 1866, 10),
+  ];
+  t.mock.method(globalThis, 'fetch', async () =>
+    Response.json({ images: [{ inferResult: 'SUCCESS', fields }] }),
+  );
+  const result = await readSheetService(
+    { bytes: Buffer.from('x'), mime: 'image/png' },
+    'E',
+  );
+  assert.deepEqual(
+    result.detected.map((d: { displayNumber: string }) => d.displayNumber),
+    ['07', '08', '09', '10', '11', '12'],
+  );
+  assert.ok(
+    result.detected.every((d: { printedPage?: number }) => d.printedPage === 2),
+  );
+});
+
+test(
+  '숙제 등록은 OCR에서 빠진 하단 쪽수를 로컬에서 읽고 두 후보가 있으면 비운다',
+  {
+    skip:
+      !existsSync(join(ocrCacheDir(), 'eng.traineddata')) &&
+      '로컬 영어 OCR 모델 없음',
+  },
+  async (t) => {
+    t.mock.method(globalThis, 'fetch', async () =>
+      Response.json({
+        images: [
+          {
+            inferResult: 'SUCCESS',
+            fields: [
+              ...line('01', 80, 120, 20),
+              ...line('Choose the answer.', 120, 120, 240),
+              ...line('02', 80, 480, 20),
+              ...line('Footer', 80, 930, 80),
+            ],
+          },
+        ],
+      }),
+    );
+    t.mock.property(process, 'env', {
+      ...process.env,
+      CLOVA_OCR_INVOKE_URL: 'https://ocr.example.test/general',
+      CLOVA_OCR_SECRET: 'test',
+    });
+    const canvas = createCanvas(900, 1000);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#666';
+    ctx.font = '24px Arial';
+    ctx.fillText('Footer', 80, 950);
+    ctx.fillText('1', 800, 950);
+    const readPage = async () => {
+      const result = await readSheetService(
+        { bytes: canvas.toBuffer('image/png'), mime: 'image/png' },
+        'E',
+      );
+      return result.detected.map(
+        (item: { printedPage?: number }) => item.printedPage,
+      );
+    };
+    assert.deepEqual(await readPage(), [1, 1]);
+    ctx.fillText('2', 440, 950);
+    assert.deepEqual(await readPage(), [undefined, undefined]);
+  },
+);

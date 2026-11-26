@@ -1,5 +1,7 @@
 import { demoHomeworkMaterials } from './demo-homework-materials.ts';
-import { assignWorkbook } from './workbook-catalog.ts';
+import { gradingService } from '../homework-grading/module.ts';
+import { workbookItem } from '../homework-grading/workbook-assign.ts';
+import { resolveBook, saveBookQuestion } from './workbook-catalog.ts';
 import { getActor } from './directory.ts';
 import type { OperationsDatabase } from './database.ts';
 import { one, rows, transaction } from './shared.ts';
@@ -180,35 +182,47 @@ export function seedDemoHomework(db: OperationsDatabase) {
     )
       continue;
     const ctx = { db, actor, url: new URL('http://localhost/') };
+    // 체험 숙제는 교재 과제로 둔다: 공용 교재 목록에 문항·유형·정답을 저장하고 정답 채점 과제를 만든다.
+    const subject = material.subject === 'ENG' ? 'E' : 'M';
+    const form = new FormData();
+    form.set('subject', subject);
+    form.set('book', material.book);
+    transaction(db, () => {
+      const book = resolveBook(ctx, form);
+      for (const q of material.items)
+        saveBookQuestion(ctx, book, {
+          ...q,
+          tagIds: [...q.tagIds],
+          page: material.page,
+        });
+    });
+    // 문항 id가 매번 새로 만들어지므로, 이미 등록한 체험 과제는 다시 등록하지 않는다.
     if (
       one(
         db,
-        'SELECT 1 FROM homework_assignments WHERE id=?',
-        material.workbookId,
+        "SELECT 1 FROM grading_v3_idempotency WHERE tenant=? AND actor=? AND endpoint='assignment' AND key=?",
+        actor.academyId,
+        actor.id,
+        material.requestKey + '-workbook',
       )
     )
       continue;
-    const form = new FormData();
-    for (const [key, value] of Object.entries({
-      assignmentId: material.workbookId,
-      subject: material.subject === 'MATH' ? 'M' : 'E',
-      book: material.book,
-      edition: material.subject === 'MATH' ? '초등' : '중등',
-      title: material.title,
-      date: new Date(Date.now() + 7 * 86400000 + 32400000)
-        .toISOString()
-        .slice(0, 10),
-      targetKind: 'class',
-      classId: material.classId,
-      items: JSON.stringify(
-        [1, 2, 3, 4, 5].map((number) => ({
-          page: material.page,
-          number: String(number),
-          tagIds: [],
-        })),
-      ),
-    }))
-      form.set(key, value);
-    assignWorkbook(ctx, form);
+    gradingService(db).register(
+      ctx,
+      {
+        title: material.title,
+        class_id: material.classId,
+        rights_ref: material.rights,
+        items: material.items.map((q) =>
+          workbookItem(
+            subject,
+            { ...q, tagIds: [...q.tagIds], page: material.page },
+            1,
+            material.rights,
+          ),
+        ),
+      },
+      material.requestKey + '-workbook',
+    );
   }
 }

@@ -46,6 +46,19 @@ export function setupWorkbookCatalog(db: OperationsDatabase) {
       page INTEGER NOT NULL, number TEXT NOT NULL, tag_ids TEXT NOT NULL, rubric_version TEXT NOT NULL
     );
   `);
+  // 교재 문항의 정답. 처음 등록할 때 한 번 입력하고 이후 숙제에서 다시 쓴다. 비어 있으면 정답 미등록이다.
+  const columns = rows<{ name: string }>(
+    db,
+    'PRAGMA table_info(book_questions)',
+  ).map((c) => c.name);
+  if (!columns.includes('answer'))
+    db.exec(
+      "ALTER TABLE book_questions ADD COLUMN answer TEXT NOT NULL DEFAULT ''",
+    );
+  if (!columns.includes('is_choice'))
+    db.exec(
+      'ALTER TABLE book_questions ADD COLUMN is_choice INTEGER CHECK(is_choice IN (0,1))',
+    );
 }
 
 export function requireStaff(ctx: PageContext) {
@@ -86,6 +99,8 @@ export function bookQuestions(ctx: PageContext, bookId: string) {
     page: number;
     number: string;
     version: number;
+    answer: string;
+    is_choice: number | null;
     tags: string;
   }>(
     ctx.db,
@@ -96,7 +111,7 @@ export function bookQuestions(ctx: PageContext, bookId: string) {
   ).map((q) => ({ ...q, tagIds: JSON.parse(q.tags) as string[] }));
 }
 
-function resolveBook(ctx: PageContext, form: FormData) {
+export function resolveBook(ctx: PageContext, form: FormData) {
   requireStaff(ctx);
   const subject = required(form, 'subject', '과목', 1);
   if (!workbookClasses(ctx).some((c) => c.subject === subject))
@@ -133,12 +148,92 @@ function resolveBook(ctx: PageContext, form: FormData) {
     ...identity,
   )!;
 }
-export function registerBook(ctx: PageContext, form: FormData) {
+export function registerBook(
+  ctx: PageContext,
+  form: FormData,
+  next = '/homework?view=create',
+) {
   requireStaff(ctx);
-  return transaction(
+  return transaction(ctx.db, () => next + '&book=' + resolveBook(ctx, form).id);
+}
+
+/**
+ * 교재 문항 하나를 공용 목록에 저장하고 유형(과 정답)을 갱신한다. 다른 강사가 그사이 유형을 고쳤으면
+ * 최신 목록을 다시 불러오게 한다. 반환값은 공용 문항 id와 정렬한 유형 id다.
+ */
+export function saveBookQuestion(
+  ctx: PageContext,
+  book: Book,
+  q: {
+    page: number;
+    number: string;
+    tagIds: string[];
+    version?: number | null;
+    answer?: string;
+    isChoice?: boolean;
+  },
+) {
+  const ids = [...new Set(q.tagIds)].sort();
+  if (
+    ids.length !== q.tagIds.length ||
+    ids.some((t) => tagById.get(t)?.subject !== book.subject)
+  )
+    throw new OperationError('중복 문항 또는 과목과 다른 유형이 있습니다.');
+  const prior = one<{
+    id: string;
+    version: number;
+    answer: string;
+    is_choice: number | null;
+  }>(
     ctx.db,
-    () => '/homework?view=create&book=' + resolveBook(ctx, form).id,
+    'SELECT id,version,answer,is_choice FROM book_questions WHERE book_id=? AND page=? AND number=?',
+    book.id,
+    q.page,
+    q.number,
   );
+  const master = prior?.id ?? randomUUID();
+  const choice = q.isChoice === undefined ? null : Number(q.isChoice);
+  if (!prior)
+    ctx.db
+      .prepare(
+        'INSERT INTO book_questions(id,book_id,page,number,answer,is_choice) VALUES(?,?,?,?,?,?)',
+      )
+      .run(master, book.id, q.page, q.number, q.answer ?? '', choice);
+  const previous = rows<{ tag_id: string }>(
+    ctx.db,
+    'SELECT tag_id FROM book_question_types WHERE question_id=? ORDER BY tag_id',
+    master,
+  ).map((t) => t.tag_id);
+  const answerChanged =
+    !!prior &&
+    q.answer !== undefined &&
+    (q.answer !== prior.answer || choice !== prior.is_choice);
+  const typesChanged = JSON.stringify(previous) !== JSON.stringify(ids);
+  if (prior && (typesChanged || answerChanged) && q.version !== prior.version)
+    throw new OperationError(
+      '교재 목록에서 해당 문항의 최신 유형·정답을 불러온 뒤 수정해 주세요.',
+      409,
+    );
+  if (typesChanged) {
+    ctx.db
+      .prepare('DELETE FROM book_question_types WHERE question_id=?')
+      .run(master);
+    for (const tag of ids)
+      ctx.db
+        .prepare(
+          'INSERT INTO book_question_types(question_id,tag_id) VALUES(?,?)',
+        )
+        .run(master, tag);
+  }
+  if (answerChanged)
+    ctx.db
+      .prepare('UPDATE book_questions SET answer=?,is_choice=? WHERE id=?')
+      .run(q.answer ?? '', choice, master);
+  if (prior && (typesChanged || answerChanged))
+    ctx.db
+      .prepare('UPDATE book_questions SET version=version+1 WHERE id=?')
+      .run(master);
+  return { master, ids };
 }
 
 const itemSchema = z
@@ -243,53 +338,10 @@ export function assignWorkbook(ctx: PageContext, form: FormData) {
     const seen = new Set<string>();
     for (const [index, q] of parsed.data.entries()) {
       const key = JSON.stringify([q.page, q.number]);
-      const ids = [...new Set(q.tagIds)].sort();
-      if (
-        seen.has(key) ||
-        ids.length !== q.tagIds.length ||
-        ids.some((t) => tagById.get(t)?.subject !== book.subject)
-      )
+      if (seen.has(key))
         throw new OperationError('중복 문항 또는 과목과 다른 유형이 있습니다.');
       seen.add(key);
-      const prior = one<{ id: string; version: number }>(
-        ctx.db,
-        'SELECT id,version FROM book_questions WHERE book_id=? AND page=? AND number=?',
-        book.id,
-        q.page,
-        q.number,
-      );
-      const master = prior?.id ?? randomUUID();
-      if (!prior)
-        ctx.db
-          .prepare(
-            'INSERT INTO book_questions(id,book_id,page,number) VALUES(?,?,?,?)',
-          )
-          .run(master, book.id, q.page, q.number);
-      const previous = rows<{ tag_id: string }>(
-        ctx.db,
-        'SELECT tag_id FROM book_question_types WHERE question_id=? ORDER BY tag_id',
-        master,
-      ).map((t) => t.tag_id);
-      if (JSON.stringify(previous) !== JSON.stringify(ids)) {
-        if (prior && q.version !== prior.version)
-          throw new OperationError(
-            '교재 목록에서 해당 문항의 최신 유형을 불러온 뒤 수정해 주세요.',
-            409,
-          );
-        ctx.db
-          .prepare('DELETE FROM book_question_types WHERE question_id=?')
-          .run(master);
-        for (const tag of ids)
-          ctx.db
-            .prepare(
-              'INSERT INTO book_question_types(question_id,tag_id) VALUES(?,?)',
-            )
-            .run(master, tag);
-        if (prior)
-          ctx.db
-            .prepare('UPDATE book_questions SET version=version+1 WHERE id=?')
-            .run(master);
-      }
+      const { master, ids } = saveBookQuestion(ctx, book, q);
       const question = randomUUID(),
         types = ids.map((t) => tagById.get(t)!.name).join(', ');
       ctx.db

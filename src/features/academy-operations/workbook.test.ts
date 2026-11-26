@@ -370,6 +370,7 @@ test('OCR 판독으로 수학 대분류를 추천하고, 배정해도 문항 원
   ];
   const areaPrompts: string[] = [];
   t.mock.method(globalThis, 'fetch', async (url: string, init: RequestInit) => {
+    assert.equal(init.redirect, 'manual');
     if (String(url).includes('ocr.example.test'))
       return Response.json({ images: [{ inferResult: 'SUCCESS', fields }] });
     const body = JSON.parse(String(init.body));

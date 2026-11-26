@@ -175,6 +175,13 @@ export function validateDocument(
       check(fact.subjectId === document.academyId, `${label}:academy_binding`);
     }
     if (fact.value.kind === 'accuracy') {
+      check(
+        fact.value.subject === undefined ||
+          (typeof fact.value.subject === 'string' &&
+            fact.value.subject.length > 0 &&
+            fact.value.subject.length <= 80),
+        `${label}:accuracy_subject`,
+      );
       const { correct, total } = fact.value;
       check(
         Number.isInteger(correct) &&

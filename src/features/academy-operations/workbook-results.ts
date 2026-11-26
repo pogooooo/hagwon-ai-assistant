@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { accessibleStudents } from './directory.ts';
 import {
   readWorkbookAnalysis,
   summarizeWorkbookAnalysis,
@@ -249,15 +248,8 @@ export function workbookAnalytics(ctx: PageContext, individual: boolean) {
     roster = workbookRecipients(ctx);
   const classes = workbookClasses(ctx),
     students = uniqueRecipients(roster);
-  const classId = params.get('class') ?? classes[0]?.id ?? '';
-  const classStudents = individual
-    ? []
-    : accessibleStudents(ctx.db, ctx.actor).filter((s) =>
-        s.classIds.includes(classId),
-      );
-  const student =
-    params.get('student') ?? (individual ? students[0]?.student_id : '') ?? '';
-  const selected = classStudents.find((s) => s.id === student);
+  const classId = params.get('class') ?? classes[0]?.id ?? '',
+    student = params.get('student') ?? students[0]?.student_id ?? '';
   const book = params.get('book') ?? '',
     subject = params.get('subject') ?? '',
     assignment = params.get('workbook') ?? '';
@@ -274,16 +266,13 @@ export function workbookAnalytics(ctx: PageContext, individual: boolean) {
       student &&
       !students.some((s) => s.student_id === student)) ||
     (!individual && classId && !classes.some((c) => c.id === classId)) ||
-    (!individual && student && !selected) ||
     (book && !roster.some((r) => r.book_id === book)) ||
     (assignment && !roster.some((r) => r.id === assignment)) ||
     (subject && subject !== 'M' && subject !== 'E')
   )
     throw new OperationError('조회 가능한 분석 범위를 선택해 주세요.', 404);
   const scope = roster.filter((r) =>
-    individual
-      ? r.student_id === student
-      : r.class_id === classId && (!selected || r.student_id === selected.id),
+    individual ? r.student_id === student : r.class_id === classId,
   );
   const chosen = scope.filter(
     (r) =>
@@ -303,7 +292,7 @@ export function workbookAnalytics(ctx: PageContext, individual: boolean) {
   const rejected = analysis.rejected.filter((id) => selectedIds.has(id)).length;
   const stats = (map: typeof types) =>
     [...map]
-      .filter(([, s]) => individual || selected || s.correct < s.total)
+      .filter(([, s]) => individual || s.correct < s.total)
       .sort((a, b) => b[1].total - b[1].correct - (a[1].total - a[1].correct))
       .map(
         ([, s]) =>
@@ -320,25 +309,23 @@ export function workbookAnalytics(ctx: PageContext, individual: boolean) {
   ];
   // Keep assignment choices available when switching between classes.
   const assignments = [...groupHomework(roster).values()].map((g) => g[0]);
-  return `<section class="panel${individual ? '' : ' briefing-results'}">${individual ? '<h1>학생별 분석</h1>' : ''}<form method="get"${individual ? ' class="fields"' : ' class="briefing-filters" data-briefing-filters'}>
+  return `<section class="panel"><h1>${individual ? '학생별 분석' : '반 브리핑'}</h1><form method="get" class="fields">
   ${
     individual
       ? `<input type="hidden" name="view" value="analysis"><label>학생<select name="student">${students.map((r) => option(r.student_id!, r.student_name!, student)).join('')}</select></label>
   <label>과목<select name="subject">${option('', '전체', subject) + option('M', '수학', subject) + option('E', '영어', subject)}</select></label>
   <label>교재<select name="book">${option('', '전체 교재', book) + books.map(([k, v]) => option(k, v, book)).join('')}</select></label>`
       : `<label>반<select name="class">${classes.map((c) => option(c.id, c.name, classId)).join('')}</select></label>
-  <label>학생<select name="student">${option('', '반 전체', student) + classStudents.map((s) => option(s.id, s.name, student)).join('')}</select></label>
   <label>숙제<select name="workbook">${option('', '기간 내 전체 숙제', assignment) + assignments.map((r) => option(r.id, r.title, assignment)).join('')}</select></label>`
   }
   <label>마감일 기준 시작<input type="date" name="from" value="${h(from)}"></label><label>종료<input type="date" name="to" value="${h(to)}"></label><button>조회</button></form>
-  ${selected ? `<h2 class="briefing-student-heading">${h(selected.name)} 학습 결과</h2>` : ''}
   ${rejected ? `<p role="alert">승인 기록과 문항별 결과가 일치하지 않는 ${rejected}건은 집계에서 제외했습니다. 숙제 상세에서 확인해 주세요.</p>` : ''}
   ${
     total
-      ? `<div class="${individual ? '' : 'briefing-student-card'}"><h${selected ? 3 : 2}>${selected ? '정답률' : '전체 정답률'} ${((100 * correct) / total).toFixed(1)}%</h${selected ? 3 : 2}><p>확인 완료 ${results.length}건 · 정답 ${correct}/${total}문항</p></div>
+      ? `<h2>전체 정답률 ${((100 * correct) / total).toFixed(1)}%</h2><p>확인 완료 ${results.length}건 · 정답 ${correct}/${total}문항</p>
   <p class="muted">유형 미지정 ${unclassified}문항은 전체 정답률에 포함하고 유형별 집계에서만 제외합니다. 배정 당시 유형과 교사 승인 결과를 사용하며, 오답만으로 원인을 단정하지 않습니다.</p>
-  <h3>${individual || selected ? '대분류별 결과' : '다시 설명할 대분류'}</h3><ul>${stats(groups) || '<li>집계할 유형이 없습니다.</li>'}</ul>
-  <h3>${individual || selected ? '소분류별 결과' : '다시 설명할 소분류'}</h3><ul>${stats(types) || '<li>집계할 유형이 없습니다.</li>'}</ul>
+  <h3>${individual ? '대분류별 결과' : '다시 설명할 대분류'}</h3><ul>${stats(groups) || '<li>집계할 유형이 없습니다.</li>'}</ul>
+  <h3>${individual ? '소분류별 결과' : '다시 설명할 소분류'}</h3><ul>${stats(types) || '<li>집계할 유형이 없습니다.</li>'}</ul>
   <h3>많이 틀린 문항</h3><ul>${
     [...misses.values()]
       .filter((m) => m.wrong)

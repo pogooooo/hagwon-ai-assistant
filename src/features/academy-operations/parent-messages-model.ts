@@ -1,3 +1,4 @@
+import { approvedPhotoReports } from './student-reports.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { OperationsDatabase } from './database.ts';
 import { accessibleStudents } from './directory.ts';
@@ -150,7 +151,7 @@ export function previousReportMonth(now: number) {
   d.setUTCMonth(d.getUTCMonth() - 1);
   return d.toISOString().slice(0, 7);
 }
-export function monthlyEvidence(db: OperationsDatabase, academy: string) {
+function archivedEvidence(db: OperationsDatabase, academy: string) {
   const a = learningEvidence(db, academy),
     b = workbookEvidence(db, academy);
   return {
@@ -158,12 +159,12 @@ export function monthlyEvidence(db: OperationsDatabase, academy: string) {
     facts: [...a.facts, ...b.facts],
   };
 }
-export function monthlyReport(
+export function archivedMonthlyReport(
   db: OperationsDatabase,
   academy: string,
   student: string,
   period: string,
-  evidence = monthlyEvidence(db, academy),
+  evidence = archivedEvidence(db, academy),
 ) {
   month(period);
   const memberships = new Set(
@@ -239,6 +240,79 @@ export function monthlyReport(
     })),
   };
 }
+
+function photoMonthlyReport(
+  db: OperationsDatabase,
+  academy: string,
+  student: string,
+  period: string,
+  classId: string,
+) {
+  const reports = approvedPhotoReports(
+    db,
+    academy,
+    student,
+    month(period),
+    classId,
+  );
+  if (!reports.length) return null;
+  const sources = reports.map((r) => ({
+    kind: 'student-report' as const,
+    documentId: r.id,
+    revision: r.version,
+    title:
+      r.period +
+      ' 월간 리포트 · ' +
+      (one<{ name: string }>(
+        db,
+        'SELECT name FROM classes WHERE academy_id=? AND id=?',
+        academy,
+        r.class_id,
+      )?.name ?? '수강 반'),
+  }));
+  return {
+    sources,
+    summary: reports.map((r) => r.body).join('\n\n'),
+    fingerprint: hash(
+      reports.map((r) => [r.id, r.version, r.fingerprint, r.body]),
+    ),
+  };
+}
+// Batch-scoped only: the next preview, approval, delivery or read resolves current evidence again.
+export function monthlyEvidence(db: OperationsDatabase, academy: string) {
+  const cache = new Map<string, ReturnType<typeof photoMonthlyReport>>();
+  let legacy: ReturnType<typeof archivedEvidence> | undefined;
+  return {
+    current(student: string, period: string, classId: string) {
+      const key = JSON.stringify([student, period, classId]);
+      if (!cache.has(key))
+        cache.set(
+          key,
+          photoMonthlyReport(db, academy, student, period, classId),
+        );
+      return cache.get(key) ?? null;
+    },
+    archived(student: string, period: string) {
+      return archivedMonthlyReport(
+        db,
+        academy,
+        student,
+        period,
+        (legacy ??= archivedEvidence(db, academy)),
+      );
+    },
+  };
+}
+export function monthlyReport(
+  db: OperationsDatabase,
+  academy: string,
+  student: string,
+  period: string,
+  evidence = monthlyEvidence(db, academy),
+  classId = '',
+) {
+  return evidence.current(student, period, classId);
+}
 function recipients(db: OperationsDatabase, academy: string, classId = '') {
   if (
     classId &&
@@ -292,11 +366,23 @@ export function messageCurrent(
   m: ParentMessage,
   evidence?: ReturnType<typeof monthlyEvidence>,
 ) {
+  if (!isRecipient(db, m)) return false;
+  if (m.kind !== 'monthly') return true;
+  const scope = evidence ?? monthlyEvidence(db, m.academy_id);
+  const sources = JSON.parse(m.sources) as {
+    kind?: string;
+    documentId: string;
+  }[];
+  if (!sources.length) return false;
+  if (sources.every((s) => s.kind === 'student-report'))
+    return (
+      scope.current(m.student_id, m.period, m.target_class_id ?? '')
+        ?.fingerprint === m.fingerprint
+    );
   return (
-    isRecipient(db, m) &&
-    (m.kind !== 'monthly' ||
-      monthlyReport(db, m.academy_id, m.student_id, m.period, evidence)
-        ?.fingerprint === m.fingerprint)
+    (m.state === 'delivered' || m.state === 'queued') &&
+    sources.every((s) => /^(?:learning|workbook)-/.test(s.documentId)) &&
+    scope.archived(m.student_id, m.period)?.fingerprint === m.fingerprint
   );
 }
 // INSERT has explicit columns so migrations can add fields without shifting values.
@@ -367,7 +453,14 @@ function buildMonthlyMessages(
     missing = 0;
   const eligibleIds: string[] = [];
   for (const r of list) {
-    const report = monthlyReport(db, academy, r.student, period, evidence);
+    const report = monthlyReport(
+      db,
+      academy,
+      r.student,
+      period,
+      evidence,
+      policy.class_id,
+    );
     if (!report) {
       missing++;
       continue;

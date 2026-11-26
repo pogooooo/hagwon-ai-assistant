@@ -609,7 +609,7 @@ async function answerReportAssessment(
       (!frame.classIds.length ||
         (fact.classId !== null && frame.classIds.includes(fact.classId))) &&
       (!frame.subjects.length ||
-        subjectOf(ctx.catalog, fact.classId) === frame.subjects[0]),
+        subjectOf(ctx.catalog, fact.classId, fact) === frame.subjects[0]),
   );
   const period = years.length
     ? makePeriod(Number(years[0]), frame.months[0])
@@ -1130,7 +1130,7 @@ async function answerLearningReport(
   markMultiSubjectStudents(ctx, loaded);
   const matchesSubject = (fact: ApprovedFact) =>
     inferredSubjects.length === 1
-      ? subjectOf(ctx.catalog, fact.classId) === inferredSubjects[0]
+      ? subjectOf(ctx.catalog, fact.classId, fact) === inferredSubjects[0]
       : matchesRequestedSubject(ctx, fact);
   const allAccuracy = loaded
     .filter(isAccuracy)
@@ -1148,8 +1148,8 @@ async function answerLearningReport(
           .filter(
             (f) =>
               f.subjectId === fact.subjectId &&
-              subjectOf(ctx.catalog, f.classId) ===
-                subjectOf(ctx.catalog, fact.classId),
+              subjectOf(ctx.catalog, f.classId, f) ===
+                subjectOf(ctx.catalog, fact.classId, fact),
           )
           .map((f) => f.period ?? '')
           .sort(comparePeriods)
@@ -1157,7 +1157,7 @@ async function answerLearningReport(
     if (!relevantPeriods.includes(fact.period ?? '') || !fact.classId) continue;
     const key = JSON.stringify([
       fact.subjectId,
-      subjectOf(ctx.catalog, fact.classId),
+      subjectOf(ctx.catalog, fact.classId, fact),
       fact.period,
     ]);
     const scopes = workbookScopes.get(key) ?? new Set<string>();
@@ -1210,7 +1210,7 @@ async function answerLearningReport(
   // 같은 학생·지표·기간에 동시에 유효한 승인 값이 서로 다르면 어느 쪽도 고르지 않는다.
   const groups = new Map<string, Set<string>>();
   for (const fact of allAccuracy) {
-    const key = `${fact.subjectId}|${subjectOf(ctx.catalog, fact.classId) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}|${fact.period}`;
+    const key = `${fact.subjectId}|${subjectOf(ctx.catalog, fact.classId, fact) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}|${fact.period}`;
     const values = groups.get(key) ?? new Set<string>();
     values.add(`${fact.value.correct}/${fact.value.total}`);
     groups.set(key, values);
@@ -1867,7 +1867,7 @@ function comparePeriodsFor(
   }
 
   const keyOf = (fact: AccuracyFact) =>
-    `${subjectOf(ctx.catalog, fact.classId) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}`;
+    `${subjectOf(ctx.catalog, fact.classId, fact) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}`;
   const keySets = byPeriod.map((entry) => new Set(entry.facts.map(keyOf)));
   const commonKeys = [...keySets[0]]
     .filter((key) => keySets.every((set) => set.has(key)))
@@ -1948,7 +1948,7 @@ function compareStudents(
     ...new Set(
       series.map(
         (fact) =>
-          `${subjectOf(ctx.catalog, fact.classId) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}`,
+          `${subjectOf(ctx.catalog, fact.classId, fact) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}`,
       ),
     ),
   ].sort();
@@ -1961,7 +1961,7 @@ function compareStudents(
       fact: series.find(
         (fact) =>
           fact.subjectId === target &&
-          `${subjectOf(ctx.catalog, fact.classId) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}` ===
+          `${subjectOf(ctx.catalog, fact.classId, fact) ?? ''}|${dimensionOf(fact)}|${fact.value.unit}` ===
             key,
       ),
     }));

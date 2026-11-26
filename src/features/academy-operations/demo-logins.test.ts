@@ -76,4 +76,21 @@ test('체험 로그인 변경은 기존 기록과 체험 학원만 유지하며 
   setupDemoLogins(db, hashes);
   assert.ok(listedDemoLogins(db).some((row) => row[1] === 'renamed-guest'));
   assert.equal(authenticate(db, 'renamed-guest', next), undefined);
+  setupDemoLogins(db, undefined, true);
+  const local = listedDemoLogins(db).map((row) => row[1]);
+  assert.deepEqual(local, [
+    'admin',
+    'teacher1',
+    'student',
+    'parent',
+    'visitor',
+  ]);
+  for (const user of local) assert.ok(authenticate(db, user, 'ondap1234'));
+  assert.equal(authenticate(db, 'parent', 'ondap1234')?.id, 'qa-parent');
+  const hash = () =>
+    db.prepare("SELECT password_hash FROM accounts WHERE id='TA_VISITOR'").get()
+      ?.password_hash;
+  const firstHash = hash();
+  setupDemoLogins(db, undefined, true);
+  assert.equal(hash(), firstHash);
 });

@@ -1,3 +1,8 @@
+import { getActor } from './directory.ts';
+import { homeworkModule } from './homework.ts';
+import { askArchived } from './test-fixtures/archived-consultation.ts';
+import { learningModule } from './learning.ts';
+import { OperationError } from './shared.ts';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes, randomUUID, scryptSync } from 'node:crypto';
@@ -13,7 +18,11 @@ import { fileURLToPath } from 'node:url';
 
 const demoPassword = 'axr-http-test';
 
-async function startOperations(t: TestContext, publicOrigin = '') {
+async function startOperations(
+  t: TestContext,
+  publicOrigin = '',
+  useDefaultLogins = false,
+) {
   const directory = mkdtempSync(join(tmpdir(), 'axr-operations-test-'));
   const filename = join(directory, 'academy.sqlite');
   const child = spawn(
@@ -29,6 +38,9 @@ async function startOperations(t: TestContext, publicOrigin = '') {
         AXR_OPERATIONS_PORT: '0',
         AXR_OPERATIONS_DEMO_PASSWORD: demoPassword,
         AXR_OPERATIONS_PUBLIC_ORIGIN: publicOrigin,
+        AXR_OPERATIONS_LOCAL_DEMO_LOGINS: useDefaultLogins
+          ? undefined
+          : 'false',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -75,11 +87,13 @@ async function startOperations(t: TestContext, publicOrigin = '') {
     };
   }
 
+  const accounts = new Map<string, string>();
   async function login(username: string, password = demoPassword) {
     const response = await send('/login', '', { username, password });
     assert.equal(response.status, 303);
     const cookie = response.headers.get('set-cookie')?.split(';')[0];
     assert.ok(cookie);
+    accounts.set(cookie, username);
     return cookie;
   }
 
@@ -92,10 +106,88 @@ async function startOperations(t: TestContext, publicOrigin = '') {
     }
   }
 
-  return { origin, send, login, readDatabase, filename };
+  // Reconstruct records made before the photo-grading rollout. Only the verified
+  // publication and consultation reads are still public HTTP entry points.
+  async function historical(
+    path: string,
+    cookie: string,
+    fields?: Record<string, string> | FormData,
+  ) {
+    const db = new DatabaseSync(filename);
+    try {
+      db.exec('PRAGMA foreign_keys=ON');
+      const username = accounts.get(cookie);
+      assert.ok(username);
+      const account = db
+        .prepare('SELECT id FROM accounts WHERE username=?')
+        .get(username);
+      assert.ok(account);
+      const actor = getActor(db, String(account.id))!;
+      const url = new URL(path, origin);
+      assert.ok(['/homework', '/learning'].includes(url.pathname));
+      const mod =
+        url.pathname === '/homework' ? homeworkModule : learningModule;
+      const ctx = { db, actor, url };
+      if (!fields) return { status: 200, text: await mod.render(ctx) };
+      const form = fields instanceof FormData ? fields : new FormData();
+      if (!(fields instanceof FormData))
+        for (const [k, v] of Object.entries(fields)) form.append(k, v);
+      await mod.submit(ctx, form);
+      return { status: 303, text: '' };
+    } catch (e) {
+      if (e instanceof OperationError)
+        return { status: e.status, text: e.message };
+      throw e;
+    } finally {
+      db.close();
+    }
+  }
+  async function archivedAnswer(cookie: string, question: string) {
+    const db = new DatabaseSync(filename);
+    try {
+      const username = accounts.get(cookie);
+      assert.ok(username);
+      const account = db
+        .prepare('SELECT id FROM accounts WHERE username=?')
+        .get(username);
+      assert.ok(account);
+      const actor = getActor(db, String(account.id))!;
+      const conversationId = randomUUID(),
+        form = new FormData();
+      for (const [k, v] of Object.entries({
+        question,
+        conversationId,
+        studentId: 'TA_STU_001',
+      }))
+        form.set(k, v);
+      await askArchived(
+        { db, actor, url: new URL('/consultation', origin) },
+        form,
+      );
+      return conversationId;
+    } finally {
+      db.close();
+    }
+  }
+
+  return {
+    origin,
+    send,
+    login,
+    readDatabase,
+    historical,
+    archivedAnswer,
+    filename,
+  };
 }
 
-test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 기존 근거 차단', async (t) => {
+test('기본 로컬 서버에서 역할별 체험 아이디와 공통 비밀번호로 로그인한다', async (t) => {
+  const s = await startOperations(t, '', true);
+  for (const username of ['admin', 'teacher', 'student', 'parent', 'visitor'])
+    await s.login(username, 'ondap1234');
+});
+
+test('기존 교재 분석의 HTTP 상담 인용·권한·정정 후 철회', async (t) => {
   const s = await startOperations(t);
   const teacher = await s.login('TA_TEACHER'),
     student = await s.login('TA_STUDENT_001'),
@@ -104,7 +196,7 @@ test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 �
   const id = randomUUID();
   assert.equal(
     (
-      await s.send('/homework', teacher, {
+      await s.historical('/homework', teacher, {
         action: 'assign-workbook',
         assignmentId: id,
         subject: 'M',
@@ -130,7 +222,7 @@ test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 �
   );
   assert.equal(
     (
-      await s.send('/homework', student, {
+      await s.historical('/homework', student, {
         action: 'report',
         assignmentId: id,
         wrong: String(questions[0].id),
@@ -148,7 +240,7 @@ test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 �
   );
   assert.equal(
     (
-      await s.send('/homework', teacher, {
+      await s.historical('/homework', teacher, {
         action: 'approve-workbook',
         assignmentId: id,
         single: sub,
@@ -158,7 +250,7 @@ test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 �
     ).status,
     303,
   );
-  const view = await s.send(
+  const view = await s.historical(
     '/homework?view=analysis&student=TA_STU_001',
     teacher,
   );
@@ -171,8 +263,8 @@ test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 �
     publicationRevision: '0',
     fingerprint: /name="fingerprint" value="([a-f0-9]+)"/.exec(view.text)![1],
   };
-  assert.equal((await s.send('/homework', parent, fields)).status, 403);
-  assert.equal((await s.send('/homework', teacher, fields)).status, 303);
+  assert.equal((await s.historical('/homework', parent, fields)).status, 403);
+  assert.equal((await s.historical('/homework', teacher, fields)).status, 303);
   const conversationId = randomUUID();
   assert.equal(
     (
@@ -185,18 +277,23 @@ test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 �
     ).status,
     303,
   );
-  const answer = await s.send('/consultation?id=' + conversationId, parent);
+  const fresh = await s.send('/consultation?id=' + conversationId, parent);
+  assert.doesNotMatch(fresh.text, /2문항 중 1문항|\/learning\?publication=/);
+  const archivedId = await s.archivedAnswer(
+    parent,
+    '11월 수학 전체 정답률 알려줘',
+  );
+  const answer = await s.send('/consultation?id=' + archivedId, parent);
   assert.match(answer.text, /2문항 중 1문항/);
-  const publicationId =
-    /\/homework\?view=source&amp;publication=(workbook-[a-f0-9]+)/.exec(
-      answer.text,
-    )![1];
-  const source = '/homework?view=source&publication=' + publicationId;
+  const publicationId = /\/learning\?publication=(workbook-[a-f0-9]+)/.exec(
+    answer.text,
+  )![1];
+  const source = '/learning?publication=' + publicationId;
   assert.equal((await s.send(source, parent)).status, 200);
   assert.equal((await s.send(source, other)).status, 404);
   assert.equal(
     (
-      await s.send('/homework', teacher, {
+      await s.historical('/homework', teacher, {
         action: 'approve-workbook',
         assignmentId: id,
         single: sub,
@@ -208,10 +305,10 @@ test('HTTP 교재 승인 → 분석 공개 → 보호자 상담 → 정정 시 �
   );
   assert.equal((await s.send(source, parent)).status, 404);
   assert.match(
-    (await s.send('/consultation?id=' + conversationId, parent)).text,
+    (await s.send('/consultation?id=' + archivedId, parent)).text,
     /답변을 표시할 수 없습니다/,
   );
-  assert.equal((await s.send('/homework', teacher, fields)).status, 409);
+  assert.equal((await s.historical('/homework', teacher, fields)).status, 409);
 });
 
 test('HTTPS 프록시 접속은 등록된 호스트와 같은 출처의 요청만 허용한다', async (t) => {
@@ -381,7 +478,7 @@ test(
       401,
     );
     const newSession = await login(account.username, resetPassword);
-    assert.equal((await send('/homework', newSession)).status, 200);
+    assert.equal((await send('/grading', newSession)).status, 200);
     assert.equal(
       (await send('/directory', administrator, { ...account, role: 'admin' }))
         .status,
@@ -599,10 +696,10 @@ test(
 );
 
 test(
-  '확정 점수를 정정해도 이전 점수와 정정 사유가 보존된다',
+  '이전 방식으로 확정한 점수를 정정해도 이전 점수와 정정 사유가 보존된다',
   { timeout: 15000 },
   async (t) => {
-    const { send, login, readDatabase } = await startOperations(t);
+    const { send, login, readDatabase, historical } = await startOperations(t);
     const teacher = await login('TA_TEACHER');
     const student = await login('TA_STUDENT_001');
     const guardian = await login('TA_GUARDIAN_E_MATH');
@@ -613,8 +710,11 @@ test(
       dueDate: '2099-12-31',
       questions: '2 + 2? | 4 | 5 | 덧셈',
     };
-    assert.equal((await send('/homework', teacher, assignment)).status, 303);
-    assert.match((await send('/', student)).text, /점수 정정 확인/);
+    assert.equal(
+      (await historical('/homework', teacher, assignment)).status,
+      303,
+    );
+    assert.doesNotMatch((await send('/', student)).text, /점수 정정 확인/);
     assert.doesNotMatch((await send('/', guardian)).text, /점수 정정 확인/);
     const { assignmentId, questionId } = readDatabase(
       (db) =>
@@ -631,7 +731,7 @@ test(
     );
     assert.equal(
       (
-        await send('/homework', student, {
+        await historical('/homework', student, {
           action: 'submit',
           assignmentId,
           ['answer-' + questionId]: '4',
@@ -649,9 +749,11 @@ test(
       ),
     );
     const submission = '/homework?submission=' + submissionId;
-    assert.ok((await send('/', teacher)).text.includes(submission));
+    assert.ok(!(await send('/', teacher)).text.includes(submission));
     assert.ok(
-      (await send('/homework?view=review', teacher)).text.includes(submission),
+      (await historical('/homework?view=review', teacher)).text.includes(
+        submission,
+      ),
     );
     assert.doesNotMatch((await send('/', guardian)).text, /점수 정정 확인/);
     const review = {
@@ -661,7 +763,7 @@ test(
     };
     assert.equal(
       (
-        await send('/homework', teacher, {
+        await historical('/homework', teacher, {
           ...review,
           decision: 'confirm',
           reviewVersion: '0',
@@ -669,14 +771,12 @@ test(
       ).status,
       303,
     );
-    assert.match((await send(submission, guardian)).text, /5\/5점/);
+    assert.match((await historical(submission, guardian)).text, /5\/5점/);
+    assert.ok(!(await send('/', guardian)).text.includes(submission));
     assert.ok(
-      (await send('/student-reports?view=assignments', guardian)).text.includes(
+      !(await historical('/homework?view=review', teacher)).text.includes(
         submission,
       ),
-    );
-    assert.ok(
-      !(await send('/homework?view=review', teacher)).text.includes(submission),
     );
 
     const correction = {
@@ -686,15 +786,28 @@ test(
       reason: '부분 점수 기준 확인',
       reviewVersion: '1',
     };
-    assert.equal((await send('/homework', guardian, correction)).status, 403);
     assert.equal(
-      (await send('/homework', teacher, { ...correction, reason: '' })).status,
+      (await historical('/homework', guardian, correction)).status,
+      403,
+    );
+    assert.equal(
+      (await historical('/homework', teacher, { ...correction, reason: '' }))
+        .status,
       400,
     );
-    assert.equal((await send('/homework', teacher, correction)).status, 303);
-    assert.equal((await send('/homework', teacher, correction)).status, 409);
-    assert.match((await send(submission, guardian)).text, /3\/5점/);
-    assert.match((await send(submission, teacher)).text, /부분 점수 기준 확인/);
+    assert.equal(
+      (await historical('/homework', teacher, correction)).status,
+      303,
+    );
+    assert.equal(
+      (await historical('/homework', teacher, correction)).status,
+      409,
+    );
+    assert.match((await historical(submission, guardian)).text, /3\/5점/);
+    assert.match(
+      (await historical(submission, teacher)).text,
+      /부분 점수 기준 확인/,
+    );
     const grades = readDatabase((db) =>
       db
         .prepare(
@@ -717,10 +830,11 @@ test(
 );
 
 test(
-  'HTTP 분류 파일 업로드·학생 제출·검수·학습 화면·상담 출처·재분류 철회',
+  '이전 분류·제출 데이터의 HTTP 상담 출처·재분류 철회',
   { timeout: 20000 },
   async (t) => {
-    const { origin, send, login, readDatabase } = await startOperations(t);
+    const { historical, archivedAnswer, send, login, readDatabase } =
+      await startOperations(t);
     const admin = await login('TA_DIRECTOR');
     const student = await login('TA_STUDENT_001');
     const guardian = await login('TA_GUARDIAN_E_MATH');
@@ -778,12 +892,7 @@ test(
           type: 'application/json',
         }),
       );
-      return fetch(origin + '/learning', {
-        method: 'POST',
-        body: form,
-        headers: { cookie: admin, origin },
-        redirect: 'manual',
-      });
+      return historical('/learning', admin, form);
     };
     assert.equal((await upload('0')).status, 303);
     const common = {
@@ -794,7 +903,7 @@ test(
     };
     assert.equal(
       (
-        await send('/learning', student, {
+        await historical('/learning', student, {
           ...common,
           action: 'results',
           revision: '0',
@@ -806,7 +915,7 @@ test(
     );
     assert.equal(
       (
-        await send('/learning', guardian, {
+        await historical('/learning', guardian, {
           ...common,
           action: 'confirm',
           revision: '1',
@@ -816,7 +925,7 @@ test(
     );
     assert.equal(
       (
-        await send('/learning', admin, {
+        await historical('/learning', admin, {
           ...common,
           action: 'confirm',
           revision: '1',
@@ -835,7 +944,7 @@ test(
       ),
       1,
     );
-    const page = await send(
+    const page = await historical(
       '/learning?assignment=http-classified&student=TA_STU_001',
       guardian,
     );
@@ -844,7 +953,7 @@ test(
     assert.match(page.text, /참고용/);
     assert.equal(
       (
-        await send(
+        await historical(
           '/learning?assignment=http-classified&student=TA_STU_001',
           other,
         )
@@ -863,7 +972,13 @@ test(
       ).status,
       303,
     );
-    const answer = await send('/consultation?id=' + cid, guardian);
+    const fresh = await send('/consultation?id=' + cid, guardian);
+    assert.doesNotMatch(fresh.text, /2문항 중 1문항|publication=/);
+    const archivedId = await archivedAnswer(
+      guardian,
+      '11월 전체 정답률 알려줘',
+    );
+    const answer = await send('/consultation?id=' + archivedId, guardian);
     assert.match(answer.text, /2문항 중 1문항/);
     const source = /href="(\/learning\?publication=[^"]+)"/.exec(
       answer.text,
@@ -871,13 +986,12 @@ test(
     assert.ok(source);
     assert.equal((await send(source, guardian)).status, 200);
     assert.equal((await send(source, other)).status, 404);
-    assert.match((await send('/', guardian)).text, /학습 리포트 보기/);
-    assert.ok((await send('/student-reports', guardian)).text.includes(source));
-    assert.ok(!(await send('/student-reports', other)).text.includes(source));
+    assert.ok(!(await send('/', guardian)).text.includes(source));
+    assert.ok(!(await send('/', other)).text.includes(source));
     document.classifiedAt = '2026-11-11T10:00:00+09:00';
     document.items[0].tags[0].tagId = 'math-09';
     assert.equal((await upload('1')).status, 303);
-    const stale = await send('/consultation?id=' + cid, guardian);
+    const stale = await send('/consultation?id=' + archivedId, guardian);
     assert.match(stale.text, /답변을 표시할 수 없습니다/);
     assert.doesNotMatch(stale.text, /2문항 중 1문항/);
     assert.equal((await send(source, guardian)).status, 404);

@@ -90,7 +90,7 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
         _academyAccount: from,
       });
     if (role === 'student' || role === 'guardian') {
-      const page = await (await send('/homework', cookie)).text();
+      const page = await (await send('/grading', cookie)).text();
       assert.match(page, /숙제 자료/);
       assert.match(page, /\/assets\/demo-homework-fractions\.pdf" download/);
       assert.doesNotMatch(page, /\/assets\/demo-homework-english\.pdf/);
@@ -115,7 +115,7 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       409,
     );
     if (role === 'student' || role === 'guardian') {
-      const page = await (await send('/homework', cookie)).text();
+      const page = await (await send('/grading', cookie)).text();
       assert.match(page, /숙제 자료/);
       assert.match(page, /\/assets\/demo-homework-english\.pdf" download/);
       assert.doesNotMatch(page, /\/assets\/demo-homework-fractions\.pdf/);
@@ -132,7 +132,9 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       }
     }
     if (role === 'student') {
-      const assignments = await (await send('/homework', cookie)).text();
+      const assignments = await (
+        await send('/grading?view=upload', cookie)
+      ).text();
       assert.match(assignments, /일과와 약속 시간 복습/);
     }
     if (role === 'admin' || role === 'teacher') {
@@ -248,12 +250,12 @@ test('학원 선택 · 네 역할별 전환, 세션 격리, 타 학원 검증과
       assert.match(monthly, /data:text\/markdown/);
       assert.doesNotMatch(monthly, /리포트 예시|분수의 덧셈과 뺄셈/);
       const inHomework = await (
-        await send('/homework?view=reports', cookie)
+        await send('/grading?view=reports', cookie)
       ).text();
       assert.match(inHomework, /2026년 11월 학습 리포트/);
       assert.ok(
         inHomework.includes(
-          'href="/homework?view=reports&amp;id=archived-2026-09"',
+          'href="/grading?view=reports&amp;id=archived-2026-09"',
         ),
       );
       const poll = await (await send('/makeup-votes', cookie)).text();

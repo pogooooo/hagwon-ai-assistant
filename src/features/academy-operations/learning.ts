@@ -674,56 +674,41 @@ export function recentLearningReports(ctx: PageContext) {
     }));
 }
 
+export function renderLearningPublication(
+  ctx: PageContext,
+  publicationId: string,
+) {
+  if (isWorkbookPublication(publicationId))
+    return renderWorkbookSource(ctx, publicationId);
+
+  const publication = one<Publication>(
+    ctx.db,
+    'SELECT * FROM op_learning_publications WHERE academy_id = ? AND id = ? ORDER BY revision DESC LIMIT 1',
+    ctx.actor.academyId,
+    publicationId,
+  );
+  if (!publication?.payload || !canReadPublication(ctx, publication))
+    throw new OperationError('조회 가능한 학습 근거가 아닙니다.', 404);
+  const payload = JSON.parse(publication.payload) as {
+    documents: SourceDocumentInput[];
+    facts: ApprovedFactInput[];
+  };
+  return (
+    '<section class="panel source-record"><h1>상담에 사용된 확정 학습 기록</h1><div class="formatted-output">' +
+    renderOutputMarkdown(payload.documents[0].text) +
+    '</div><p>분석 버전 ' +
+    publication.revision +
+    '</p><p class="learning-record-actions">' +
+    (ctx.actor.role === 'student'
+      ? '<a class="workspace-link" href="/learning">학습 기록으로</a>'
+      : '<a class="workspace-link" href="/consultation">상담으로 돌아가기</a>') +
+    '</p></section>'
+  );
+}
+
 function render(ctx: PageContext) {
   const publicationId = ctx.url.searchParams.get('publication');
-  if (publicationId && isWorkbookPublication(publicationId))
-    return renderWorkbookSource(ctx, publicationId);
-  if (publicationId) {
-    const publication = one<Publication>(
-      ctx.db,
-      'SELECT * FROM op_learning_publications WHERE academy_id = ? AND id = ? ORDER BY revision DESC LIMIT 1',
-      ctx.actor.academyId,
-      publicationId,
-    );
-    if (!publication?.payload || !canReadPublication(ctx, publication))
-      throw new OperationError('조회 가능한 학습 근거가 아닙니다.', 404);
-    const payload = JSON.parse(publication.payload) as {
-      documents: SourceDocumentInput[];
-      facts: ApprovedFactInput[];
-    };
-    const assignments = [
-      ...new Map(
-        payload.facts
-          .flatMap((f) => f.assignments ?? [])
-          .map((a) => [a.assignmentId, a]),
-      ).values(),
-    ];
-    return (
-      '<section class="panel source-record"><h1>상담에 사용된 확정 학습 기록</h1><div class="formatted-output">' +
-      renderOutputMarkdown(payload.documents[0].text) +
-      '</div><p>분석 버전 ' +
-      publication.revision +
-      '</p><ul class="record-card-list">' +
-      assignments
-        .map(
-          (a) =>
-            '<li><a class="record-card-link" href="/learning?assignment=' +
-            encodeURIComponent(a.assignmentId) +
-            '&amp;student=' +
-            encodeURIComponent(publication.student_id) +
-            '"><span><strong>' +
-            h(a.title) +
-            '</strong><small>문항별 근거 확인</small></span><span aria-hidden="true">›</span></a></li>',
-        )
-        .join('') +
-      '</ul><p class="learning-record-actions">' +
-      (ctx.actor.role === 'student'
-        ? '<a class="workspace-link" href="/learning">학습 기록으로</a>'
-        : '<a class="workspace-link" href="/consultation">상담으로 돌아가기</a>') +
-      '</p></section>'
-    );
-  }
-
+  if (publicationId) return renderLearningPublication(ctx, publicationId);
   const classes = accessibleClasses(ctx.db, ctx.actor);
   const assignments = rows<Assignment>(
     ctx.db,

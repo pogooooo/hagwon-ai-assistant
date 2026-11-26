@@ -1,10 +1,8 @@
-import { homeworkDashboard } from './homework-dashboard.ts';
+import { gradingOverview } from '../homework-grading/overview.ts';
 import { visibleParentMessages } from './parent-messages-model.ts';
 import { visibleCalendarEntries } from './calendar.ts';
 import { canAskConsultation, consultationOverview } from './consultation.ts';
 import { recentPublishedDocuments } from './documents.ts';
-import { homeworkOverview } from './homework.ts';
-import { recentLearningReports } from './learning.ts';
 import { makeupResultNotices, pendingMakeupNotices } from './makeup-polls.ts';
 import { serviceIcon } from './service-navigation.ts';
 import { escapeHtml as h, type PageContext } from './shared.ts';
@@ -116,7 +114,7 @@ export function renderHome(ctx: PageContext) {
             : '학원 안내';
   const heading = `<div class="ondap-heading"><h1>${title}</h1><time datetime="${today}">${h(date)}</time></div>`;
   const { pending, recent } = consultationOverview(ctx);
-  const homework = visitor ? undefined : homeworkOverview(ctx);
+  const homework = visitor ? undefined : gradingOverview(ctx);
   const agenda = visitor ? '' : schedulePanel(ctx, today);
   const documentList = () =>
     panel(
@@ -145,7 +143,14 @@ export function renderHome(ctx: PageContext) {
   const shortcuts = `<nav class="home-shortcuts" aria-label="자주 사용하는 서비스">${[
     ...(!visitor
       ? [
-          ['/homework', staff ? '숙제 관리' : '숙제 확인'],
+          [
+            guardian ? '/grading?view=queue' : '/grading',
+            staff
+              ? '사진 채점 검수'
+              : actor.role === 'guardian'
+                ? '숙제 제출 현황'
+                : '사진 숙제 제출',
+          ],
           ...(!guardian ? [['/learning', '학습 기록']] : []),
         ]
       : []),
@@ -162,8 +167,7 @@ export function renderHome(ctx: PageContext) {
     <div class="home-search-bottom"><span>일정 · 수강료 · 학원 안내</span><a class="home-consultation-link" href="/consultation">상담 내역 <span aria-hidden="true">↗</span></a></div>
   </section>`;
   if (staff && homework) {
-    const board = homeworkDashboard(ctx);
-    const reviewPath = '/homework?view=review';
+    const reviewPath = '/grading?queue=review';
     const dayEntries = visibleCalendarEntries(ctx, today, today);
     const dayPanel = panel(
       '오늘 일정',
@@ -178,17 +182,28 @@ export function renderHome(ctx: PageContext) {
       `<section class="panel next-actions"><h2>${title}</h2>${items.map(([path, label, icon]) => `<a href="${h(path)}">${serviceIcon(icon)}${label}<span aria-hidden="true">›</span></a>`).join('')}</section>`;
     const review = homework.review;
     const queue = panel(
-      `제출 확인 대기 · ${review.length}건`,
-      '/homework?view=review',
-      review.slice(0, 4).map((r) => ({
-        title: r.student_name + ' · ' + r.assignment_title,
-        meta: '제출 내용 확인',
-        href:
-          r.submission_mode === 'catalog'
-            ? '/homework?detail=' + encodeURIComponent(r.assignment_id)
-            : '/homework?submission=' + encodeURIComponent(r.id),
+      `사진 채점 검수 대기 · ${review.length}건`,
+      '/grading?queue=review',
+      review.slice(0, 5).map((r) => ({
+        title: r.studentName + ' · ' + r.title,
+        meta:
+          r.purpose === 'correction_evidence'
+            ? '정정 제출물 검수'
+            : '문항별 답안 검수',
+        href: r.href,
       })),
-      '확인 대기 중인 제출물이 없습니다.',
+      '검수할 제출물이 없습니다.',
+    );
+    const assignments = panel(
+      '사진 채점 과제',
+      '/grading?view=register',
+      homework.assignments.slice(0, 5).map((a) => ({
+        title: a.title,
+        href: '/grading?assignment=' + encodeURIComponent(a.assignment_id),
+        meta: a.scope ? '사진에서 문항 확인' : a.items.length + '문항',
+      })),
+      '등록된 사진 채점 과제가 없습니다.',
+      '과제 등록',
     );
     const inbox = panel(
       `상담 요청 · ${pending.length}건`,
@@ -227,12 +242,12 @@ export function renderHome(ctx: PageContext) {
       : agenda;
     return `${heading}${hero}${staffSummary(reviewPath, review.length, pending.length, today, dayEntries.length)}${makeupResultNotices(ctx)}<div class="ondap-board"><div class="ondap-column">
        ${work || '<p class="home-clear">지금 확인할 제출과 상담이 없습니다.</p>'}
-       ${board.table}
+       ${assignments}
        </div><div class="ondap-column">${dayEntries.length ? dayPanel : ''}${links(
          '학습 관리',
          [
            ['/briefing', '반 브리핑 보기', '/briefing'],
-           ['/learning', '학습 기록 검수', '/learning'],
+           ['/grading?view=reports', '채점 리포트 검토', '/learning'],
          ],
        )}
        ${
@@ -245,49 +260,54 @@ export function renderHome(ctx: PageContext) {
              ])
            : ''
        }
-       ${board.summary}${upcoming}${documentList()}</div></div>`;
+       ${upcoming}${documentList()}</div></div>`;
   }
 
+  const submitted = new Set(
+    homework?.entries
+      .filter(
+        (s) =>
+          s.purpose === 'assessment' &&
+          !['FAILED', 'CANCELLED', 'EXPIRED'].includes(s.processing),
+      )
+      .map((s) => s.assignment),
+  );
   const homeworkPanel =
-    homework &&
-    (actor.role === 'student'
+    actor.role === 'student' && homework
       ? panel(
-          '제출할 숙제',
-          '/homework',
-          homework.due.slice(0, 4).map(({ id, title, due_date }) => ({
-            href: '/homework?assignment=' + encodeURIComponent(id),
-            title,
-            meta: due_date + ' 마감',
-          })),
-          '제출할 숙제가 없습니다.',
+          '제출할 사진 숙제',
+          '/grading?view=upload',
+          homework.assignments
+            .filter(
+              (a) =>
+                a.scope?.kind === 'workbook' || !submitted.has(a.assignment_id),
+            )
+            .slice(0, 5)
+            .map((a) => ({
+              title: a.title,
+              meta: a.scope
+                ? '사진 또는 PDF 제출'
+                : a.items.length + '문항 · 사진 또는 PDF',
+              href:
+                '/grading?view=upload&assignment=' +
+                encodeURIComponent(a.assignment_id),
+            })),
+          '현재 제출할 사진 숙제가 없습니다.',
         )
-      : guardian
-        ? ''
-        : panel(
-            '최근 숙제 결과',
-            '/homework',
-            homework.results.map(
-              ({ id, assignment_title, student_name, score, total }) => ({
-                href: '/homework?submission=' + encodeURIComponent(id),
-                title: assignment_title,
-                meta: student_name + ' · ' + score + ' / ' + total + '점',
-              }),
-            ),
-            '확정된 숙제 결과가 없습니다.',
-          ));
+      : '';
   const learning =
-    visitor || guardian
-      ? ''
-      : panel(
-          '최근 학습 기록',
+    homework && !guardian
+      ? panel(
+          '최근 사진 채점 결과',
           '/learning',
-          recentLearningReports(ctx).map(({ id, name, period }) => ({
-            href: '/learning?publication=' + encodeURIComponent(id),
-            title: name + ' 학습 기록',
-            meta: period,
+          homework.results.slice(0, 5).map((r) => ({
+            title: r.studentName + ' · ' + r.title,
+            meta: r.assessment_date + ' · 검수 완료',
+            href: r.href,
           })),
-          '확정된 학습 기록이 없습니다.',
-        );
+          '공개된 사진 채점 결과가 없습니다.',
+        )
+      : '';
   const messages = guardian ? visibleParentMessages(ctx) : [];
   const familyHero = guardian
     ? `<section class="family-highlight"><img src="/assets/ondap-report-mascot.png" alt=""><div><h2>학습 리포트</h2><p>과제별 결과와 월간 학습 기록을 확인하세요.</p><a class="button-link assessment-entry" href="/student-reports">학습 리포트 보기 <span aria-hidden="true">›</span></a></div></section>`

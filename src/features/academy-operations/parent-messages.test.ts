@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import { type SQLInputValue } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import { createOperationsServer } from './application.ts';
 import { getActor } from './directory.ts';
-import { learningModule } from './learning.ts';
+import { fixture, item } from '../homework-grading/test-fixtures.ts';
+import {
+  studentReportsModule,
+  studentReportEvidence,
+} from './student-reports.ts';
+import { consultationModule } from './consultation.ts';
 import { homeworkModule } from './homework.ts';
 import {
   readWorkbookAnalysis,
@@ -17,6 +22,7 @@ import {
   saveParentPolicy,
   prepareMonthlyMessages,
   monthlyReport,
+  archivedMonthlyReport,
   runParentMessageJobs,
   queueParentBatch,
   deliverParentMessages,
@@ -40,9 +46,9 @@ const form = (data: Record<string, string>) => {
   return f;
 };
 function setup(t: TestContext) {
-  const db = new DatabaseSync(':memory:');
+  const photo = fixture(t);
+  const db = photo.db;
   createOperationsServer({ db, demoPassword: 'synthetic-password' });
-  t.after(() => db.close());
   const ctx = (user = 'TA_DIRECTOR', path = '/messages') => ({
     db,
     actor: getActor(db, user)!,
@@ -50,56 +56,54 @@ function setup(t: TestContext) {
   });
   const submit = async (data: Record<string, string>, user = 'TA_DIRECTOR') =>
     parentMessagesModule.submit(ctx(user), form(data));
-  const result = (action: string, revision: string) =>
-    learningModule.submit(
-      ctx(),
-      form({
-        action,
-        assignmentId: 'monthly-fixture',
-        studentId: 'TA_STU_001',
-        classificationRevision: '1',
-        revision,
-        wrongItems: '1 | 2',
-        complete: 'yes',
-        reason: '검증용 승인',
-      }),
-    );
+  const report = () =>
+    db
+      .prepare(
+        'SELECT id,version FROM op_student_reports WHERE student_id=? AND class_id=? AND period=?',
+      )
+      .get('TA_STU_001', 'TA_E_MATH', '2026-11')!;
   const publish = async () => {
-    await learningModule.submit(
-      ctx(),
+    const first = item('MATH'),
+      second = { ...item('MATH'), item_no: '2' };
+    photo.answers.set(second.item_ref, { answer_observed: '3' });
+    await photo.confirm(await photo.upload(photo.register([first, second])));
+    await studentReportsModule.submit(
+      ctx('TA_TEACHER'),
       form({
-        action: 'import',
-        classification: JSON.stringify({
-          formatVersion: '1.0',
-          assignmentId: 'monthly-fixture',
-          subject: 'M',
-          rubricVersion: '1.0',
-          classifiedAt: '2026-11-10T18:30:00+09:00',
-          items: [1, 2].map((n) => ({
-            itemId: 'q' + n,
-            page: 1,
-            displayNumber: String(n),
-            itemStatus: 'classified',
-            tags: [
-              {
-                tagId: 'math-01',
-                status: 'adopted',
-                evidenceKind: 'text',
-                agreement: { same: 2, runs: 3 },
-              },
-            ],
-          })),
-        }),
-        classId: 'TA_E_MATH',
-        title: '검증용 월간 숙제',
+        action: 'analyze',
+        student: 'TA_STU_001',
+        class: 'TA_E_MATH',
         period: '2026-11',
-        revision: '0',
       }),
     );
-    await result('results', '0');
-    await result('confirm', '1');
+    assert.equal(
+      monthlyReport(db, 'AC_TEST_A', 'TA_STU_001', '2026-11'),
+      null,
+      'draft stays private',
+    );
+    const r = report();
+    await studentReportsModule.submit(
+      ctx('TA_TEACHER'),
+      form({
+        action: 'approve',
+        id: String(r.id),
+        version: String(r.version),
+        reviewed: 'yes',
+      }),
+    );
   };
-  return { db, ctx, submit, publish, result };
+  const withdraw = () => {
+    const r = report();
+    return studentReportsModule.submit(
+      ctx('TA_TEACHER'),
+      form({
+        action: 'withdraw',
+        id: String(r.id),
+        version: String(r.version),
+      }),
+    );
+  };
+  return { db, ctx, submit, publish, withdraw, photo };
 }
 test('approved learning → monthly preview → delivery → own guardian inbox and read receipt', async (t) => {
   const s = setup(t);
@@ -122,6 +126,7 @@ test('approved learning → monthly preview → delivery → own guardian inbox 
     s.ctx('TA_GUARDIAN_E_MATH', '/messages?id=' + inbox[0].id),
   );
   assert.match(html, /학습 근거/);
+  assert.match(html, /href="\/student-reports\?id=/);
   assert.match(html, /50%/);
   await s.submit({ action: 'read', id: inbox[0].id }, 'TA_GUARDIAN_E_MATH');
   assert.ok(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH'))[0].read_at);
@@ -349,7 +354,7 @@ test('withdrawn evidence in an old preview is not queued at the monthly due time
     Date.now(),
     true,
   );
-  await s.result('withdraw', '2');
+  await s.withdraw();
   runParentMessageJobs(s.db, Date.parse('2026-12-05T10:00:00+09:00'));
   assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
   assert.ok(visibleParentMessages(s.ctx()).every((m) => m.state === 'draft'));
@@ -416,7 +421,7 @@ test('monthly report period follows KST across the year boundary', () => {
     '2026-12',
   );
 });
-test('approved workbook results join the monthly report only after explicit analysis publication', async (t) => {
+test('archived workbook publications remain readable but new reports, alerts and answers use photo results exclusively', async (t) => {
   const s = setup(t),
     id = randomUUID();
   await homeworkModule.submit(
@@ -477,17 +482,70 @@ test('approved workbook results join the monthly report only after explicit anal
       ),
     }),
   );
+  const academy = 'AC_TEST_A',
+    student = 'TA_STU_001',
+    period = '2026-11';
+  const archived = archivedMonthlyReport(s.db, academy, student, period)!;
+  assert.match(archived.summary, /교재 숙제/);
+  assert.match(archived.summary, /2문항 중 2문항/);
+  assert.equal(
+    prepareMonthlyMessages(s.db, academy, period, parentPolicy(s.db, academy))
+      .created,
+    0,
+  );
+  await s.publish();
+  const stats = studentReportEvidence(s.ctx(), student, 'TA_E_MATH', period);
+  assert.equal(stats.total, 2);
+  assert.equal(stats.correct, 1);
+  const thread = randomUUID();
+  await consultationModule.submit(
+    s.ctx('TA_GUARDIAN_E_MATH'),
+    form({
+      action: 'ask',
+      conversationId: thread,
+      studentId: student,
+      question: '11월 수학 전체 정답률 알려줘',
+    }),
+  );
+  const answer = JSON.parse(
+    String(
+      s.db
+        .prepare(
+          "SELECT response FROM op_consultation_messages WHERE thread_id=? AND kind='answer'",
+        )
+        .get(thread)!.response,
+    ),
+  );
+  assert.equal(answer.status, 'answered');
+  assert.match(answer.answer, /2문항 중 1문항/);
+  assert.ok(
+    answer.citations.length &&
+      answer.citations.every((c: { documentId: string }) =>
+        c.documentId.startsWith('grading-'),
+      ),
+  );
   const monthly = prepareMonthlyMessages(
     s.db,
-    'AC_TEST_A',
-    '2026-11',
-    parentPolicy(s.db, 'AC_TEST_A'),
+    academy,
+    period,
+    parentPolicy(s.db, academy),
   );
   queueParentBatch(s.ctx(), monthly.batch);
   const received = visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH'))[0];
-  assert.match(received.body, /교재 숙제/);
-  assert.match(received.body, /2문항 중 2문항/);
+  assert.match(received.body, /2문항 중 1문항/);
+  assert.doesNotMatch(received.body, /교재 숙제|2문항 중 2문항/);
   assert.equal(messageCurrent(s.db, received), true);
+  const prior = {
+    ...received,
+    sources: JSON.stringify(archived.sources),
+    fingerprint: archived.fingerprint,
+  };
+  assert.equal(messageCurrent(s.db, prior), true);
+  assert.equal(messageCurrent(s.db, { ...prior, state: 'draft' }), false);
+  assert.equal(
+    messageCurrent(s.db, { ...prior, guardian_id: 'TA_GUARDIAN_M2' }),
+    false,
+  );
 });
 test('missing and unapproved results are not fabricated; late approval is picked up', async (t) => {
   const s = setup(t);
@@ -523,7 +581,7 @@ test('withdrawn evidence blocks queued reports and hides previously delivered co
   queueParentBatch(s.ctx(), r.batch);
   const m = visibleParentMessages(s.ctx())[0];
   assert.ok(messageCurrent(s.db, m));
-  await s.result('withdraw', '2');
+  await s.withdraw();
   assert.equal(monthlyReport(s.db, 'AC_TEST_A', 'TA_STU_001', '2026-11'), null);
   assert.equal(messageCurrent(s.db, m), false);
   const html = await parentMessagesModule.render(
@@ -531,6 +589,48 @@ test('withdrawn evidence blocks queued reports and hides previously delivered co
   );
   assert.doesNotMatch(html, /50%/);
   assert.match(html, /변경되어/);
+});
+test('a revised approved body and a new confirmed grade invalidate previously prepared messages', async (t) => {
+  const s = setup(t);
+  await s.publish();
+  const academy = 'AC_TEST_A',
+    student = 'TA_STU_001',
+    period = '2026-11';
+  const original = monthlyReport(s.db, academy, student, period)!;
+  assert.equal(
+    monthlyReport(s.db, academy, student, period, undefined, 'TA_M2'),
+    null,
+  );
+  const teacher = s.ctx('TA_TEACHER'),
+    { documentId: id, revision } = original.sources[0];
+  const change = (
+    action: string,
+    version: number,
+    data: Record<string, string>,
+  ) =>
+    studentReportsModule.submit(
+      teacher,
+      form({ action, id, version: String(version), ...data }),
+    );
+  await change('save', revision, {
+    body: '교사가 수정한 월간 리포트',
+    counsel: '교사 상담 메모',
+  });
+  assert.equal(monthlyReport(s.db, academy, student, period), null);
+  await change('approve', revision + 1, { reviewed: 'yes' });
+  const preview = prepareMonthlyMessages(
+    s.db,
+    academy,
+    period,
+    parentPolicy(s.db, academy),
+  );
+  const message = visibleParentMessages(s.ctx())[0];
+  assert.match(message.body, /교사가 수정한 월간 리포트/);
+  assert.doesNotMatch(message.body, /교사 상담 메모/);
+  await s.photo.confirm(await s.photo.upload(s.photo.register()));
+  assert.equal(monthlyReport(s.db, academy, student, period), null);
+  assert.throws(() => queueParentBatch(s.ctx(), preview.batch), /다시 확인/);
+  assert.equal(visibleParentMessages(s.ctx('TA_GUARDIAN_E_MATH')).length, 0);
 });
 test('custom notice preview, scheduled delivery, POST replay and cancellation', async (t) => {
   const s = setup(t),

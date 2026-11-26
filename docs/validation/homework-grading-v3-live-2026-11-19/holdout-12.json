@@ -1,0 +1,471 @@
+{
+  "schema_version": "grading-live-validation-1.0",
+  "started_at": "2026-11-19T11:02:07.541Z",
+  "dataset": "Fixed self-authored synthetic cases; font-rendered writing, not real student handwriting",
+  "set_id": "holdout",
+  "n_cases": 12,
+  "validation_status": "passed",
+  "calls": [
+    {
+      "model": "HCX-005",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 7058,
+      "input_tokens": 2086,
+      "output_tokens": 228,
+      "output_shape": {
+        "valid": true
+      }
+    },
+    {
+      "model": "HCX-005",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 7233,
+      "input_tokens": 2082,
+      "output_tokens": 224,
+      "output_shape": {
+        "valid": true
+      }
+    },
+    {
+      "model": "HCX-005",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 7024,
+      "input_tokens": 2081,
+      "output_tokens": 222,
+      "output_shape": {
+        "valid": true
+      }
+    },
+    {
+      "model": "HCX-005",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 6989,
+      "input_tokens": 2139,
+      "output_tokens": 228,
+      "output_shape": {
+        "valid": true
+      }
+    },
+    {
+      "model": "HCX-005",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 7054,
+      "input_tokens": 2135,
+      "output_tokens": 224,
+      "output_shape": {
+        "valid": true
+      }
+    },
+    {
+      "model": "HCX-005",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 7035,
+      "input_tokens": 2134,
+      "output_tokens": 225,
+      "output_shape": {
+        "valid": true
+      }
+    },
+    {
+      "model": "HCX-007",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 972,
+      "input_tokens": 419,
+      "output_tokens": 25,
+      "output_shape": {
+        "valid": true
+      }
+    },
+    {
+      "model": "HCX-007",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 941,
+      "input_tokens": 420,
+      "output_tokens": 23,
+      "output_shape": {
+        "valid": true
+      }
+    },
+    {
+      "model": "HCX-007",
+      "http_status": 200,
+      "provider_status": "20000",
+      "duration_ms": 2662,
+      "input_tokens": 2333,
+      "output_tokens": 109,
+      "output_shape": {
+        "valid": true
+      }
+    }
+  ],
+  "draft_evaluation": {
+    "rubric_version": "grading-eval-3.0",
+    "overall": {
+      "n_expected": 12,
+      "n_evaluable": 12,
+      "n_missing": 0,
+      "n_scored": 10,
+      "n_low_risk": 0,
+      "prediction_coverage_operational": 0.8333333333333334,
+      "prediction_coverage_on_evaluable": 0.8333333333333334,
+      "score_agreement_all_evaluable": 0.8333333333333334,
+      "outcome_agreement_all_evaluable": 0.8333333333333334,
+      "joint_agreement_on_scored_evaluable": 1,
+      "operational_low_risk_coverage": 0,
+      "operational_low_risk_invalid_rate": null,
+      "evaluable_low_risk_coverage": 0,
+      "forced_grade_on_ungradable_n": 0,
+      "forced_grade_on_excluded_n": 0,
+      "unjustified_full_fraction_all": 0,
+      "failures": [
+        {
+          "case_id": "new-math-fraction",
+          "reason": "deferred"
+        },
+        {
+          "case_id": "new-math-wrong",
+          "reason": "deferred"
+        }
+      ]
+    },
+    "by_subject": {
+      "KOR": {
+        "n_expected": 4,
+        "n_evaluable": 4,
+        "n_missing": 0,
+        "n_scored": 4,
+        "n_low_risk": 0,
+        "prediction_coverage_operational": 1,
+        "prediction_coverage_on_evaluable": 1,
+        "score_agreement_all_evaluable": 1,
+        "outcome_agreement_all_evaluable": 1,
+        "joint_agreement_on_scored_evaluable": 1,
+        "operational_low_risk_coverage": 0,
+        "operational_low_risk_invalid_rate": null,
+        "evaluable_low_risk_coverage": 0,
+        "forced_grade_on_ungradable_n": 0,
+        "forced_grade_on_excluded_n": 0,
+        "unjustified_full_fraction_all": 0,
+        "failures": []
+      },
+      "ENG": {
+        "n_expected": 4,
+        "n_evaluable": 4,
+        "n_missing": 0,
+        "n_scored": 4,
+        "n_low_risk": 0,
+        "prediction_coverage_operational": 1,
+        "prediction_coverage_on_evaluable": 1,
+        "score_agreement_all_evaluable": 1,
+        "outcome_agreement_all_evaluable": 1,
+        "joint_agreement_on_scored_evaluable": 1,
+        "operational_low_risk_coverage": 0,
+        "operational_low_risk_invalid_rate": null,
+        "evaluable_low_risk_coverage": 0,
+        "forced_grade_on_ungradable_n": 0,
+        "forced_grade_on_excluded_n": 0,
+        "unjustified_full_fraction_all": 0,
+        "failures": []
+      },
+      "MATH": {
+        "n_expected": 4,
+        "n_evaluable": 4,
+        "n_missing": 0,
+        "n_scored": 2,
+        "n_low_risk": 0,
+        "prediction_coverage_operational": 0.5,
+        "prediction_coverage_on_evaluable": 0.5,
+        "score_agreement_all_evaluable": 0.5,
+        "outcome_agreement_all_evaluable": 0.5,
+        "joint_agreement_on_scored_evaluable": 1,
+        "operational_low_risk_coverage": 0,
+        "operational_low_risk_invalid_rate": null,
+        "evaluable_low_risk_coverage": 0,
+        "forced_grade_on_ungradable_n": 0,
+        "forced_grade_on_excluded_n": 0,
+        "unjustified_full_fraction_all": 0,
+        "failures": [
+          {
+            "case_id": "new-math-fraction",
+            "reason": "deferred"
+          },
+          {
+            "case_id": "new-math-wrong",
+            "reason": "deferred"
+          }
+        ]
+      }
+    }
+  },
+  "draft_items": [
+    {
+      "case_id": "new-kor-antonym",
+      "subject": "KOR",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "correct",
+      "actual_score": "2",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-kor-spelling",
+      "subject": "KOR",
+      "expected_outcome": "incorrect",
+      "expected_score": "0",
+      "actual_outcome": "incorrect",
+      "actual_score": "0",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-kor-spacing",
+      "subject": "KOR",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "correct",
+      "actual_score": "2",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-kor-reason",
+      "subject": "KOR",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "correct",
+      "actual_score": "2",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-eng-past",
+      "subject": "ENG",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "correct",
+      "actual_score": "2",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-eng-plural",
+      "subject": "ENG",
+      "expected_outcome": "incorrect",
+      "expected_score": "0",
+      "actual_outcome": "incorrect",
+      "actual_score": "0",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-eng-case",
+      "subject": "ENG",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "correct",
+      "actual_score": "2",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-eng-negation",
+      "subject": "ENG",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "correct",
+      "actual_score": "2",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-math-subtract",
+      "subject": "MATH",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "correct",
+      "actual_score": "2",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    },
+    {
+      "case_id": "new-math-fraction",
+      "subject": "MATH",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "ungradable",
+      "actual_score": null,
+      "answer_status": "ambiguous",
+      "association_status": "matched",
+      "ambiguity_codes": ["MODEL_DISAGREEMENT"],
+      "exclusion_reason": "UNREADABLE"
+    },
+    {
+      "case_id": "new-math-wrong",
+      "subject": "MATH",
+      "expected_outcome": "incorrect",
+      "expected_score": "0",
+      "actual_outcome": "ungradable",
+      "actual_score": null,
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": "UNSUPPORTED"
+    },
+    {
+      "case_id": "new-math-unit",
+      "subject": "MATH",
+      "expected_outcome": "correct",
+      "expected_score": "2",
+      "actual_outcome": "correct",
+      "actual_score": "2",
+      "answer_status": "readable",
+      "association_status": "matched",
+      "ambiguity_codes": [],
+      "exclusion_reason": null
+    }
+  ],
+  "teacher_corrected_items": 2,
+  "report": {
+    "model_id": "clova:HCX-005+HCX-007",
+    "text": "평가 기간 2026-11-01 ~ 2026-12-01 미만. 시도 기준: 기간 내 최근 풀이.\n\n영어 전체: 공개된 평가 가능 기록 4문항으로 자료가 부족합니다. 기록이 적다는 사실만으로 학습 여부나 능력을 판단하지 않습니다.\n\n국어 전체: 공개된 평가 가능 기록 4문항으로 자료가 부족합니다. 기록이 적다는 사실만으로 학습 여부나 능력을 판단하지 않습니다.\n\n수학 전체: 공개된 평가 가능 기록 4문항으로 자료가 부족합니다. 기록이 적다는 사실만으로 학습 여부나 능력을 판단하지 않습니다.\n\n영어 선택 4문항: 공개 4, 검수·삭제 대기 0, 확인 불가 0. 공개된 판독·채점 불가 및 제외 문항은 정답률·점수율 분모에서 제외합니다.\n\n국어 선택 4문항: 공개 4, 검수·삭제 대기 0, 확인 불가 0. 공개된 판독·채점 불가 및 제외 문항은 정답률·점수율 분모에서 제외합니다.\n\n수학 선택 4문항: 공개 4, 검수·삭제 대기 0, 확인 불가 0. 공개된 판독·채점 불가 및 제외 문항은 정답률·점수율 분모에서 제외합니다.",
+    "observations": [
+      {
+        "claim_type": "insufficient_evidence",
+        "fact_ids": ["fact_900429d857db4a13a1e0276eac525dc0"],
+        "template_key": "insufficient"
+      },
+      {
+        "claim_type": "insufficient_evidence",
+        "fact_ids": ["fact_6728863f48294804b599902d5f1f2906"],
+        "template_key": "insufficient"
+      },
+      {
+        "claim_type": "insufficient_evidence",
+        "fact_ids": ["fact_fd32cd77fbd8420dae77e8497073c01a"],
+        "template_key": "insufficient"
+      }
+    ]
+  },
+  "confirmed_overall_facts": [
+    {
+      "fact_id": "fact_900429d857db4a13a1e0276eac525dc0",
+      "period_role": "primary",
+      "subject_id": "ENG",
+      "primary_skill_id": null,
+      "skill_label": null,
+      "taxonomy_version": null,
+      "n_correct": 3,
+      "n_incorrect": 1,
+      "n_partial": 0,
+      "n_blank": 0,
+      "n_ungradable": 0,
+      "n_excluded": 0,
+      "n_evaluable": 4,
+      "score_sum": "6",
+      "max_score_sum": "8",
+      "correct_rate": "0.750000",
+      "score_rate": "0.750000",
+      "sample_state": "insufficient"
+    },
+    {
+      "fact_id": "fact_6728863f48294804b599902d5f1f2906",
+      "period_role": "primary",
+      "subject_id": "KOR",
+      "primary_skill_id": null,
+      "skill_label": null,
+      "taxonomy_version": null,
+      "n_correct": 3,
+      "n_incorrect": 1,
+      "n_partial": 0,
+      "n_blank": 0,
+      "n_ungradable": 0,
+      "n_excluded": 0,
+      "n_evaluable": 4,
+      "score_sum": "6",
+      "max_score_sum": "8",
+      "correct_rate": "0.750000",
+      "score_rate": "0.750000",
+      "sample_state": "insufficient"
+    },
+    {
+      "fact_id": "fact_fd32cd77fbd8420dae77e8497073c01a",
+      "period_role": "primary",
+      "subject_id": "MATH",
+      "primary_skill_id": null,
+      "skill_label": null,
+      "taxonomy_version": null,
+      "n_correct": 3,
+      "n_incorrect": 1,
+      "n_partial": 0,
+      "n_blank": 0,
+      "n_ungradable": 0,
+      "n_excluded": 0,
+      "n_evaluable": 4,
+      "score_sum": "6",
+      "max_score_sum": "8",
+      "correct_rate": "0.750000",
+      "score_rate": "0.750000",
+      "sample_state": "insufficient"
+    }
+  ],
+  "rag": [
+    {
+      "subject": "KOR",
+      "expected_n": 4,
+      "expected_correct": 3,
+      "citation_matches": true
+    },
+    {
+      "subject": "ENG",
+      "expected_n": 4,
+      "expected_correct": 3,
+      "citation_matches": true
+    },
+    {
+      "subject": "MATH",
+      "expected_n": 4,
+      "expected_correct": 3,
+      "citation_matches": true
+    }
+  ],
+  "checks": {
+    "http_registration": true,
+    "png_jpeg_scanned_pdf": true,
+    "teacher_review_gate": true,
+    "teacher_confirmed_scores": true,
+    "raw_deleted": true,
+    "student_raw_denied": true,
+    "report_used_real_naver": true,
+    "report_requires_approval": true,
+    "report_fact_counts": true,
+    "rag_fact_values_and_citations": true
+  },
+  "finished_at": "2026-11-19T11:02:57.491Z"
+}

@@ -657,11 +657,12 @@ export function parseQuery(
           ])
       : [];
   const subjects = [
-    ...new Set(
-      catalog.classes
+    ...new Set([
+      ...catalog.classes
         .map((klass) => klass.subject)
         .filter((v): v is string => Boolean(v)),
-    ),
+      ...(catalog.subjects ?? []),
+    ]),
   ].filter(
     (subject) =>
       withoutClasses.includes(clean(subject)) ||

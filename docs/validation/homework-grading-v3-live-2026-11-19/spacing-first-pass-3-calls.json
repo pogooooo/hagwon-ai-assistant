@@ -1,0 +1,202 @@
+{
+  "base": "78e87fa",
+  "external_calls": 3,
+  "kind": "one failed synthetic plus three short independent synthetic cases; not a benchmark",
+  "passes": [
+    {
+      "mode": "baseline",
+      "items": [
+        {
+          "case_id": "kor-spacing",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": false,
+          "status": "readable",
+          "actual_outcome": "correct",
+          "actual_score": "2",
+          "ambiguity_codes": []
+        },
+        {
+          "case_id": "independent-spacing-correct",
+          "expected_outcome": "correct",
+          "expected_score": "2",
+          "literal_matches": true,
+          "status": "readable",
+          "actual_outcome": "correct",
+          "actual_score": "2",
+          "ambiguity_codes": []
+        },
+        {
+          "case_id": "independent-spelling-1",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": true,
+          "status": "readable",
+          "actual_outcome": "incorrect",
+          "actual_score": "0",
+          "ambiguity_codes": []
+        },
+        {
+          "case_id": "independent-spelling-2",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": false,
+          "status": "readable",
+          "actual_outcome": "incorrect",
+          "actual_score": "0",
+          "ambiguity_codes": []
+        }
+      ]
+    },
+    {
+      "mode": "character_verification",
+      "items": [
+        {
+          "case_id": "kor-spacing",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": false,
+          "status": "ambiguous",
+          "actual_outcome": "ungradable",
+          "actual_score": null,
+          "ambiguity_codes": ["LITERAL_TRANSCRIPTION_UNVERIFIED"]
+        },
+        {
+          "case_id": "independent-spacing-correct",
+          "expected_outcome": "correct",
+          "expected_score": "2",
+          "literal_matches": true,
+          "status": "ambiguous",
+          "actual_outcome": "ungradable",
+          "actual_score": null,
+          "ambiguity_codes": ["LITERAL_TRANSCRIPTION_UNVERIFIED"]
+        },
+        {
+          "case_id": "independent-spelling-1",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": true,
+          "status": "ambiguous",
+          "actual_outcome": "ungradable",
+          "actual_score": null,
+          "ambiguity_codes": ["LITERAL_TRANSCRIPTION_UNVERIFIED"]
+        },
+        {
+          "case_id": "independent-spelling-2",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": false,
+          "status": "ambiguous",
+          "actual_outcome": "ungradable",
+          "actual_score": null,
+          "ambiguity_codes": ["LITERAL_TRANSCRIPTION_UNVERIFIED"]
+        }
+      ]
+    },
+    {
+      "mode": "character_verification",
+      "items": [
+        {
+          "case_id": "kor-spacing",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": false,
+          "status": "ambiguous",
+          "actual_outcome": "ungradable",
+          "actual_score": null,
+          "ambiguity_codes": ["LITERAL_TRANSCRIPTION_UNVERIFIED"]
+        },
+        {
+          "case_id": "independent-spacing-correct",
+          "expected_outcome": "correct",
+          "expected_score": "2",
+          "literal_matches": true,
+          "status": "ambiguous",
+          "actual_outcome": "ungradable",
+          "actual_score": null,
+          "ambiguity_codes": ["LITERAL_TRANSCRIPTION_UNVERIFIED"]
+        },
+        {
+          "case_id": "independent-spelling-1",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": true,
+          "status": "ambiguous",
+          "actual_outcome": "ungradable",
+          "actual_score": null,
+          "ambiguity_codes": ["LITERAL_TRANSCRIPTION_UNVERIFIED"]
+        },
+        {
+          "case_id": "independent-spelling-2",
+          "expected_outcome": "incorrect",
+          "expected_score": "0",
+          "literal_matches": false,
+          "status": "ambiguous",
+          "actual_outcome": "ungradable",
+          "actual_score": null,
+          "ambiguity_codes": ["LITERAL_TRANSCRIPTION_UNVERIFIED"]
+        }
+      ]
+    }
+  ],
+  "service_replays": [
+    {
+      "verification_pass": 1,
+      "items": [
+        {
+          "case_id": "kor-spacing",
+          "outcome": "ungradable",
+          "score": null,
+          "ambiguity_codes": ["MODEL_DISAGREEMENT"]
+        },
+        {
+          "case_id": "independent-spacing-correct",
+          "outcome": "ungradable",
+          "score": null,
+          "ambiguity_codes": ["MODEL_DISAGREEMENT"]
+        },
+        {
+          "case_id": "independent-spelling-1",
+          "outcome": "ungradable",
+          "score": null,
+          "ambiguity_codes": ["MODEL_DISAGREEMENT"]
+        },
+        {
+          "case_id": "independent-spelling-2",
+          "outcome": "ungradable",
+          "score": null,
+          "ambiguity_codes": ["MODEL_DISAGREEMENT"]
+        }
+      ]
+    },
+    {
+      "verification_pass": 2,
+      "items": [
+        {
+          "case_id": "kor-spacing",
+          "outcome": "ungradable",
+          "score": null,
+          "ambiguity_codes": ["MODEL_DISAGREEMENT"]
+        },
+        {
+          "case_id": "independent-spacing-correct",
+          "outcome": "ungradable",
+          "score": null,
+          "ambiguity_codes": ["MODEL_DISAGREEMENT"]
+        },
+        {
+          "case_id": "independent-spelling-1",
+          "outcome": "ungradable",
+          "score": null,
+          "ambiguity_codes": ["MODEL_DISAGREEMENT"]
+        },
+        {
+          "case_id": "independent-spelling-2",
+          "outcome": "ungradable",
+          "score": null,
+          "ambiguity_codes": ["MODEL_DISAGREEMENT"]
+        }
+      ]
+    }
+  ]
+}

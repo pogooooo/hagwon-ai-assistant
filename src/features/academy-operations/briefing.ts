@@ -260,7 +260,7 @@ function render(ctx: PageContext) {
   ) {
     return (
       workbookAnalytics(ctx, false) +
-      '<p class="briefing-secondary"><a class="workspace-link" href="/briefing?legacy=1">기존 학습 기록 <span aria-hidden="true">›</span></a></p>'
+      '<p><a href="/briefing?legacy=1">기존 학습 기록 브리핑</a></p>'
     );
   }
   const classes = accessibleClasses(ctx.db, ctx.actor);
@@ -274,7 +274,7 @@ function render(ctx: PageContext) {
     assignments
       .map(
         (a) =>
-          `<li><a class="record-card-link" href="/briefing?assignment=${encodeURIComponent(a.assignment_id)}"><span><strong>${h(a.title)}</strong><small>${h(className(a.class_id))} · ${h(a.period)}</small></span><span aria-hidden="true">›</span></a></li>`,
+          `<li><a href="/briefing?assignment=${encodeURIComponent(a.assignment_id)}">${h(a.title)}</a><small>${h(className(a.class_id))} · ${h(a.period)}</small></li>`,
       )
       .join('') || '<li>등록된 분류 숙제가 없습니다.</li>'
   }</ul></section>`;
@@ -286,49 +286,43 @@ function render(ctx: PageContext) {
       : undefined;
   if (id && !assignment)
     throw new OperationError('조회 가능한 분류 숙제가 아닙니다.', 404);
+  const heading =
+    '<div class="page-heading"><h1>브리핑</h1><p>숙제 한 건의 반 전체 결과를 요약합니다. 교재 숙제는 학생이 제출한 오답을, 그 밖의 숙제는 검수 확정 결과를 집계합니다.</p></div>';
   if (!assignment)
-    return `<div class="split learning-layout">${list}<section class="panel"><p>숙제를 선택해 학생별 결과를 확인해 주세요.</p></section></div>`;
+    return `${heading}<div class="split learning-layout">${list}<section class="panel"><p>숙제를 선택해 반 전체 결과를 확인해 주세요.</p></section></div>`;
 
   const classification = parseClassification(
     JSON.parse(assignment.classification),
   );
-  const pupils = accessibleStudents(ctx.db, ctx.actor).filter((s) =>
-    s.classIds.includes(assignment.class_id),
-  );
-  const studentId = ctx.url.searchParams.get('student') ?? '';
-  const selected = pupils.find((s) => s.id === studentId);
-  if (studentId && !selected)
-    throw new OperationError(
-      '이 반에서 조회할 수 있는 학생을 선택해 주세요.',
-      404,
-    );
-  const entries: BriefingEntry[] = (selected ? [selected] : pupils).map((s) => {
-    const result = one<ResultRow>(
-      ctx.db,
-      'SELECT student_id, classification_revision, outcomes, state, reason FROM op_learning_results WHERE academy_id = ? AND assignment_id = ? AND student_id = ? ORDER BY revision DESC LIMIT 1',
-      ctx.actor.academyId,
-      assignment.assignment_id,
-      s.id,
-    );
-    const state: BriefingState = !result
-      ? 'missing'
-      : result.classification_revision !== assignment.revision
-        ? 'stale'
-        : result.state === 'draft' &&
-            result.reason === workbookReportReason &&
-            classification.items.every((i) => i.book)
-          ? 'reported'
-          : result.state;
-    return {
-      studentId: s.id,
-      name: s.name,
-      state,
-      outcomes:
-        state === 'confirmed' || state === 'reported'
-          ? JSON.parse(result!.outcomes)
-          : {},
-    };
-  });
+  const entries: BriefingEntry[] = accessibleStudents(ctx.db, ctx.actor)
+    .filter((s) => s.classIds.includes(assignment.class_id))
+    .map((s) => {
+      const result = one<ResultRow>(
+        ctx.db,
+        'SELECT student_id, classification_revision, outcomes, state, reason FROM op_learning_results WHERE academy_id = ? AND assignment_id = ? AND student_id = ? ORDER BY revision DESC LIMIT 1',
+        ctx.actor.academyId,
+        assignment.assignment_id,
+        s.id,
+      );
+      const state: BriefingState = !result
+        ? 'missing'
+        : result.classification_revision !== assignment.revision
+          ? 'stale'
+          : result.state === 'draft' &&
+              result.reason === workbookReportReason &&
+              classification.items.every((i) => i.book)
+            ? 'reported'
+            : result.state;
+      return {
+        studentId: s.id,
+        name: s.name,
+        state,
+        outcomes:
+          state === 'confirmed' || state === 'reported'
+            ? JSON.parse(result!.outcomes)
+            : {},
+      };
+    });
   const briefing = summarizeBriefing(classification, entries);
   const counted =
     briefing.stateCounts.confirmed + briefing.stateCounts.reported;
@@ -342,7 +336,7 @@ function render(ctx: PageContext) {
   const workbook = classification.items.every((i) => i.book);
   const countLabel = workbook ? '집계' : '확정';
   const summary = counted
-    ? `<div class="learning-metrics">${metric(selected ? '학생 정답률' : '반 평균 정답률', briefing.overall, `${countLabel} ${counted}명 · ${briefing.overall.total}건 중 ${briefing.overall.correct}건 정답`)}${briefing.areas.map((a) => metric(a.name, a)).join('')}</div>
+    ? `<div class="learning-metrics">${metric('반 평균 정답률', briefing.overall, `${countLabel} ${counted}명 · ${briefing.overall.total}건 중 ${briefing.overall.correct}건 정답`)}${briefing.areas.map((a) => metric(a.name, a)).join('')}</div>
       <h3>한 번 더 설명할 유형</h3>${
         briefing.reteach.length
           ? `<div class="learning-metrics">${briefing.reteach.map((t) => metric(t.name + (t.referenceOnly ? ' (참고용)' : ''), t, `${h(t.area)} · ${t.total}건 중 ${t.correct}건 정답`)).join('')}</div>`
@@ -374,13 +368,12 @@ function render(ctx: PageContext) {
                 ? `<details><summary>오답 ${s.wrongItems.length}문항</summary><ul>${s.wrongItems.map((i) => `<li>${i.page}쪽 ${h(i.displayNumber)}번 · ${h(i.label)}</li>`).join('')}</ul>${s.weakTypes.length > 1 ? `<p>틀린 유형: ${s.weakTypes.map((t) => h(t.name)).join(', ')}</p>` : ''}</details>`
                 : '<p>오답 없음</p>'
             }`;
-      return `<article class="metric-card"><small>${h(s.name)} <span class="pill">${stateLabels[s.state]}</span></small>${body}<p><a class="workspace-link" href="${learningLink(s.studentId)}">학습 기록 보기 <span aria-hidden="true">›</span></a></p></article>`;
+      return `<article class="metric-card"><small>${h(s.name)} <span class="pill">${stateLabels[s.state]}</span></small>${body}<p><a href="${learningLink(s.studentId)}">학습 기록 열기</a></p></article>`;
     })
     .join('');
 
-  return `<div class="split learning-layout">${list}
-    <section class="panel briefing-results"><div class="panel-heading"><h2>${h(assignment.title)}</h2><span class="pill">${h(className(assignment.class_id))} · ${h(assignment.period)}</span></div>
-    <form method="get" class="briefing-filters" data-briefing-filters><input type="hidden" name="assignment" value="${h(assignment.assignment_id)}"><label>학생<select name="student"><option value="">반 전체</option>${pupils.map((s) => `<option value="${h(s.id)}"${s === selected ? ' selected' : ''}>${h(s.name)}</option>`).join('')}</select></label><button>조회</button></form>
+  return `${heading}<div class="split learning-layout">${list}
+    <section class="panel"><div class="panel-heading"><h2>${h(assignment.title)}</h2><span class="pill">${h(className(assignment.class_id))} · ${h(assignment.period)}</span></div>
     <p class="muted">등록 ${classification.items.length}문항 · 분류 제외 ${briefing.unclassified}문항 · 대상 ${entries.length}명 중 집계 ${counted}명${waiting ? ' · ' + waiting : ''}</p>
     ${summary}
     <h3>학생별 결과</h3>${cards ? `<div class="learning-metrics">${cards}</div>` : '<p class="muted">이 반에 조회할 수 있는 원생이 없습니다.</p>'}
@@ -394,7 +387,7 @@ export const briefingModule: OperationModule = {
   roles: ['admin', 'teacher'],
   setup() {},
   render: (ctx) =>
-    '<div class="workspace-heading"><h1>반 브리핑</h1><a class="workspace-link" href="/student-reports">학생 분석·월간 리포트 <span aria-hidden="true">›</span></a></div>' +
+    `<p><a href="/student-reports">학생 분석·승인 리포트·교사용 상담 자료</a></p>` +
     render(ctx),
   submit() {
     throw new OperationError('브리핑은 조회 전용 화면입니다.', 405);

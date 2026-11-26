@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { visionChat } from './read-image.mjs';
+import { ocrCacheDir } from '../rag-consultation/server/ingest/parsers/ocr.ts';
+import { imageDimensions } from '../rag-consultation/server/ingest/parsers/image.ts';
 
 // CLOVA OCR(General)로 쪽 사진의 글자를 읽고, 위치 정보로 단(왼쪽→오른쪽) 순서를 맞춘 뒤
 // 인쇄 번호에서 문항 경계를 나눈다. HCX-005 판독과 달리 결과가 결정적이고 JSON을 모델이
@@ -33,7 +35,7 @@ export async function ocrImage(source) {
       : 'jpg';
   const response = await fetch(url, {
     method: 'POST',
-    redirect: 'error',
+    redirect: 'manual',
     signal: AbortSignal.timeout(120000),
     headers: { 'Content-Type': 'application/json', 'X-OCR-SECRET': secret },
     body: JSON.stringify({
@@ -135,11 +137,115 @@ export function findPrintedPage(lines) {
   return undefined;
 }
 
+// 인쇄 문항 번호 찾기(교재 사진 분석과 사진 채점이 함께 쓴다). 번호는 각 단의 같은 왼쪽 위치에
+// 세로로 늘어서고 위에서 아래로 커진다. 보기 값("① 3"의 3)과 손글씨 숫자도 번호처럼 읽히므로,
+// 단마다 왼쪽 위치가 같은 숫자 줄 묶음 중 번호가 커지는 가장 긴 묶음만 문항 번호로 받는다.
+// "01", "7", "3.", "12)", "5번", "0012": 번호만 있는 줄이거나, 구두점 뒤에 발문이 이어지는 줄.
+const aloneNumber = /^\s*(\d{1,4})\s*(?:[.)．]|번)?\s*$/u;
+const leadingNumber = /^\s*(\d{1,4})\s*(?:[.)．]|번)\s*\S/u;
+// 앞에 0을 붙인 번호는 OCR이 발문과 한 줄로 읽어도("04 lim …") 번호로 본다. 같은 위치에 늘어선
+// 번호인지는 아래에서 따로 확인하므로 본문 중간의 숫자는 받지 않는다.
+const paddedLeading = /^\s*(0\d{1,3})\s+\S/u;
+export function pickItemNumberLines(lines) {
+  if (!lines.length) return null;
+  const left = Math.min(...lines.map((l) => l.x0));
+  const right = Math.max(...lines.map((l) => l.x1));
+  const mid = (left + right) / 2;
+  const twoColumns =
+    lines.filter((l) => l.x1 <= mid).length >= 3 &&
+    lines.filter((l) => l.x0 >= mid).length >= 3;
+  const tolerance = Math.max(4, (right - left) * 0.012);
+  const top = Math.min(...lines.map((l) => l.y0));
+  const bottom = Math.max(...lines.map((l) => l.y1));
+  const footer = bottom - (bottom - top) * 0.04;
+  const columnOf = (l) => (!twoColumns ? 0 : (l.x0 + l.x1) / 2 < mid ? 0 : 1);
+  const candidates = lines.flatMap((line) => {
+    // OCR이 번호 앞의 0을 영문 O로 읽는 경우("O4")를 바로잡는다.
+    const text = line.text.replace(
+      /^(\s*)[Oo](?=\d)/u,
+      (_, space) => space + '0',
+    );
+    const alone = aloneNumber.exec(text);
+    const match = alone ?? leadingNumber.exec(text) ?? paddedLeading.exec(text);
+    // 맨 아래 쪽 번호 줄은 문항이 아니다.
+    if (!match || line.y0 >= footer) return [];
+    // 같은 줄 높이에서 더 왼쪽에 다른 글자가 있으면("① 3"의 3) 문항 번호가 아니다.
+    const crowded = lines.some(
+      (other) =>
+        other !== line &&
+        columnOf(other) === columnOf(line) &&
+        other.x1 <= line.x0 + 2 &&
+        other.x0 < line.x0 - tolerance &&
+        other.y0 < line.y1 &&
+        line.y0 < other.y1,
+    );
+    if (crowded) return [];
+    return [
+      {
+        line,
+        n: Number(match[1]),
+        display: match[1],
+        // 번호 뒤에 이어지는 발문의 시작 위치(번호만 있는 줄이면 줄 끝).
+        prefix: alone ? text.length : match[0].length - 1,
+        padded: /^0\d/.test(match[1]),
+      },
+    ];
+  });
+  // 앞에 0을 붙인 번호("01")가 섞여 있으면 그 문제지는 번호를 그렇게 인쇄한 것이다. 같은 자리에
+  // 숫자 하나로 읽힌 것("4")은 펜에 덮인 보기 기호일 수 있어 뺀다.
+  const score = (group) =>
+    group.length + group.filter((c) => c.padded).length * 0.5;
+  // 위에서 아래 순서로 번호가 커지는(한 번에 10 이내) 묶음 중 점수가 가장 높은 것.
+  const longestIncreasing = (all) => {
+    const group = all.some((c) => c.padded) ? all.filter((c) => c.padded) : all;
+    const chain = group.map((c) => [c]);
+    for (let i = 0; i < group.length; i++)
+      for (let j = 0; j < i; j++) {
+        const step = group[i].n - group[j].n;
+        if (
+          step > 0 &&
+          step <= 10 &&
+          score([...chain[j], group[i]]) > score(chain[i])
+        )
+          chain[i] = [...chain[j], group[i]];
+      }
+    return chain.reduce((best, c) => (score(c) > score(best) ? c : best), []);
+  };
+  const picked = [];
+  for (const column of twoColumns ? [0, 1] : [0]) {
+    const inColumn = candidates
+      .filter((c) => columnOf(c.line) === column)
+      .sort((a, b) => a.line.y0 - b.line.y0);
+    let best = [];
+    for (const anchor of inColumn) {
+      const aligned = longestIncreasing(
+        inColumn.filter(
+          (c) => Math.abs(c.line.x0 - anchor.line.x0) <= tolerance,
+        ),
+      );
+      if (score(aligned) > score(best)) best = aligned;
+    }
+    picked.push(...best);
+  }
+  return {
+    picked,
+    twoColumns,
+    columnOf,
+    left,
+    right,
+    mid,
+    top,
+    bottom,
+    footer,
+  };
+}
+
 // 줄 맨 앞의 인쇄 번호("5.", "0012", "12)")와 공유 지문 머리말("[41~42]")에서 문항을 나눈다.
 // 번호는 앞 번호보다 크고 10 이내로 늘어날 때만 받아 본문 속 숫자를 문항 번호로 오인하지 않는다.
-const itemMark = /^\s*(\d{1,4})\s*(?:[.)．]\s*|\s+(?=\S))/;
+// 교재에 따라 OCR이 "0001"을 발문과 다른 줄로 읽으므로 번호만 있는 줄도 받는다(네 자리 번호만 채택).
+const itemMark = /^\s*(\d{1,4})\s*(?:[.)．]\s*|\s+(?=\S)|$)/;
 const passageMark = /^\s*\[\s*(\d{1,4})\s*[~∼～\-–]\s*(\d{1,4})\s*\]/;
-export function segmentItems(lines) {
+function segmentByMarks(lines) {
   const items = [];
   const passages = [];
   let current = null;
@@ -176,6 +282,62 @@ export function segmentItems(lines) {
     const shared = passages
       .filter((p) => p.from <= n && n <= p.to)
       .map((p) => p.lines.join('\n'));
+    return {
+      displayNumber: i.displayNumber,
+      text: [...shared, i.lines.join('\n')].join('\n').trim(),
+      confidence: i.confidence,
+      start: i.start,
+    };
+  });
+}
+
+// 문항 나누기. 같은 위치에 세로로 늘어선 번호(pickItemNumberLines)와 줄 맨 앞 표시 규칙
+// (segmentByMarks)을 모두 써 보고 문항을 더 많이 찾은 쪽을 쓴다. 같으면 기존 규칙을 쓴다.
+// "01"처럼 점 없이 인쇄한 번호는 기존 규칙으로는 찾지 못한다.
+export function segmentItems(lines) {
+  const byMarks = segmentByMarks(lines);
+  const layout = pickItemNumberLines(lines);
+  const picked = layout?.picked ?? [];
+  if (picked.length <= byMarks.length) return byMarks;
+  // 같은 단에서 번호 줄 높이의 1.5배 위부터 다음 번호 직전까지를 그 문항의 줄로 본다. 발문 첫 줄이
+  // 번호보다 조금 위에 놓이는 경우(분수·극한 기호)가 있어 읽기 순서만으로 나누지 않는다.
+  const top = (c) => c.line.y0 - (c.line.y1 - c.line.y0) * 1.5;
+  const items = picked.map((c) => ({
+    pick: c,
+    displayNumber: c.display,
+    lines: [],
+    confidence: c.line.confidence,
+    start: { x0: c.line.x0, x1: c.line.x1, y0: c.line.y0, y1: c.line.y1 },
+  }));
+  const passages = [];
+  for (const line of lines) {
+    const column = layout.columnOf(line);
+    const owner = items
+      .filter(
+        (i) =>
+          layout.columnOf(i.pick.line) === column && top(i.pick) <= line.y0,
+      )
+      .reduce(
+        (best, i) => (!best || top(i.pick) > top(best.pick) ? i : best),
+        null,
+      );
+    const passage = line.text.match(passageMark);
+    if (passage) {
+      passages.push({ from: +passage[1], to: +passage[2], line });
+      continue;
+    }
+    if (!owner) continue;
+    owner.lines.push(
+      line === owner.pick.line ? line.text.slice(owner.pick.prefix) : line.text,
+    );
+    if (owner.confidence !== undefined)
+      owner.confidence = Math.min(owner.confidence, line.confidence);
+  }
+  return items.map((i) => {
+    const n = Number(i.displayNumber);
+    const shared = passages
+      .filter((p) => p.from <= n && n <= p.to)
+      .map((p) => p.line.text);
     return {
       displayNumber: i.displayNumber,
       text: [...shared, i.lines.join('\n')].join('\n').trim(),
@@ -232,23 +394,57 @@ export function itemRegions(items, lines) {
 
 // 잘라 낸 문항 이미지. HCX-005는 너무 길쭉하거나 큰 이미지를 거절하므로(HTTP 400) 흰 여백으로
 // 가로세로 비율을 4:1 안에 맞추고 긴 변을 2000px 이하로 둔다.
-async function cropRegion(bytes, region, { pad = 20, scale = 1.5 } = {}) {
+let renderWorkbookCrop = async (bytes, box) => {
   const img = await loadImage(bytes);
-  const x0 = Math.max(0, region.x0 - pad);
-  const y0 = Math.max(0, region.y0 - pad);
-  const w = Math.min(img.width, region.x1 + pad) - x0;
-  const h = Math.min(img.height, region.y1 + pad) - y0;
-  const s = Math.min(scale, 2000 / Math.max(w, h));
-  const sw = Math.round(w * s);
-  const sh = Math.round(h * s);
-  const cw = Math.max(sw, Math.ceil(sh / 4), 64);
-  const ch = Math.max(sh, Math.ceil(sw / 4), 64);
-  const canvas = createCanvas(cw, ch);
+  const canvas = createCanvas(box.canvasWidth, box.canvasHeight);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = 'white';
-  ctx.fillRect(0, 0, cw, ch);
-  ctx.drawImage(img, x0, y0, w, h, (cw - sw) / 2, (ch - sh) / 2, sw, sh);
-  return { bytes: canvas.toBuffer('image/png'), mime: 'image/png' };
+  ctx.fillRect(0, 0, box.canvasWidth, box.canvasHeight);
+  ctx.drawImage(
+    img,
+    box.x,
+    box.y,
+    box.width,
+    box.height,
+    box.left,
+    box.top,
+    box.scaledWidth,
+    box.scaledHeight,
+  );
+  return canvas.toBuffer('image/png');
+};
+
+export function configureWorkbookPhotoCrop(render) {
+  renderWorkbookCrop = render;
+}
+
+async function cropRegion(bytes, region) {
+  const size = imageDimensions(bytes);
+  if (!size) throw Error('문항 이미지 크기를 읽지 못함');
+  const x = Math.max(0, Math.floor(region.x0 - 20));
+  const y = Math.max(0, Math.floor(region.y0 - 20));
+  const width = Math.min(size.width, Math.ceil(region.x1 + 20)) - x;
+  const height = Math.min(size.height, Math.ceil(region.y1 + 20)) - y;
+  if (width < 1 || height < 1) throw Error('문항 이미지 영역이 비어 있음');
+  const scale = Math.min(1.5, 2000 / Math.max(width, height));
+  const scaledWidth = Math.max(1, Math.round(width * scale));
+  const scaledHeight = Math.max(1, Math.round(height * scale));
+  const canvasWidth = Math.max(scaledWidth, Math.ceil(scaledHeight / 4), 64);
+  const canvasHeight = Math.max(scaledHeight, Math.ceil(scaledWidth / 4), 64);
+  const rendered = await renderWorkbookCrop(bytes, {
+    x,
+    y,
+    width,
+    height,
+    scaledWidth,
+    scaledHeight,
+    canvasWidth,
+    canvasHeight,
+    left: Math.floor((canvasWidth - scaledWidth) / 2),
+    top: Math.floor((canvasHeight - scaledHeight) / 2),
+    sourcePixels: size.width * size.height,
+  });
+  return { bytes: Buffer.from(rendered), mime: 'image/png' };
 }
 
 const ITEM_PROMPT =
@@ -288,6 +484,73 @@ async function readItemImage(image) {
 // 쓴다. 수학은 OCR이 수식 구조를 잃으므로(√2×∛4 → V2×4) 문항 영역을 잘라 HCX-005로 다시 읽는다.
 // 다시 읽기에 실패한 수학 문항은 보류하고 OCR 글을 교사 확인용 후보로 남긴다.
 // 반환 모양은 readSheet과 같다({ detected, readingPasses, reads }).
+// 문항 번호 줄("10")이 쪽 위 여백에 걸려 쪽 번호로 잡히지 않게 번호 줄을 빼고 쪽 번호를 찾는다.
+function withoutItemNumbers(lines) {
+  const numbered = new Set(
+    (pickItemNumberLines(lines)?.picked ?? []).map((c) => c.line),
+  );
+  return lines.filter((l) => !numbered.has(l));
+}
+
+// 전체 사진 OCR이 작은 쪽수를 빠뜨렸을 때 하단의 빈 영역만 로컬에서 확대 판독한다.
+// 문항·보기나 꼬리말의 일부를 숫자로 오인하지 않도록 이미 글을 읽은 영역은 제외한다.
+async function readFooterPage(bytes, lines) {
+  let worker;
+  try {
+    const cache = ocrCacheDir();
+    await access(path.join(cache, 'eng.traineddata'));
+    const img = await loadImage(bytes);
+    const y = Math.floor(img.height * 0.88);
+    const h = img.height - y;
+    const regions = [];
+    for (let col = 0; col < 3; col++) {
+      const x = Math.floor((img.width * col) / 3);
+      const end = Math.floor((img.width * (col + 1)) / 3);
+      if (!lines.some((l) => l.y1 >= y && l.x0 < end && l.x1 > x))
+        regions.push({ x, w: end - x });
+    }
+    if (!regions.length) return;
+    const { createWorker } = await import('tesseract.js');
+    worker = await createWorker('eng', 1, {
+      cachePath: cache,
+      cacheMethod: 'readOnly',
+      langPath: cache,
+      errorHandler: () => {},
+    });
+    // SINGLE_BLOCK는 넓은 여백 안의 한 글자도 읽는다.
+    await worker.setParameters({ tessedit_pageseg_mode: '6' });
+    const pages = [];
+    for (const { x, w } of regions) {
+      const scale = Math.min(3, 1250 / w, 750 / h);
+      const canvas = createCanvas(Math.round(w * scale), Math.round(h * scale));
+      canvas
+        .getContext('2d')
+        .drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height);
+      const { data } = await worker.recognize(
+        canvas.toBuffer('image/png'),
+        {},
+        { blocks: true },
+      );
+      const word = data.blocks?.[0]?.paragraphs[0]?.lines[0]?.words[0];
+      if (
+        /^[1-9]\d{0,3}$/.test(data.text.trim()) &&
+        word?.text === data.text.trim() &&
+        word.confidence >= 85 &&
+        word.bbox.x0 > 2 &&
+        word.bbox.x1 < canvas.width - 2 &&
+        word.bbox.y0 > 2 &&
+        word.bbox.y1 < canvas.height - 2
+      )
+        pages.push(Number(word.text));
+    }
+    if (pages.length === 1) return pages[0];
+  } catch {
+    // 모델 또는 이미지 디코더를 쓸 수 없으면 교사가 쪽수를 입력한다.
+  } finally {
+    await worker?.terminate();
+  }
+}
+
 export async function readSheetService(source, subject) {
   const bytes =
     typeof source === 'string' ? await readFile(source) : source.bytes;
@@ -299,8 +562,10 @@ export async function readSheetService(source, subject) {
       : source.mime;
   const fields = await ocrImage({ bytes, mime });
   const lines = readingOrder(fieldsToLines(fields));
-  const printedPage = findPrintedPage(lines);
   const items = segmentItems(lines);
+  const printedPage =
+    findPrintedPage(withoutItemNumbers(lines)) ??
+    (items.length ? await readFooterPage(bytes, lines) : undefined);
   const regions = itemRegions(items, lines);
   const pageOf = printedPage ? { printedPage } : {};
   const detected = [];
@@ -352,7 +617,7 @@ export async function readSheetService(source, subject) {
 export async function readSheetOcr(source) {
   const fields = await ocrImage(source);
   const lines = readingOrder(fieldsToLines(fields));
-  const printedPage = findPrintedPage(lines);
+  const printedPage = findPrintedPage(withoutItemNumbers(lines));
   const detected = segmentItems(lines).map(({ displayNumber, text }) => ({
     displayNumber,
     text,

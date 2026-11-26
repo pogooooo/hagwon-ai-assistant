@@ -16,7 +16,11 @@ import {
 } from './academy-switcher.ts';
 import { accountDisplayName } from './demo-presentation.ts';
 import { seedDemoLibrary } from './demo-library.ts';
-import { listedDemoLogins, setupDemoLogins } from './demo-logins.ts';
+import {
+  listedDemoLogins,
+  localDemoPassword,
+  setupDemoLogins,
+} from './demo-logins.ts';
 import {
   seedAcademyChoices,
   seedDemoConsultationGuides,
@@ -45,6 +49,7 @@ import {
   seedDemoConsultationInbox,
 } from './consultation.ts';
 import {
+  accessibleStudents,
   authenticate,
   directoryModule,
   getActor,
@@ -55,13 +60,23 @@ import {
   documentsModule,
   maxDocumentBytes as defaultMaxDocumentBytes,
 } from './documents.ts';
+import { homeworkModule } from './homework.ts';
 import {
   analyzeHomeworkPhoto,
   reviewHomeworkReading,
 } from './homework-classifier.ts';
-import { homeworkModule, homeworkOverview, homeworkPhoto } from './homework.ts';
-import { learningModule, recentLearningReports } from './learning.ts';
-import { briefingModule } from './briefing.ts';
+import { renderWorkbookSource } from './workbook-publication.ts';
+import {
+  gradingLearning,
+  gradingBriefing,
+} from '../homework-grading/records-page.ts';
+import {
+  gradingModule,
+  gradingPhoto,
+  gradingService,
+  visibleGradingReports,
+} from '../homework-grading/module.ts';
+import { setupLearning, renderLearningPublication } from './learning.ts';
 import { parentMessagesModule } from './parent-messages.ts';
 import { unreadParentCount } from './parent-messages-model.ts';
 import { calendarModule } from './calendar.ts';
@@ -87,29 +102,60 @@ import {
 
 const modules: OperationModule[] = [
   directoryModule,
-  homeworkModule,
-  learningModule,
-  briefingModule,
+  gradingModule,
+  {
+    path: '/learning',
+    label: '학습 기록',
+    roles: gradingModule.roles,
+    setup: setupLearning,
+    render: (ctx) =>
+      ctx.url.searchParams.has('publication')
+        ? renderLearningPublication(
+            ctx,
+            ctx.url.searchParams.get('publication')!,
+          )
+        : gradingLearning(ctx),
+    submit() {
+      throw new OperationError('사진 채점의 확정 기록은 조회 전용입니다.', 405);
+    },
+  },
+  {
+    path: '/briefing',
+    label: '브리핑',
+    roles: ['admin', 'teacher'],
+    setup() {},
+    render: gradingBriefing,
+    submit() {
+      throw new OperationError('브리핑은 조회 전용입니다.', 405);
+    },
+  },
   calendarModule,
   makeupPollsModule,
   {
     ...studentReportsModule,
     render: (ctx) =>
-      renderStudentReports(
-        ctx,
-        () =>
-          homeworkOverview(ctx).results.map((result) => ({
-            href: '/homework?submission=' + encodeURIComponent(result.id),
-            title: result.assignment_title,
-            studentName: result.student_name,
-            date: result.confirmed_at!.slice(0, 10),
-          })),
-        () =>
-          recentLearningReports(ctx).map(({ id, name, period }) => ({
-            href: '/learning?publication=' + encodeURIComponent(id),
-            title: name + ' · ' + period,
-          })),
-      ),
+      renderStudentReports(ctx, () => {
+        const names = new Map(
+          accessibleStudents(ctx.db, ctx.actor).map((student) => [
+            student.id,
+            student.name,
+          ]),
+        );
+        return visibleGradingReports(ctx, new Set(names.keys())).flatMap(
+          (report) =>
+            report.assignment_title
+              ? [
+                  {
+                    href:
+                      '/grading?report=' + encodeURIComponent(report.report_id),
+                    title: report.assignment_title,
+                    studentName: names.get(report.student) ?? '',
+                    date: report.generated_at.slice(0, 10),
+                  },
+                ]
+              : [],
+        );
+      }),
   },
   documentsModule,
   examBuilderModule,
@@ -132,7 +178,7 @@ const menuOrder = [
   '/exam-builder',
   '/learning',
   '/briefing',
-  '/homework',
+  '/grading',
   '/directory',
   '/settings',
   '/public-data',
@@ -150,6 +196,7 @@ export interface OperationsServerOptions {
   showDefaultPassword?: boolean;
   showDemoAccounts?: boolean;
   trialPasswordHashes?: string;
+  localDemoLogins?: boolean;
   assetsRoot?: URL | null;
   formControlStyles?: string;
   fixturesRoot?: URL;
@@ -167,6 +214,7 @@ export function createOperationsServer({
   showDefaultPassword = false,
   showDemoAccounts = showDefaultPassword,
   trialPasswordHashes,
+  localDemoLogins = false,
   assetsRoot = new URL('./', import.meta.url),
   formControlStyles,
   fixturesRoot,
@@ -197,6 +245,7 @@ export function createOperationsServer({
       'service-ui.js',
       'select-ui.js',
       'control-surface-ui.js',
+      'grading-ui.js',
       'app.webmanifest',
       '.well-known/assetlinks.json',
       'service-worker.js',
@@ -209,6 +258,9 @@ export function createOperationsServer({
       'assets/ondap-logo.png',
       'assets/ondap-review.png',
       'assets/ondap-report-mascot.png',
+      'assets/practice-math-1.png',
+      'assets/practice-math-2.png',
+      'assets/practice-math.pdf',
       'assets/app-192.png',
       'assets/app-512.png',
       'assets/study-room.webp',
@@ -247,12 +299,14 @@ export function createOperationsServer({
   initializeIdentity(db, demoPassword, fixturesRoot);
   setupAcademySelection(db);
   setupAcademyOnboarding(db);
+  // Historical publications and monthly reports still reference workbook tables.
+  homeworkModule.setup(db, documentsRoot);
   for (const operation of modules) operation.setup(db, documentsRoot);
   if (showDemoAccounts) {
     seedAcademyChoices(db);
     seedDemoConsultationGuides(db);
     seedDemoLibrary(db);
-    setupDemoLogins(db, trialPasswordHashes);
+    setupDemoLogins(db, trialPasswordHashes, localDemoLogins && !publicOrigin);
     seedDemoMakeupPolls(db);
     seedDemoHomework(db);
     seedDemoConsultationInbox(db);
@@ -437,7 +491,7 @@ export function createOperationsServer({
     showDemoAccounts
       ? `<details class="sign-in-accounts">
     <summary>체험 계정 보기</summary>
-    ${showDefaultPassword ? '<p>초기 비밀번호 <code>axr-demo</code></p>' : ''}
+    ${showDefaultPassword ? '<p>초기 비밀번호 <code>' + h(localDemoLogins && !publicOrigin ? localDemoPassword : demoPassword) + '</code></p>' : ''}
     <dl class="demo-accounts">${demoAccounts
       .map(
         ([label, username]) =>
@@ -736,10 +790,58 @@ export function createOperationsServer({
         sendPage(response, 200, renderHome({ db, actor, url }), actor, '/');
         return;
       }
-      if (url.pathname === '/homework/photo' && request.method === 'GET') {
-        const photo = homeworkPhoto({ db, actor, url });
-        response.writeHead(200, { 'Content-Type': photo.mime });
+      if (url.pathname === '/homework' || url.pathname === '/homework/photo') {
+        if (!gradingModule.roles.includes(actor.role))
+          throw new OperationError('이 기능에 접근할 수 없습니다.', 403);
+        if (request.method !== 'GET')
+          throw new OperationError('사진 채점에서 숙제를 제출해 주세요.', 405);
+        const view = url.searchParams.get('view');
+        if (url.pathname === '/homework' && view === 'source') {
+          sendPage(
+            response,
+            200,
+            renderWorkbookSource(
+              { db, actor, url },
+              url.searchParams.get('publication') ?? '',
+            ),
+            actor,
+            '/learning',
+          );
+        } else if (url.pathname === '/homework/photo') {
+          throw new OperationError(
+            '기존 제출 사진은 이 화면에서 제공하지 않습니다.',
+            410,
+          );
+        } else {
+          const staff = actor.role === 'admin' || actor.role === 'teacher';
+          redirect(
+            response,
+            view === 'analysis'
+              ? '/learning'
+              : staff && view === 'create'
+                ? '/grading?view=register'
+                : staff && view === 'review'
+                  ? '/grading?queue=review'
+                  : '/grading',
+          );
+        }
+        return;
+      }
+      if (url.pathname === '/grading/photo' && request.method === 'GET') {
+        const photo = await gradingPhoto({
+          db,
+          actor,
+          url,
+          assertCurrentAccess: () => assertCurrentSession(request, actor!),
+        });
+        assertCurrentSession(request, actor);
+        response.writeHead(200, {
+          'Content-Type': photo.mime,
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        });
         response.end(Buffer.from(photo.bytes));
+        photo.bytes.fill(0);
         return;
       }
       if (url.pathname === '/documents/download' && request.method === 'GET') {
@@ -799,9 +901,10 @@ export function createOperationsServer({
         response.end(bytes);
         return;
       }
+      // 과제 등록 탭의 교재 사진 분석(쪽수·번호·유형)과 원문 확인 후 재분류.
       if (
         form &&
-        operation === homeworkModule &&
+        operation === gradingModule &&
         (url.searchParams.get('analyze') === '1' ||
           url.searchParams.get('review') === '1')
       ) {
@@ -890,7 +993,15 @@ export function createOperationsServer({
     }
   }
 
-  return createServer((request, response) => {
+  const server = createServer((request, response) => {
     void serve(request, response);
   });
+  const maintenance = setInterval(() => {
+    void gradingService(db)
+      .sweep()
+      .catch(() => {});
+  }, 30000);
+  maintenance.unref?.();
+  server.on('close', () => clearInterval(maintenance));
+  return server;
 }

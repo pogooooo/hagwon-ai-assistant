@@ -233,7 +233,10 @@ export function recordChunks(trace: RagTrace, chunks: readonly RagChunk[]) {
 export function subjectOf(
   catalog: AcademyCatalog,
   classId: string | null,
+  fact?: ApprovedFact,
 ): string | null {
+  if (fact?.value.kind === 'accuracy' && fact.value.subject)
+    return fact.value.subject;
   if (!classId) return null;
   return (
     catalog.classes.find((klass) => klass.classId === classId)?.subject ?? null
@@ -246,7 +249,7 @@ export function matchesRequestedSubject(
   fact: ApprovedFact,
 ): boolean {
   if (ctx.frame.subjects.length === 0) return true;
-  const subject = subjectOf(ctx.catalog, fact.classId);
+  const subject = subjectOf(ctx.catalog, fact.classId, fact);
   return subject === null || ctx.frame.subjects.includes(subject);
 }
 
@@ -257,7 +260,7 @@ export function markMultiSubjectStudents(
 ) {
   const subjects = new Map<string, Set<string>>();
   for (const fact of facts) {
-    const subject = subjectOf(ctx.catalog, fact.classId);
+    const subject = subjectOf(ctx.catalog, fact.classId, fact);
     if (!subject) continue;
     const set = subjects.get(fact.subjectId) ?? new Set<string>();
     set.add(subject);
@@ -270,6 +273,6 @@ export function markMultiSubjectStudents(
 
 export function subjectTag(ctx: AnswerContext, fact: ApprovedFact): string {
   if (!ctx.multiSubjectStudents?.has(fact.subjectId)) return '';
-  const subject = subjectOf(ctx.catalog, fact.classId);
+  const subject = subjectOf(ctx.catalog, fact.classId, fact);
   return subject ? `[${subject}] ` : '';
 }

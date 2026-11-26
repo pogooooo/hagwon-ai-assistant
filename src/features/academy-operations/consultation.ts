@@ -3,6 +3,10 @@ import { accountDisplayName, isAcceptanceRecord } from './demo-presentation.ts';
 import { randomUUID } from 'node:crypto';
 import { setupKnowledge, knowledgeEvidence } from './knowledge.ts';
 import {
+  gradingCatalog,
+  gradingEvidence,
+} from '../homework-grading/evidence.ts';
+import {
   setupSchools,
   schoolEvidence,
   schoolQuerySelection,
@@ -515,8 +519,12 @@ function currentCatalog({ db, actor }: PageContext): AcademyCatalog {
       subject,
       grade,
     })),
-    units: learningLabels,
-    questionTypes: learningTypes,
+    subjects: gradingCatalog(db, actor.academyId).subjects,
+    units: [...learningLabels, ...gradingCatalog(db, actor.academyId).units],
+    questionTypes: [
+      ...learningTypes,
+      ...gradingCatalog(db, actor.academyId).units,
+    ],
     studentDirectory: students.map(({ id, name }) => ({
       studentId: id,
       names: [name, name.replace(/^가상/, '')],
@@ -542,9 +550,12 @@ function consultationAccess({ db, actor }: PageContext): RagAccessScope {
   };
 }
 
-function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
-  const learning = learningEvidence(db, academyId);
-  const workbook = workbookEvidence(db, academyId);
+function supplementaryEvidence(
+  db: OperationsDatabase,
+  academyId: string,
+  readGrades = gradingEvidence,
+) {
+  const grading = readGrades(db, academyId);
   const team = teamScheduleEvidence(db, academyId);
   const polls = pollScheduleEvidence(db, academyId);
   const schedule = {
@@ -566,14 +577,18 @@ function supplementaryEvidence(db: OperationsDatabase, academyId: string) {
       ...knowledgeEvidence(db, academyId),
       ...schoolEvidence(db, academyId),
       ...schedule.documents,
-      ...learning.documents,
-      ...workbook.documents,
+      ...grading.documents,
     ],
-    facts: [...schedule.facts, ...learning.facts, ...workbook.facts],
+    facts: [...schedule.facts, ...grading.facts],
   };
 }
 
-export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
+export async function ask(
+  ctx: PageContext,
+  form: FormData,
+  existing?: Thread,
+  readGrades = gradingEvidence,
+) {
   const { db, actor } = ctx;
   if (!canAskConsultation(actor))
     throw new OperationError('학생과 학부모만 질문할 수 있습니다.', 403);
@@ -644,7 +659,7 @@ export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
     documents: notices,
     facts: noticeFacts,
     schedule,
-  } = supplementaryEvidence(db, actor.academyId);
+  } = supplementaryEvidence(db, actor.academyId, readGrades);
   const indexVersion = documentsIndexVersion(
     db,
     actor.academyId,
@@ -708,7 +723,7 @@ export async function ask(ctx: PageContext, form: FormData, existing?: Thread) {
         '상담 열람 권한이 변경되었습니다. 다시 질문해 주세요.',
         403,
       );
-    const liveEvidence = supplementaryEvidence(db, actor.academyId);
+    const liveEvidence = supplementaryEvidence(db, actor.academyId, readGrades);
     const liveVersion = documentsIndexVersion(
       db,
       actor.academyId,
@@ -934,8 +949,13 @@ function submitThreadAction(
 export function currentCitationRevisions(ctx: PageContext) {
   const access = consultationAccess(ctx);
   const revisions = currentDocumentRevisions(ctx);
-  for (const notice of supplementaryEvidence(ctx.db, ctx.actor.academyId)
-    .documents) {
+  const academy = ctx.actor.academyId;
+  // Approved historical citations can still be read, subject to current revisions and access.
+  for (const notice of [
+    ...supplementaryEvidence(ctx.db, academy).documents,
+    ...learningEvidence(ctx.db, academy).documents,
+    ...workbookEvidence(ctx.db, academy).documents,
+  ]) {
     if (
       canReadRecord(
         access,
@@ -996,7 +1016,7 @@ function renderMessage(
                     .slice(citation.title.length)
                     .replace(/^[\s·:>/—-]+/, '')
                 : citation.location;
-              return `<li>${citation.documentId.startsWith('workbook-') ? `<a href="/homework?view=source&amp;publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : citation.documentId.startsWith('learning-') ? `<a class="workspace-link" href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${location ? ' · ' + h(location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`;
+              return `<li>${citation.documentId.startsWith('workbook-') || citation.documentId.startsWith('learning-') ? `<a class="workspace-link" href="/learning?publication=${encodeURIComponent(citation.documentId)}">${h(citation.title)}</a>` : h(citation.title)}${location ? ' · ' + h(location) : ''}${citation.revision ? ' · v' + citation.revision : ''}</li>`;
             })
             .join('')}</ul></details>`
         : ''
