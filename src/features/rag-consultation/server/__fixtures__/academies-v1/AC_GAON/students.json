@@ -1,0 +1,73 @@
+[
+  {
+    "student_id": "GA_STU_001",
+    "academy_id": "AC_GAON",
+    "name": "김서준",
+    "aliases": [
+      "서준",
+      "서준이"
+    ],
+    "class_ids": [
+      "GA_M3_ADV"
+    ]
+  },
+  {
+    "student_id": "GA_STU_002",
+    "academy_id": "AC_GAON",
+    "name": "김서윤",
+    "aliases": [
+      "서윤",
+      "서윤이"
+    ],
+    "class_ids": [
+      "GA_M2_ADV"
+    ]
+  },
+  {
+    "student_id": "GA_STU_003",
+    "academy_id": "AC_GAON",
+    "name": "이도윤",
+    "aliases": [
+      "도윤",
+      "도윤이"
+    ],
+    "class_ids": [
+      "GA_M2_ADV"
+    ]
+  },
+  {
+    "student_id": "GA_STU_004",
+    "academy_id": "AC_GAON",
+    "name": "박하은",
+    "aliases": [
+      "하은",
+      "하은이"
+    ],
+    "class_ids": [
+      "GA_M2_BASIC"
+    ]
+  },
+  {
+    "student_id": "GA_STU_005",
+    "academy_id": "AC_GAON",
+    "name": "최지호",
+    "aliases": [
+      "지호"
+    ],
+    "class_ids": [
+      "GA_M3_EXAM"
+    ]
+  },
+  {
+    "student_id": "GA_STU_006",
+    "academy_id": "AC_GAON",
+    "name": "정예린",
+    "aliases": [
+      "예린",
+      "예린이"
+    ],
+    "class_ids": [
+      "GA_M1_BASIC"
+    ]
+  }
+]

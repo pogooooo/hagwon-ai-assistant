@@ -1,0 +1,452 @@
+/* Role dashboards use one emphasis surface, with quiet cards for the next tasks. */
+.ondap-heading {
+  gap: 6px 20px;
+  margin-block-end: 20px;
+}
+.ondap-heading time {
+  padding-inline-start: 0;
+  border: 0;
+  color: var(--muted);
+}
+.ondap-hero,
+.family-highlight {
+  border-radius: 26px;
+  padding: clamp(18px, 2.5vw, 30px);
+}
+.ondap-hero {
+  margin-block-end: 12px;
+}
+.ondap-hero :is(h2, a) {
+  max-inline-size: 100%;
+}
+.ondap-hero h2 {
+  font-size: clamp(1.25rem, 2.5vw, 2rem);
+  text-wrap: balance;
+}
+.ondap-hero img {
+  block-size: clamp(82px, 11vw, 124px);
+  inline-size: clamp(82px, 13vw, 162px);
+}
+.ondap-metrics {
+  margin-block-end: 20px;
+  gap: 10px;
+}
+.ondap-metrics a {
+  min-inline-size: 0;
+  background: var(--surface);
+  border: 0;
+  border-radius: 20px;
+  padding: 14px;
+}
+.ondap-metrics a:hover,
+.home-shortcuts a:hover {
+  background: var(--accent-soft);
+}
+.ondap-metrics a > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+}
+.ondap-metrics strong {
+  font-size: clamp(1rem, 2.4vw, 1.5rem);
+  line-height: 1.15;
+  margin-inline: 0;
+  font-variant-numeric: tabular-nums;
+}
+.ondap-metrics .metric-arrow {
+  margin-inline-start: auto;
+  color: var(--accent);
+}
+.ondap-board,
+.home-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(14px, 2vw, 26px);
+}
+.home-flow-primary,
+.home-flow-secondary {
+  min-inline-size: 0;
+  display: grid;
+  gap: 14px;
+}
+:is(.ondap-board, .home-flow) .panel {
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 24px;
+  padding: clamp(16px, 2vw, 24px);
+  background: var(--surface);
+}
+.ondap-board .is-empty,
+.home-flow .is-empty {
+  background: var(--paper);
+}
+.home-flow .home-makeup,
+.makeup-result-notices {
+  background: var(--accent-soft);
+  border: 0;
+  border-radius: 24px;
+}
+.ondap-board .next-actions a,
+.home-flow .record-list a {
+  min-block-size: 44px;
+}
+.home-flow .home-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  background: transparent;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.home-flow .home-shortcuts a {
+  min-inline-size: 0;
+  flex: 1 1 100px;
+  min-block-size: 54px;
+  padding: 8px;
+  background: var(--surface);
+  border: 0;
+  border-radius: 16px;
+  justify-content: center;
+  flex-direction: row;
+  text-align: left;
+}
+.home-flow .home-shortcuts .service-icon {
+  inline-size: 28px;
+  block-size: 28px;
+  flex: none;
+}
+.home-flow .home-search {
+  margin: 0;
+  padding: clamp(18px, 2vw, 24px);
+  border-radius: 24px;
+}
+.home-flow .home-search-heading img,
+.home-flow .family-highlight img {
+  inline-size: clamp(72px, 10vw, 115px);
+}
+.home-flow .family-highlight h2 {
+  margin-block-end: 4px;
+}
+
+/* Paired controls share a field group and keep the form's native semantics. */
+.workflow-description {
+  margin-block: 0 10px;
+  line-height: 1.55;
+  color: var(--muted);
+  word-break: keep-all;
+}
+.report-periods,
+.report-period-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  align-items: end;
+}
+.report-periods {
+  align-items: stretch;
+  margin-block: 8px;
+}
+.report-periods > p {
+  grid-column: 1 / -1;
+  margin-block-end: 0;
+  font-size: 0.875rem;
+}
+.report-period-group {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 10px 14px 14px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--paper);
+}
+.report-period-group legend {
+  font-weight: 700;
+}
+.report-period-group small {
+  margin-inline-start: 4px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.report-period-fields label {
+  min-inline-size: 0;
+  margin: 0;
+}
+.report-period-fields input {
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+.report-create,
+.report-index,
+.report-assignment-index,
+.report-builder,
+.report-workspace :is(.report-document, .report-manage) {
+  max-inline-size: none;
+}
+.report-kind-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.workspace .report-kind-actions a.button-link:not(.subtle-link) {
+  color: var(--surface);
+}
+.report-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.report-review-actions :is(button, small) {
+  max-inline-size: 100%;
+}
+.report-review-actions form:not(.report-refresh) {
+  flex: 0 0 auto;
+  max-inline-size: 100%;
+}
+.report-review-actions .report-refresh {
+  flex: 1 1 21rem;
+  min-inline-size: 0;
+}
+.report-refresh small {
+  flex: 1 1 13rem;
+}
+.report-manage header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.report-manage header :is(h2, .report-publication) {
+  margin: 0;
+}
+.report-comment-editor label[for='report-comment'] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.report-publication {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.85rem;
+}
+.report-workspace-family {
+  grid-template-columns: minmax(0, 1fr) minmax(175px, 230px);
+}
+.report-workspace-family .report-history-link {
+  display: none;
+}
+:is(
+  .report-index,
+  .report-create,
+  .report-document,
+  .report-manage,
+  .report-builder,
+  .report-assignment-index
+) {
+  border: 0;
+  border-radius: 24px;
+  background: var(--surface);
+}
+.report-document,
+.report-manage,
+.report-create {
+  padding: clamp(16px, 2.5vw, 28px);
+}
+.report-workspace-family :is(.report-preview, .report-index) {
+  min-inline-size: 0;
+}
+
+/* Put the current step first and keep secondary choices visually quiet. */
+.makeup-assistant,
+.grade-upload,
+.grade-spread :is(.grade-paper, .grade-decisions) {
+  min-inline-size: 0;
+  background: var(--surface);
+  border: 0;
+  border-radius: 24px;
+}
+.makeup-assistant .chat-composer {
+  border: 0;
+  border-radius: 18px;
+  background: var(--paper);
+}
+.makeup-proposal {
+  margin: 0 0 8px;
+}
+.makeup-proposal > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding-block: 6px;
+}
+.makeup-proposal > div + div {
+  border-block-start: 1px solid var(--border);
+}
+.makeup-proposal dt {
+  flex: 0 0 5em;
+  color: var(--muted);
+}
+.makeup-proposal dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 700;
+}
+.makeup-upcoming {
+  background: var(--surface);
+  border: 0;
+  border-radius: 24px;
+}
+.makeup-upcoming .item-list {
+  list-style: none;
+  padding-inline-start: 0;
+}
+.makeup-upcoming li {
+  display: grid;
+  grid-template-columns: minmax(7.25rem, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding-block: 8px;
+  border-block-start: 1px solid var(--border);
+}
+.makeup-upcoming time {
+  display: grid;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.875rem;
+}
+.makeup-upcoming .workspace-link {
+  grid-column: 2 / -1;
+  justify-self: start;
+}
+.home-makeup .workspace-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.home-makeup .workspace-link > span:first-child {
+  min-inline-size: 0;
+  display: grid;
+}
+.home-makeup .workspace-link small {
+  color: var(--muted);
+}
+.home-makeup .workspace-link > span:last-child {
+  flex: none;
+  font-size: 0.875rem;
+}
+.question-suggestions button.secondary {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  max-inline-size: 100%;
+  min-block-size: 40px;
+}
+.question-suggestions button.secondary:hover {
+  background: var(--sage);
+}
+.workspace :is(.grade-filters, .report-filters) {
+  gap: 6px;
+}
+.workspace .grade-filters:not(.grading-sections) a[aria-current] {
+  background: var(--accent);
+  color: var(--surface);
+}
+.workspace .grading-sections {
+  border-block-end: 1px solid var(--border);
+  padding-block-end: 8px;
+}
+.workspace .grading-sections a {
+  min-block-size: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+}
+.workspace #grade-queue .inline-form {
+  max-inline-size: 28rem;
+}
+@media (max-width: 780px) {
+  .ondap-board,
+  .home-flow,
+  .report-workspace-family,
+  .report-periods {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ondap-heading {
+    align-items: baseline;
+    margin-block-end: 14px;
+  }
+  .ondap-hero {
+    margin-block-end: 10px;
+  }
+  .ondap-hero h2 {
+    margin-block-end: 8px;
+  }
+  .ondap-metrics {
+    gap: 6px;
+    margin-block-end: 14px;
+  }
+  .ondap-metrics a {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 9px;
+    font-size: 0.8rem;
+  }
+  .ondap-metrics a .service-icon {
+    background: var(--accent-soft);
+    width: 27px;
+    height: 27px;
+  }
+  .ondap-metrics .metric-arrow {
+    display: none;
+  }
+  .home-flow .home-search-heading h2 br {
+    display: none;
+  }
+  .report-workspace-family .report-history-link {
+    display: flex;
+    inline-size: fit-content;
+    margin-block-end: 8px;
+    margin-inline-start: auto;
+  }
+  .report-workspace-family .report-index-list {
+    max-block-size: none;
+  }
+  .makeup-upcoming li {
+    grid-template-columns: minmax(6.25rem, auto) minmax(0, 1fr) auto;
+    gap: 4px 8px;
+  }
+  .report-period-group {
+    padding-inline: 10px;
+  }
+  .report-period-fields {
+    column-gap: 8px;
+  }
+  a.consultation-shortcut {
+    display: none;
+  }
+  .mobile-nav a.mobile-chat-entry {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 14px;
+    font-weight: 700;
+  }
+  .mobile-nav a.mobile-chat-entry[aria-current] {
+    background: var(--accent);
+    color: var(--surface);
+  }
+}
+@media print {
+  .report-history-link {
+    display: none !important;
+  }
+}

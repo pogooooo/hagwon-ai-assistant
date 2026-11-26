@@ -1,0 +1,9 @@
+{
+  "document_id": "OS_NEWS_2026_11", "revision": 1, "document_type": "announcement",
+  "title": "온샘소식 2026년 11월호 (가정통신문)", "status": "approved_active",
+  "visibility": "academy_public", "class_id": null, "student_id": null,
+  "valid_from": "2026-11-02T09:00:00+09:00", "valid_to": "2027-01-01T00:00:00+09:00",
+  "approved_at": "2026-10-30T15:00:00+09:00",
+  "file_name": "온샘소식_11월호_가정통신문.pdf",
+  "render": { "format": "pdf_text", "layout": "two_column", "rotate": 0, "scan_quality": null }
+}

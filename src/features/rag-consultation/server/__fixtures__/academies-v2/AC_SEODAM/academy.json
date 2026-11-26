@@ -1,0 +1,21 @@
+{
+  "academy_id": "AC_SEODAM",
+  "display_name": "서담국어논술학원",
+  "aliases": ["서담국어논술", "서담국어", "서담학원", "서담"],
+  "classes": [
+    { "class_id": "SD_E3_READ", "name": "초3 독서논술반", "aliases": ["초3 독서논술", "초3반", "초등 3학년 독서논술"], "subject": "독서논술", "grade": "초3" },
+    { "class_id": "SD_E4_READ", "name": "초4 독서논술반", "aliases": ["초4 독서논술", "초4반", "초등 4학년 독서논술"], "subject": "독서논술", "grade": "초4" },
+    { "class_id": "SD_E5_READ", "name": "초5 독서논술반", "aliases": ["초5 독서논술", "초5반", "초등 5학년 독서논술"], "subject": "독서논술", "grade": "초5" },
+    { "class_id": "SD_E6_READ", "name": "초6 독서논술반", "aliases": ["초6 독서논술", "초6반", "초등 6학년 독서논술"], "subject": "독서논술", "grade": "초6" },
+    { "class_id": "SD_M1_BASE", "name": "중1 국어 기본반", "aliases": ["중1 기본반", "중1 국어", "중1반"], "subject": "국어", "grade": "중1" },
+    { "class_id": "SD_M2_SD", "name": "서담중 2학년반", "aliases": ["서담중 2학년", "서담중2반", "서담중 중2반"], "subject": "국어", "grade": "중2" },
+    { "class_id": "SD_M2_SDG", "name": "서담여중 2학년반", "aliases": ["서담여중 2학년", "서담여중2반", "서담여중 중2반"], "subject": "국어", "grade": "중2" },
+    { "class_id": "SD_M2_HS", "name": "해솔중 2학년반", "aliases": ["해솔중 2학년", "해솔중2반", "해솔중 중2반"], "subject": "국어", "grade": "중2" },
+    { "class_id": "SD_M3_ALL", "name": "중3 내신·고입 국어반", "aliases": ["중3 국어", "중3반", "고입 국어반"], "subject": "국어", "grade": "중3" },
+    { "class_id": "SD_H1_CSAT", "name": "고1 수능국어반", "aliases": ["고1 수능국어", "고1반", "고1 국어"], "subject": "국어", "grade": "고1" },
+    { "class_id": "SD_H2_CSAT", "name": "고2 수능국어반", "aliases": ["고2 수능국어", "고2반", "고2 국어"], "subject": "국어", "grade": "고2" },
+    { "class_id": "SD_ESSAY_1ON1", "name": "1:1 논술 첨삭 코스", "aliases": ["1:1 첨삭", "논술 첨삭", "첨삭 코스"], "subject": "논술", "grade": "초3~고2" }
+  ],
+  "units": ["비문학 독해", "문학 감상", "어휘·어법", "문법", "논술 쓰기"],
+  "question_types": ["사실 확인", "추론", "적용", "서술형"]
+}

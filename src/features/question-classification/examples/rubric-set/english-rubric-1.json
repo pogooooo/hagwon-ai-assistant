@@ -1,0 +1,66 @@
+{
+  "assignmentId": "english-rubric-1",
+  "subject": "E",
+  "items": [
+    {
+      "itemId": "english-ex-01",
+      "page": 1,
+      "displayNumber": "1",
+      "text": "Trees shade sidewalks. They also cool nearby buildings. 두 문장을 함께 포괄하는 제목을 고르시오."
+    },
+    {
+      "itemId": "english-ex-02",
+      "page": 1,
+      "displayNumber": "2",
+      "text": "Trees shade sidewalks. They also cool nearby buildings. 나무가 무엇에 그늘을 만드는지 본문에서 찾으시오."
+    },
+    {
+      "itemId": "english-ex-03",
+      "page": 1,
+      "displayNumber": "3",
+      "text": "The tour is free, but visitors must book by Friday. 방문객의 예약 마감일은 언제인가?"
+    },
+    {
+      "itemId": "english-ex-04",
+      "page": 1,
+      "displayNumber": "4",
+      "text": "The tour is free, but visitors must book by Friday. 이 안내문을 쓴 목적은 무엇인가?"
+    },
+    {
+      "itemId": "english-ex-05",
+      "page": 1,
+      "displayNumber": "5",
+      "text": "The first version failed. Its errors showed us what to change. Failure was our map. 마지막 문장의 ‘Failure was our map’이 뜻하는 바로 가장 적절한 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-06",
+      "page": 1,
+      "displayNumber": "6",
+      "text": "The first version failed. Its errors showed us what to change. Failure was our map. ‘Its errors’에서 ‘Its’가 가리키는 대상을 고르시오."
+    },
+    {
+      "itemId": "english-ex-07",
+      "page": 1,
+      "displayNumber": "7",
+      "text": "The last bus leaves before evening classes end. Please run one later service. 필자가 요구하는 조치로 가장 적절한 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-08",
+      "page": 1,
+      "displayNumber": "8",
+      "text": "The last bus leaves before evening classes end. Please run one later service. 마지막 버스는 저녁 수업이 끝나기 전과 후 중 언제 떠나는가?"
+    },
+    {
+      "itemId": "english-ex-09",
+      "page": 1,
+      "displayNumber": "9",
+      "text": "The last bus leaves before evening classes end. Please run one later service. 윗글의 요지로 가장 적절한 것은?"
+    },
+    {
+      "itemId": "english-ex-10",
+      "page": 1,
+      "displayNumber": "10",
+      "text": "The last bus leaves before evening classes end. Please run one later service. 필자가 주장하는 바로 가장 적절한 것은?"
+    }
+  ]
+}

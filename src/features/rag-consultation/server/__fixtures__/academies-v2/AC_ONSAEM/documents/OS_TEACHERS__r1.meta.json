@@ -1,0 +1,9 @@
+{
+  "document_id": "OS_TEACHERS", "revision": 1, "document_type": "teacher",
+  "title": "온샘초등종합학원 강사 소개 (2026년 2학기)", "status": "approved_active",
+  "visibility": "academy_public", "class_id": null, "student_id": null,
+  "valid_from": "2026-09-01T00:00:00+09:00", "valid_to": null,
+  "approved_at": "2026-08-25T10:00:00+09:00",
+  "file_name": "강사소개_2026_2학기.txt",
+  "render": { "format": "txt", "layout": "single", "rotate": 0, "scan_quality": null }
+}

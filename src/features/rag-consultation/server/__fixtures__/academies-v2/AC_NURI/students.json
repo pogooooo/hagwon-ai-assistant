@@ -1,0 +1,72 @@
+[
+  {
+    "student_id": "NR_STU_001",
+    "academy_id": "AC_NURI",
+    "name": "윤하린",
+    "aliases": [
+      "하린",
+      "하린이"
+    ],
+    "class_ids": [
+      "NR_L2_SCR"
+    ]
+  },
+  {
+    "student_id": "NR_STU_002",
+    "academy_id": "AC_NURI",
+    "name": "윤도건",
+    "aliases": [
+      "도건",
+      "도건이"
+    ],
+    "class_ids": [
+      "NR_L6_ALG_SAT"
+    ]
+  },
+  {
+    "student_id": "NR_STU_003",
+    "academy_id": "AC_NURI",
+    "name": "백서우",
+    "aliases": [
+      "서우"
+    ],
+    "class_ids": [
+      "NR_L4_PY"
+    ]
+  },
+  {
+    "student_id": "NR_STU_004",
+    "academy_id": "AC_NURI",
+    "name": "차민결",
+    "aliases": [
+      "민결",
+      "민결이"
+    ],
+    "class_ids": [
+      "NR_L5_ALG_SAT"
+    ]
+  },
+  {
+    "student_id": "NR_STU_005",
+    "academy_id": "AC_NURI",
+    "name": "임채아",
+    "aliases": [
+      "채아"
+    ],
+    "class_ids": [
+      "NR_L3_PY"
+    ]
+  },
+  {
+    "student_id": "NR_STU_006",
+    "academy_id": "AC_NURI",
+    "name": "오지환",
+    "aliases": [
+      "지환",
+      "지환이"
+    ],
+    "class_ids": [
+      "NR_APP"
+    ]
+  }
+]

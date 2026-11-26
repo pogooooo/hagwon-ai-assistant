@@ -1,0 +1,28 @@
+{
+  "dataset_name": "AXR_RAG_Synthetic_Preimplementation_v1",
+  "created_on": "2026-11-01",
+  "synthetic_only": true,
+  "records": {
+    "users": 9,
+    "documents": 18,
+    "facts": 17,
+    "test_cases": 81
+  },
+  "case_categories": {
+    "api_failure": 5,
+    "entity_binding": 8,
+    "insufficiency": 8,
+    "multi_turn": 8,
+    "private_analysis": 12,
+    "public_faq": 12,
+    "security": 10,
+    "table_cell": 8,
+    "temporal_version": 10
+  },
+  "split_counts": {
+    "dev": 57,
+    "holdout": 24
+  },
+  "critical_warning": "모든 학생·가격·기관 정보는 가상. 실제 원생 개인정보와 혼합 금지.",
+  "evaluation_status": "스키마·출처 참조만 검사 완료 예정; RAG 검색/AI 성능 실험은 미수행"
+}

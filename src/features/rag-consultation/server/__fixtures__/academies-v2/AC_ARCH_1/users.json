@@ -1,0 +1,10 @@
+[
+  {
+    "user_id": "AC_ARCH_1_VISITOR",
+    "academy_id": "AC_ARCH_1",
+    "role": "visitor",
+    "allowed_student_ids": [],
+    "allowed_class_ids": [],
+    "student_aliases": {}
+  }
+]

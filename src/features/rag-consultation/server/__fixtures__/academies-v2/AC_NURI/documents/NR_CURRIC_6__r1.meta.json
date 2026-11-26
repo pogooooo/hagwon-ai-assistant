@@ -1,0 +1,20 @@
+{
+  "document_id": "NR_CURRIC_6",
+  "revision": 1,
+  "document_type": "schedule",
+  "title": "누리코딩아카데미 2026년 6기 과정별 주차 커리큘럼",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-11-02T00:00:00+09:00",
+  "valid_to": "2027-01-04T00:00:00+09:00",
+  "approved_at": "2026-10-26T10:00:00+09:00",
+  "file_name": "6기_과정별_주차_커리큘럼.pdf",
+  "render": {
+    "format": "pdf_text",
+    "layout": "single",
+    "rotate": 0,
+    "scan_quality": null
+  }
+}

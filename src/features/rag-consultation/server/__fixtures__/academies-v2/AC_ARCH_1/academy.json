@@ -1,0 +1,54 @@
+{
+  "academy_id": "AC_ARCH_1",
+  "display_name": "모래별 창작학원",
+  "aliases": [],
+  "classes": [
+    {
+      "class_id": "AC_ARCH_1_C0",
+      "name": "초3 채색반",
+      "grade": "초3",
+      "subject": "미술",
+      "aliases": [
+        "초3 채색 수업"
+      ]
+    },
+    {
+      "class_id": "AC_ARCH_1_C1",
+      "name": "초4 소묘반",
+      "grade": "초4",
+      "subject": "미술",
+      "aliases": [
+        "초4 소묘 수업"
+      ]
+    },
+    {
+      "class_id": "AC_ARCH_1_C2",
+      "name": "초5 조형반",
+      "grade": "초5",
+      "subject": "미술",
+      "aliases": [
+        "초5 조형 수업"
+      ]
+    },
+    {
+      "class_id": "AC_ARCH_1_C3",
+      "name": "초6 판화반",
+      "grade": "초6",
+      "subject": "미술",
+      "aliases": [
+        "초6 판화 수업"
+      ]
+    },
+    {
+      "class_id": "AC_ARCH_1_C4",
+      "name": "중1 표현반",
+      "grade": "중1",
+      "subject": "미술",
+      "aliases": [
+        "중1 표현 수업"
+      ]
+    }
+  ],
+  "units": [],
+  "question_types": []
+}

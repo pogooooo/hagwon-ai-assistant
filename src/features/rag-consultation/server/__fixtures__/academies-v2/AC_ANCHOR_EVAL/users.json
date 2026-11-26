@@ -1,0 +1,10 @@
+[
+  {
+    "user_id": "ANCHOR_VISITOR",
+    "academy_id": "AC_ANCHOR_EVAL",
+    "role": "visitor",
+    "allowed_student_ids": [],
+    "allowed_class_ids": [],
+    "student_aliases": {}
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "document_id": "NR_FEE_2026_H2",
+  "revision": 1,
+  "document_type": "fee",
+  "title": "누리코딩아카데미 2026년 하반기 과정 수강료 안내",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-07-06T00:00:00+09:00",
+  "valid_to": "2027-01-04T00:00:00+09:00",
+  "approved_at": "2026-06-22T10:00:00+09:00",
+  "file_name": "2026_하반기_과정_수강료_안내.pdf",
+  "render": {
+    "format": "pdf_text",
+    "layout": "single",
+    "rotate": 0,
+    "scan_quality": null
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "academy_id": "AC_TEST_A",
+  "display_name": "[가상] 테스트 교습소",
+  "aliases": ["테스트 교습소", "테스트교습소"],
+  "classes": [
+    {
+      "class_id": "TA_E_MATH",
+      "name": "초등 수학반",
+      "aliases": ["초등 수학", "초등반"],
+      "subject": "수학",
+      "grade": "초등"
+    },
+    {
+      "class_id": "TA_M2_EXAM",
+      "name": "중2 내신반",
+      "aliases": ["중2 내신", "중2반"],
+      "subject": "수학",
+      "grade": "중2"
+    },
+    {
+      "class_id": "TA_M3",
+      "name": "중3반",
+      "aliases": ["중3"],
+      "subject": "수학",
+      "grade": "중3"
+    },
+    {
+      "class_id": "TA_H1",
+      "name": "고1반",
+      "aliases": ["고1"],
+      "subject": "수학",
+      "grade": "고1"
+    }
+  ],
+  "units": [],
+  "question_types": []
+}

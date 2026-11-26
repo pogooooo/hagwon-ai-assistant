@@ -1,0 +1,91 @@
+[
+  {
+    "user_id": "VISITOR_A",
+    "role": "visitor",
+    "academy_id": "AC_A",
+    "allowed_student_ids": [],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "GUARDIAN_A",
+    "role": "guardian",
+    "academy_id": "AC_A",
+    "allowed_student_ids": [
+      "ST_A01",
+      "ST_A02"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "GUARDIAN_A02",
+    "role": "guardian",
+    "academy_id": "AC_A",
+    "allowed_student_ids": [
+      "ST_A02"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "STUDENT_A01",
+    "role": "student",
+    "academy_id": "AC_A",
+    "allowed_student_ids": [
+      "ST_A01"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "INSTRUCTOR_ADV",
+    "role": "teacher",
+    "academy_id": "AC_A",
+    "allowed_student_ids": [
+      "ST_A01",
+      "ST_A02"
+    ],
+    "allowed_class_ids": [
+      "CL_ADV"
+    ]
+  },
+  {
+    "user_id": "INSTRUCTOR_REG",
+    "role": "teacher",
+    "academy_id": "AC_A",
+    "allowed_student_ids": [],
+    "allowed_class_ids": [
+      "CL_REG"
+    ]
+  },
+  {
+    "user_id": "ADMIN_A",
+    "role": "admin",
+    "academy_id": "AC_A",
+    "allowed_student_ids": [
+      "ST_A01",
+      "ST_A02"
+    ],
+    "allowed_class_ids": [
+      "CL_ADV",
+      "CL_REG"
+    ]
+  },
+  {
+    "user_id": "ADMIN_B",
+    "role": "admin",
+    "academy_id": "AC_B",
+    "allowed_student_ids": [
+      "ST_B01"
+    ],
+    "allowed_class_ids": [
+      "CL_BADV"
+    ]
+  },
+  {
+    "user_id": "GUARDIAN_B",
+    "role": "guardian",
+    "academy_id": "AC_B",
+    "allowed_student_ids": [
+      "ST_B01"
+    ],
+    "allowed_class_ids": []
+  }
+]

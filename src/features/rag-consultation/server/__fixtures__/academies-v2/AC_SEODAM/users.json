@@ -1,0 +1,15 @@
+[
+  { "user_id": "SD_VISITOR", "role": "visitor", "academy_id": "AC_SEODAM", "allowed_student_ids": [], "allowed_class_ids": [] },
+  { "user_id": "SD_GUARDIAN_KIM", "role": "guardian", "academy_id": "AC_SEODAM",
+    "allowed_student_ids": ["SD_STU_001", "SD_STU_002"], "allowed_class_ids": [],
+    "student_aliases": { "SD_STU_002": ["첫째", "큰애", "아들"], "SD_STU_001": ["둘째", "작은애", "딸"] } },
+  { "user_id": "SD_GUARDIAN_LEE", "role": "guardian", "academy_id": "AC_SEODAM", "allowed_student_ids": ["SD_STU_004"], "allowed_class_ids": [] },
+  { "user_id": "SD_GUARDIAN_JUNG", "role": "guardian", "academy_id": "AC_SEODAM", "allowed_student_ids": ["SD_STU_006"], "allowed_class_ids": [] },
+  { "user_id": "SD_STUDENT_PARK", "role": "student", "academy_id": "AC_SEODAM", "allowed_student_ids": ["SD_STU_003"], "allowed_class_ids": [] },
+  { "user_id": "SD_STUDENT_CHOI", "role": "student", "academy_id": "AC_SEODAM", "allowed_student_ids": ["SD_STU_005"], "allowed_class_ids": [] },
+  { "user_id": "SD_TEACHER_BAEK", "role": "teacher", "academy_id": "AC_SEODAM",
+    "allowed_student_ids": ["SD_STU_002", "SD_STU_003"], "allowed_class_ids": ["SD_M2_SD", "SD_M2_SDG"] },
+  { "user_id": "SD_ADMIN", "role": "admin", "academy_id": "AC_SEODAM",
+    "allowed_student_ids": ["SD_STU_001", "SD_STU_002", "SD_STU_003", "SD_STU_004", "SD_STU_005", "SD_STU_006"],
+    "allowed_class_ids": ["SD_E3_READ", "SD_E4_READ", "SD_E5_READ", "SD_E6_READ", "SD_M1_BASE", "SD_M2_SD", "SD_M2_SDG", "SD_M2_HS", "SD_M3_ALL", "SD_H1_CSAT", "SD_H2_CSAT", "SD_ESSAY_1ON1"] }
+]

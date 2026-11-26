@@ -1,0 +1,2781 @@
+{
+  "kind": "synthetic-operational-acceptance",
+  "realVoiceRecordings": false,
+  "voice": {
+    "pass": 29,
+    "sameAsChat": 30,
+    "total": 30,
+    "results": [
+      {
+        "question": "학원 주소가 어디예요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+        "answer": {
+          "status": "answered",
+          "answer": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주소 · 문단 1"
+            }
+          ],
+          "requestId": "55512260-34a7-4507-bd04-7945788ef6f2",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 76.35620000000006
+      },
+      {
+        "question": "학원 주소 알려줘.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+        "answer": {
+          "status": "answered",
+          "answer": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주소 · 문단 1"
+            }
+          ],
+          "requestId": "304bf76e-a9c1-4bf9-a51e-361c1bf302b9",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 11.056500000000028
+      },
+      {
+        "question": "방문할 주소는?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+        "answer": {
+          "status": "answered",
+          "answer": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주소 · 문단 1"
+            }
+          ],
+          "requestId": "2316ac01-e393-41e6-b91a-3e65be71351b",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 10.498899999999935
+      },
+      {
+        "question": "등록된 주소를 알려주세요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+        "answer": {
+          "status": "answered",
+          "answer": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주소 · 문단 1"
+            }
+          ],
+          "requestId": "1021d76e-6af7-407c-9c06-731850cd3780",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 9.701199999999972
+      },
+      {
+        "question": "학원 위치와 주소 알려주세요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+        "answer": {
+          "status": "answered",
+          "answer": "[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주소 · 문단 1"
+            }
+          ],
+          "requestId": "3bbbe37d-a177-4cb7-bbd7-e5f00e2caef1",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 14.373099999999909
+      },
+      {
+        "question": "주차 가능한가요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주차 · 문단 2"
+            }
+          ],
+          "requestId": "a128d37c-7924-4286-9def-34fa07a0fba5",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 13.0625
+      },
+      {
+        "question": "주차 공간이 있나요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주차 · 문단 2"
+            }
+          ],
+          "requestId": "e6a2fa2e-c485-4ee9-ac15-40fcc039d8b6",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 7.334100000000035
+      },
+      {
+        "question": "주차 안내를 알려주세요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주차 · 문단 2"
+            }
+          ],
+          "requestId": "c55f2abd-7adb-4aa3-8dab-4269a36fd2ca",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.408500000000004
+      },
+      {
+        "question": "학원 주차는 어떻게 하나요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주차 · 문단 2"
+            }
+          ],
+          "requestId": "5b1d4e66-81a3-409d-afdd-7977040a89fc",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 7.382100000000037
+      },
+      {
+        "question": "주차장을 이용할 수 있나요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"주차장은 건물 지하에 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "주차 · 문단 2"
+            }
+          ],
+          "requestId": "a3d875e2-5a87-49c1-a964-7e6dac34828b",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 9.004000000000133
+      },
+      {
+        "question": "와이파이가 있나요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "와이파이 · 문단 3"
+            }
+          ],
+          "requestId": "2280db3a-ee8f-44e9-9b56-49720b7cabfd",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 7.229800000000068
+      },
+      {
+        "question": "무선인터넷 이용 가능한가요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "와이파이 · 문단 3"
+            }
+          ],
+          "requestId": "ab7462f7-3b1c-428b-875f-32ed9f45c58a",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.51480000000015
+      },
+      {
+        "question": "학원 와이파이 안내해주세요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "와이파이 · 문단 3"
+            }
+          ],
+          "requestId": "2af6bc36-fbe1-4ecf-aef4-db9eae8d1787",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 7.253999999999905
+      },
+      {
+        "question": "인터넷을 사용할 수 있나요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "와이파이 · 문단 3"
+            }
+          ],
+          "requestId": "23dc2fcc-8ddb-4e75-8fa2-1615eb01a464",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.935699999999997
+      },
+      {
+        "question": "wifi 사용 가능해요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"와이파이는 학원에서 이용할 수 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "와이파이 · 문단 3"
+            }
+          ],
+          "requestId": "b36185a6-a81c-44c2-8188-79664b624aa6",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 7.360899999999901
+      },
+      {
+        "question": "자습실이 있나요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "자습실 · 문단 4"
+            }
+          ],
+          "requestId": "898af2e0-b8ca-4cad-9139-641bb13dafc3",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.560699999999997
+      },
+      {
+        "question": "자습 공간은 어디인가요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "자습실 · 문단 4"
+            }
+          ],
+          "requestId": "dc1095a8-6548-4d69-9d23-630f2e9af092",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 7.487599999999929
+      },
+      {
+        "question": "학원 자습실 위치 알려줘.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"\n[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"\n[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "자습실 · 문단 4, 주소 · 문단 1"
+            }
+          ],
+          "requestId": "32ec79f6-9080-4b0e-91f7-27f2451f84dd",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 9.260600000000068
+      },
+      {
+        "question": "독서실 위치를 알려주세요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"\n[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"\n[주소] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n주소: 충청남도 아산시 합성로 37",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "자습실 · 문단 4, 주소 · 문단 1"
+            }
+          ],
+          "requestId": "a377dc36-65bb-4cdd-91d5-63c9d31b8fbc",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.09089999999992
+      },
+      {
+        "question": "자습 안내 부탁해요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"",
+        "answer": {
+          "status": "answered",
+          "answer": "등록된 안내 자료에 따르면: \"자습실은 로비 옆에 있습니다.\"",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "자습실 · 문단 4"
+            }
+          ],
+          "requestId": "7d7ea71d-d5ef-43f4-ae3e-a5700fe5055b",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 14.262899999999945
+      },
+      {
+        "question": "환불은 어떻게 신청하나요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "환불 · 문단 5"
+            }
+          ],
+          "requestId": "5c1368ff-9dc6-4428-9ec1-499dd7611e46",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.296800000000076
+      },
+      {
+        "question": "환불 신청 안내해주세요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "환불 · 문단 5"
+            }
+          ],
+          "requestId": "9eabe8b1-b2ca-4946-8e50-7178de15bb79",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.666500000000042
+      },
+      {
+        "question": "환급 신청 방법은?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "환불 · 문단 5"
+            }
+          ],
+          "requestId": "744725fe-e320-43ed-9f98-c2dfe34b75b8",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.108899999999949
+      },
+      {
+        "question": "수강을 그만두면 어떻게 하나요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "환불 · 문단 5"
+            }
+          ],
+          "requestId": "c02e24a4-4a6c-4715-939e-1210a8b87af2",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 7.745400000000018
+      },
+      {
+        "question": "환불 규정 알려주세요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[환불] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n환불 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "환불 · 문단 5"
+            }
+          ],
+          "requestId": "7278771f-96fe-4e67-87b8-6ea9b609da0d",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 7.7871000000000095
+      },
+      {
+        "question": "셔틀 이용 방법 알려줘.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[셔틀] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n셔틀 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[셔틀] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n셔틀 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "셔틀 · 문단 6"
+            }
+          ],
+          "requestId": "eb5ae1a1-5852-4a11-9098-7c579aacbeaa",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 9.445600000000013
+      },
+      {
+        "question": "통학버스는 어떻게 신청해요?",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[셔틀] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n셔틀 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[셔틀] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n셔틀 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "셔틀 · 문단 6"
+            }
+          ],
+          "requestId": "396168db-148e-4d83-8ea8-1d91ff061e6c",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.509400000000142
+      },
+      {
+        "question": "셔틀 신청 안내해주세요.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[셔틀] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n셔틀 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[셔틀] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n셔틀 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "셔틀 · 문단 6"
+            }
+          ],
+          "requestId": "25f5f719-54e6-471e-bdae-8826bfe12c3c",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.495499999999993
+      },
+      {
+        "question": "학원 셔틀을 이용할 수 있나요?",
+        "pass": false,
+        "sameAsChat": true,
+        "spoken": "확인할 내용이 있어 화면에 안내했습니다. 학원 담당자의 확인이 필요할 수 있습니다.",
+        "answer": {
+          "status": "abstained",
+          "answer": "요청하신 조건의 차량 운행을 승인 자료에서 확인할 수 없습니다.",
+          "citations": [],
+          "requestId": "0d24b265-2abc-4f95-a6e1-10ab96187001",
+          "handoff": {
+            "needed": true,
+            "reasonCode": "INSUFFICIENT_EVIDENCE"
+          },
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 9.769600000000082
+      },
+      {
+        "question": "통학버스 이용 안내 부탁합니다.",
+        "pass": true,
+        "sameAsChat": true,
+        "spoken": "[셔틀] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n셔틀 신청은 안내 데스크에서 접수합니다.",
+        "answer": {
+          "status": "answered",
+          "answer": "[셔틀] 합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17 기준 안내입니다.\n셔틀 신청은 안내 데스크에서 접수합니다.",
+          "citations": [
+            {
+              "sourceId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77:r2:body",
+              "documentId": "knowledge-1b5570ee-822f-427f-b399-8bcc9a813d77",
+              "title": "합성 학원 운영 안내 · 합성 평가 자료 · 원장 확인 2026-11-17",
+              "revision": 2,
+              "location": "셔틀 · 문단 6"
+            }
+          ],
+          "requestId": "85a42f29-4ea3-486c-915e-2fc05f5c88f0",
+          "operations": {
+            "studentIds": ["TA_STU_001"]
+          }
+        },
+        "ms": 8.439100000000053
+      }
+    ]
+  },
+  "rankings": {
+    "pass": 20,
+    "total": 20,
+    "results": [
+      {
+        "start": "2026-12-05",
+        "end": "2026-12-07",
+        "canceled": "2026-11-28",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-04",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-08",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-05",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 0 (2026-12-05~2026-12-07)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-07",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 0 (2026-12-05~2026-12-07)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-06",
+        "end": "2026-12-08",
+        "canceled": "2026-11-29",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-05",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-09",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-08",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 1 (2026-12-06~2026-12-08)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-06",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 1 (2026-12-06~2026-12-08)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-07",
+        "end": "2026-12-09",
+        "canceled": "2026-11-30",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-06",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-10",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-07",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 2 (2026-12-07~2026-12-09)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-09",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 2 (2026-12-07~2026-12-09)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-08",
+        "end": "2026-12-10",
+        "canceled": "2026-12-01",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-07",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-11",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-10",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 3 (2026-12-08~2026-12-10)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-08",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 3 (2026-12-08~2026-12-10)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-09",
+        "end": "2026-12-11",
+        "canceled": "2026-12-02",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-08",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-12",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-09",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 4 (2026-12-09~2026-12-11)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-11",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 4 (2026-12-09~2026-12-11)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-10",
+        "end": "2026-12-12",
+        "canceled": "2026-12-03",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-09",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-13",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-12",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 5 (2026-12-10~2026-12-12)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-10",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 5 (2026-12-10~2026-12-12)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-11",
+        "end": "2026-12-13",
+        "canceled": "2026-12-04",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-10",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-14",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-11",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 6 (2026-12-11~2026-12-13)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-13",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 6 (2026-12-11~2026-12-13)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-12",
+        "end": "2026-12-14",
+        "canceled": "2026-12-05",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-11",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-15",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-14",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 7 (2026-12-12~2026-12-14)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-12",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 7 (2026-12-12~2026-12-14)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-13",
+        "end": "2026-12-15",
+        "canceled": "2026-12-06",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-12",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-16",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-13",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 8 (2026-12-13~2026-12-15)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-15",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 8 (2026-12-13~2026-12-15)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-14",
+        "end": "2026-12-16",
+        "canceled": "2026-12-07",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-13",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-17",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-16",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 9 (2026-12-14~2026-12-16)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-14",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 9 (2026-12-14~2026-12-16)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-15",
+        "end": "2026-12-17",
+        "canceled": "2026-12-08",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-14",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-18",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-15",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 10 (2026-12-15~2026-12-17)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-17",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 10 (2026-12-15~2026-12-17)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-16",
+        "end": "2026-12-18",
+        "canceled": "2026-12-09",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-15",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-19",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-18",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 11 (2026-12-16~2026-12-18)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-16",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 11 (2026-12-16~2026-12-18)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-17",
+        "end": "2026-12-19",
+        "canceled": "2026-12-10",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-16",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-20",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-17",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 12 (2026-12-17~2026-12-19)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-19",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 12 (2026-12-17~2026-12-19)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-18",
+        "end": "2026-12-20",
+        "canceled": "2026-12-11",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-17",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-21",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-20",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 13 (2026-12-18~2026-12-20)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-18",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 13 (2026-12-18~2026-12-20)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-19",
+        "end": "2026-12-21",
+        "canceled": "2026-12-12",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-18",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-22",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-19",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 14 (2026-12-19~2026-12-21)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-21",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 14 (2026-12-19~2026-12-21)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-20",
+        "end": "2026-12-22",
+        "canceled": "2026-12-13",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-19",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-23",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-22",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 15 (2026-12-20~2026-12-22)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-20",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 15 (2026-12-20~2026-12-22)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-21",
+        "end": "2026-12-23",
+        "canceled": "2026-12-14",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-20",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-24",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-21",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 16 (2026-12-21~2026-12-23)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-23",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 16 (2026-12-21~2026-12-23)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-22",
+        "end": "2026-12-24",
+        "canceled": "2026-12-15",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-21",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-25",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-24",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 17 (2026-12-22~2026-12-24)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-22",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 3"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 17 (2026-12-22~2026-12-24)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      },
+      {
+        "start": "2026-12-23",
+        "end": "2026-12-25",
+        "canceled": "2026-12-16",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-22",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-26",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 3
+          },
+          {
+            "slot": {
+              "date": "2026-12-23",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 18 (2026-12-23~2026-12-25)"],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-25",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 1"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 18 (2026-12-23~2026-12-25)"],
+            "beforeExam": false,
+            "index": 1
+          }
+        ]
+      },
+      {
+        "start": "2026-12-24",
+        "end": "2026-12-26",
+        "canceled": "2026-12-17",
+        "pass": true,
+        "result": [
+          {
+            "slot": {
+              "date": "2026-12-23",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": true,
+            "index": 1
+          },
+          {
+            "slot": {
+              "date": "2026-12-27",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": [],
+            "beforeExam": false,
+            "index": 0
+          },
+          {
+            "slot": {
+              "date": "2026-12-26",
+              "start": "16:00",
+              "end": "17:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 19 (2026-12-24~2026-12-26)"],
+            "beforeExam": false,
+            "index": 2
+          },
+          {
+            "slot": {
+              "date": "2026-12-24",
+              "start": "17:00",
+              "end": "18:00",
+              "room": "교실 2"
+            },
+            "attendance": {
+              "available": [],
+              "unavailable": [],
+              "unknown": []
+            },
+            "examConflicts": ["합성 시험 19 (2026-12-24~2026-12-26)"],
+            "beforeExam": false,
+            "index": 3
+          }
+        ]
+      }
+    ]
+  },
+  "schoolDates": {
+    "pass": 20,
+    "total": 20,
+    "results": [
+      {
+        "question": "새봄중학교 2학년 2027년 중간고사 날짜는 언제인가요?",
+        "expectedDates": ["2027-04-20"],
+        "actualDates": ["2027-04-20"],
+        "pass": true,
+        "id": "eaa237cd-8c7e-4667-8641-63153286969e",
+        "ms": 10.884199999999964,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 중간고사 시험 일정] 새봄중학교 2학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 학교: 새봄중학교 / 학년: 2학년 / 시험 일정: 중간고사 2027-04-20\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-1fdb0e956cd1617ce5990919ff8f402bcf2e5280f5ef6bdc8664ee3dca955a18:r212146912:body",
+              "documentId": "school-1fdb0e956cd1617ce5990919ff8f402bcf2e5280f5ef6bdc8664ee3dca955a18",
+              "title": "새봄중학교 2학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 212146912,
+              "location": "중2 내신반 새봄중학교 2학년 중간고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중2 내신반 새봄중학교 2학년 중간고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "6eef1b66-a318-406d-b074-ff51558e992e",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "2027년 새봄중학교 2학년 중간고사 일정 알려주세요.",
+        "expectedDates": ["2027-04-20"],
+        "actualDates": ["2027-04-20"],
+        "pass": true,
+        "id": "cbf4c05e-e74b-4697-b58a-fd517615fa09",
+        "ms": 4.988100000000031,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 중간고사 시험 일정] 새봄중학교 2학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 시험 일정: 중간고사 2027-04-20\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-1fdb0e956cd1617ce5990919ff8f402bcf2e5280f5ef6bdc8664ee3dca955a18:r212146912:body",
+              "documentId": "school-1fdb0e956cd1617ce5990919ff8f402bcf2e5280f5ef6bdc8664ee3dca955a18",
+              "title": "새봄중학교 2학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 212146912,
+              "location": "중2 내신반 새봄중학교 2학년 중간고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중2 내신반 새봄중학교 2학년 중간고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "1d49635c-b92e-46a2-8e02-6c51e7bb49f1",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 2학년 2027년 4월 시험 일정은?",
+        "expectedDates": ["2027-04-20"],
+        "actualDates": ["2027-04-20"],
+        "pass": true,
+        "id": "0a708cdf-857d-4199-908d-525d0c9f7da5",
+        "ms": 11.175600000000031,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 중간고사 시험 일정] 새봄중학교 2학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 시험 일정: 중간고사 2027-04-20\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-1fdb0e956cd1617ce5990919ff8f402bcf2e5280f5ef6bdc8664ee3dca955a18:r212146912:body",
+              "documentId": "school-1fdb0e956cd1617ce5990919ff8f402bcf2e5280f5ef6bdc8664ee3dca955a18",
+              "title": "새봄중학교 2학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 212146912,
+              "location": "중2 내신반 새봄중학교 2학년 중간고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중2 내신반 새봄중학교 2학년 중간고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "e91cf66e-6e85-4d4b-afb9-00be79ec9069",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 2학년 2027년 4월 고사 기간 알려줘.",
+        "expectedDates": ["2027-04-20"],
+        "actualDates": ["2027-04-20"],
+        "pass": true,
+        "id": "d2982415-9889-45b5-b87f-d30424d261d8",
+        "ms": 4.919699999999921,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 중간고사 시험 일정] 새봄중학교 2학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 학교: 새봄중학교 / 학년: 2학년 / 시험 일정: 중간고사 2027-04-20\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-1fdb0e956cd1617ce5990919ff8f402bcf2e5280f5ef6bdc8664ee3dca955a18:r212146912:body",
+              "documentId": "school-1fdb0e956cd1617ce5990919ff8f402bcf2e5280f5ef6bdc8664ee3dca955a18",
+              "title": "새봄중학교 2학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 212146912,
+              "location": "중2 내신반 새봄중학교 2학년 중간고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중2 내신반 새봄중학교 2학년 중간고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "5dfaeda0-6d22-4ba1-9ab9-500d51d951cf",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 2학년 2027년 7월 기말고사 날짜는?",
+        "expectedDates": ["2027-07-01"],
+        "actualDates": ["2027-07-01"],
+        "pass": true,
+        "id": "88a1fb6c-1607-4c31-aa67-4df4e31105c4",
+        "ms": 5.758800000000065,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 기말고사 시험 일정] 새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 학교: 새봄중학교 / 학년: 2학년 / 시험 일정: 기말고사 2027-07-01\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-0fb46fd8595d4167f48489756b9b3cbac4c3d18b14c4e5b576b5afd0a65bd36d:r120354290:body",
+              "documentId": "school-0fb46fd8595d4167f48489756b9b3cbac4c3d18b14c4e5b576b5afd0a65bd36d",
+              "title": "새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 120354290,
+              "location": "중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "8f556a5a-cf87-4a9d-b286-fcc290d261d6",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "2027년 7월 새봄중학교 2학년 시험 일정 알려주세요.",
+        "expectedDates": ["2027-07-01"],
+        "actualDates": ["2027-07-01"],
+        "pass": true,
+        "id": "6ee0bc4c-5868-4121-b86c-0fd623e5b2ea",
+        "ms": 5.047600000000102,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 기말고사 시험 일정] 새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 시험 일정: 기말고사 2027-07-01\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-0fb46fd8595d4167f48489756b9b3cbac4c3d18b14c4e5b576b5afd0a65bd36d:r120354290:body",
+              "documentId": "school-0fb46fd8595d4167f48489756b9b3cbac4c3d18b14c4e5b576b5afd0a65bd36d",
+              "title": "새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 120354290,
+              "location": "중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "15b8756b-1589-4232-87f8-573ae8fcbcb3",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 2학년 2027년 12월 기말고사 날짜는 언제인가요?",
+        "expectedDates": ["2027-12-10", "2027-12-11"],
+        "actualDates": ["2027-12-10", "2027-12-11"],
+        "pass": true,
+        "id": "2af3101b-b5a0-45ef-8ac5-1a1254131d48",
+        "ms": 4.820799999999963,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 기말고사 시험 일정] 새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 학교: 새봄중학교 / 학년: 2학년 / 시험 일정: 기말고사 2027-12-10\n반: 중2 내신반 / 학교: 새봄중학교 / 학년: 2학년 / 시험 일정: 기말고사 2027-12-11\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-c4a918692bb205d7d293f8a7d1fb30a8f1eff79c5e230d71fc98c82a99b194e3:r240471236:body",
+              "documentId": "school-c4a918692bb205d7d293f8a7d1fb30a8f1eff79c5e230d71fc98c82a99b194e3",
+              "title": "새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 240471236,
+              "location": "중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 2행 · 열 반, 학교, 학년, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "74235caf-3dad-4e12-a26f-208d7fb1cb35",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "2027년 12월 새봄중학교 2학년 기말고사 일정 알려줘.",
+        "expectedDates": ["2027-12-10", "2027-12-11"],
+        "actualDates": ["2027-12-10", "2027-12-11"],
+        "pass": true,
+        "id": "88ff0a0d-b1a5-4d2a-9887-cbf3c33f2ef5",
+        "ms": 6.158500000000004,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 기말고사 시험 일정] 새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 시험 일정: 기말고사 2027-12-10\n반: 중2 내신반 / 시험 일정: 기말고사 2027-12-11\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-c4a918692bb205d7d293f8a7d1fb30a8f1eff79c5e230d71fc98c82a99b194e3:r240471236:body",
+              "documentId": "school-c4a918692bb205d7d293f8a7d1fb30a8f1eff79c5e230d71fc98c82a99b194e3",
+              "title": "새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 240471236,
+              "location": "중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 2행 · 열 반, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "c6af456c-7d4e-42c3-893a-74382cd393ce",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 2학년 2027년 12월 시험 기간은?",
+        "expectedDates": ["2027-12-10", "2027-12-11"],
+        "actualDates": ["2027-12-10", "2027-12-11"],
+        "pass": true,
+        "id": "e322f009-2942-4c49-b747-ec6afa4f4450",
+        "ms": 4.923199999999952,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 기말고사 시험 일정] 새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 시험 일정: 기말고사 2027-12-10\n반: 중2 내신반 / 시험 일정: 기말고사 2027-12-11\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-c4a918692bb205d7d293f8a7d1fb30a8f1eff79c5e230d71fc98c82a99b194e3:r240471236:body",
+              "documentId": "school-c4a918692bb205d7d293f8a7d1fb30a8f1eff79c5e230d71fc98c82a99b194e3",
+              "title": "새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 240471236,
+              "location": "중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 2행 · 열 반, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "c681ca24-d333-4cdb-95df-6212cf6bc59f",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 2학년 2027년 12월 고사는 언제인가요?",
+        "expectedDates": ["2027-12-10", "2027-12-11"],
+        "actualDates": ["2027-12-10", "2027-12-11"],
+        "pass": true,
+        "id": "4f5be298-c35a-42e9-a389-a8651c8e8518",
+        "ms": 4.826799999999821,
+        "answer": {
+          "status": "answered",
+          "answer": "[중2 내신반 새봄중학교 2학년 기말고사 시험 일정] 새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중2 내신반 / 학교: 새봄중학교 / 학년: 2학년 / 시험 일정: 기말고사 2027-12-10\n반: 중2 내신반 / 학교: 새봄중학교 / 학년: 2학년 / 시험 일정: 기말고사 2027-12-11\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-c4a918692bb205d7d293f8a7d1fb30a8f1eff79c5e230d71fc98c82a99b194e3:r240471236:body",
+              "documentId": "school-c4a918692bb205d7d293f8a7d1fb30a8f1eff79c5e230d71fc98c82a99b194e3",
+              "title": "새봄중학교 2학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 240471236,
+              "location": "중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 표 1 · 2행 · 열 반, 학교, 학년, 시험 일정, 중2 내신반 새봄중학교 2학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "7d7c92cc-a440-492b-ada0-12615fdf7c96",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 3학년 2027년 중간고사 날짜는 언제인가요?",
+        "expectedDates": ["2027-04-22"],
+        "actualDates": ["2027-04-22"],
+        "pass": true,
+        "id": "4a4230e6-ee9d-4afd-9791-614160bf7126",
+        "ms": 6.236599999999953,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 중간고사 시험 일정] 새봄중학교 3학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 학교: 새봄중학교 / 학년: 3학년 / 시험 일정: 중간고사 2027-04-22\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-476640445e234185ed27da38d0f228566b7a0562729da1117056d3b136b4d457:r251660912:body",
+              "documentId": "school-476640445e234185ed27da38d0f228566b7a0562729da1117056d3b136b4d457",
+              "title": "새봄중학교 3학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 251660912,
+              "location": "중3반 새봄중학교 3학년 중간고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중3반 새봄중학교 3학년 중간고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "68ab4b17-798f-4311-8b35-141b842a91da",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "2027년 새봄중학교 3학년 중간고사 일정 알려주세요.",
+        "expectedDates": ["2027-04-22"],
+        "actualDates": ["2027-04-22"],
+        "pass": true,
+        "id": "4194b2f6-ce0f-4eab-9270-18bb81e01540",
+        "ms": 4.939300000000003,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 중간고사 시험 일정] 새봄중학교 3학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 시험 일정: 중간고사 2027-04-22\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-476640445e234185ed27da38d0f228566b7a0562729da1117056d3b136b4d457:r251660912:body",
+              "documentId": "school-476640445e234185ed27da38d0f228566b7a0562729da1117056d3b136b4d457",
+              "title": "새봄중학교 3학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 251660912,
+              "location": "중3반 새봄중학교 3학년 중간고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중3반 새봄중학교 3학년 중간고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "c7b7fd3b-93df-4610-a6a6-3d1c0394a93b",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 3학년 2027년 4월 시험 일정은?",
+        "expectedDates": ["2027-04-22"],
+        "actualDates": ["2027-04-22"],
+        "pass": true,
+        "id": "bedb8f08-dc98-42c2-bc41-83f7fa6bd81f",
+        "ms": 4.468499999999949,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 중간고사 시험 일정] 새봄중학교 3학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 시험 일정: 중간고사 2027-04-22\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-476640445e234185ed27da38d0f228566b7a0562729da1117056d3b136b4d457:r251660912:body",
+              "documentId": "school-476640445e234185ed27da38d0f228566b7a0562729da1117056d3b136b4d457",
+              "title": "새봄중학교 3학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 251660912,
+              "location": "중3반 새봄중학교 3학년 중간고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중3반 새봄중학교 3학년 중간고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "760e081c-405c-455e-aea7-7c3ae3e7f4e2",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 3학년 2027년 4월 고사 기간 알려줘.",
+        "expectedDates": ["2027-04-22"],
+        "actualDates": ["2027-04-22"],
+        "pass": true,
+        "id": "e163b3b1-cba7-43df-aa05-59858803ee31",
+        "ms": 4.4465999999999894,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 중간고사 시험 일정] 새봄중학교 3학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 학교: 새봄중학교 / 학년: 3학년 / 시험 일정: 중간고사 2027-04-22\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-476640445e234185ed27da38d0f228566b7a0562729da1117056d3b136b4d457:r251660912:body",
+              "documentId": "school-476640445e234185ed27da38d0f228566b7a0562729da1117056d3b136b4d457",
+              "title": "새봄중학교 3학년 중간고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 251660912,
+              "location": "중3반 새봄중학교 3학년 중간고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중3반 새봄중학교 3학년 중간고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "42c7f529-ef92-43ad-bfb3-31e557833411",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 3학년 2027년 7월 기말고사 날짜는?",
+        "expectedDates": ["2027-07-03"],
+        "actualDates": ["2027-07-03"],
+        "pass": true,
+        "id": "38a6b275-707f-459d-8a8e-edafa067f3d3",
+        "ms": 6.620000000000118,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 기말고사 시험 일정] 새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 학교: 새봄중학교 / 학년: 3학년 / 시험 일정: 기말고사 2027-07-03\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-e7eb566cd18c90615da06924b8c28d17c423e6a24bb6ac4a12e6d4f1356f732a:r227519802:body",
+              "documentId": "school-e7eb566cd18c90615da06924b8c28d17c423e6a24bb6ac4a12e6d4f1356f732a",
+              "title": "새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 227519802,
+              "location": "중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "9d31ed40-e313-46a7-bda7-1942432a31bc",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "2027년 7월 새봄중학교 3학년 시험 일정 알려주세요.",
+        "expectedDates": ["2027-07-03"],
+        "actualDates": ["2027-07-03"],
+        "pass": true,
+        "id": "a04ae9c1-7534-46b7-94e0-55eec293cebe",
+        "ms": 4.524699999999939,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 기말고사 시험 일정] 새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 시험 일정: 기말고사 2027-07-03\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-e7eb566cd18c90615da06924b8c28d17c423e6a24bb6ac4a12e6d4f1356f732a:r227519802:body",
+              "documentId": "school-e7eb566cd18c90615da06924b8c28d17c423e6a24bb6ac4a12e6d4f1356f732a",
+              "title": "새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 227519802,
+              "location": "중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "7a67e2a0-36c7-41a3-98b9-1bbaf80a528c",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 3학년 2027년 12월 기말고사 날짜는 언제인가요?",
+        "expectedDates": ["2027-12-15", "2027-12-16"],
+        "actualDates": ["2027-12-15", "2027-12-16"],
+        "pass": true,
+        "id": "dbb163be-c78e-4f98-8c42-b931ea4fb66b",
+        "ms": 4.841300000000047,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 기말고사 시험 일정] 새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 학교: 새봄중학교 / 학년: 3학년 / 시험 일정: 기말고사 2027-12-15\n반: 중3반 / 학교: 새봄중학교 / 학년: 3학년 / 시험 일정: 기말고사 2027-12-16\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-2a065141115b93a99c99e194fdc483762351901a0654de0643e03fa456957e38:r90031340:body",
+              "documentId": "school-2a065141115b93a99c99e194fdc483762351901a0654de0643e03fa456957e38",
+              "title": "새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 90031340,
+              "location": "중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 2행 · 열 반, 학교, 학년, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "e5e8c7a2-4fe0-4d52-87ec-302aba916456",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "2027년 12월 새봄중학교 3학년 기말고사 일정 알려줘.",
+        "expectedDates": ["2027-12-15", "2027-12-16"],
+        "actualDates": ["2027-12-15", "2027-12-16"],
+        "pass": true,
+        "id": "1bfe05b8-8858-4333-8b0d-6cb433819f8e",
+        "ms": 5.735999999999876,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 기말고사 시험 일정] 새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 시험 일정: 기말고사 2027-12-15\n반: 중3반 / 시험 일정: 기말고사 2027-12-16\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-2a065141115b93a99c99e194fdc483762351901a0654de0643e03fa456957e38:r90031340:body",
+              "documentId": "school-2a065141115b93a99c99e194fdc483762351901a0654de0643e03fa456957e38",
+              "title": "새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 90031340,
+              "location": "중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 2행 · 열 반, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "57fa40e4-1ca7-4c35-81e5-1815e6b200ba",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 3학년 2027년 12월 시험 기간은?",
+        "expectedDates": ["2027-12-15", "2027-12-16"],
+        "actualDates": ["2027-12-15", "2027-12-16"],
+        "pass": true,
+        "id": "96dd5371-6e3a-4a85-9295-57261f042e01",
+        "ms": 4.7275999999999385,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 기말고사 시험 일정] 새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 시험 일정: 기말고사 2027-12-15\n반: 중3반 / 시험 일정: 기말고사 2027-12-16\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-2a065141115b93a99c99e194fdc483762351901a0654de0643e03fa456957e38:r90031340:body",
+              "documentId": "school-2a065141115b93a99c99e194fdc483762351901a0654de0643e03fa456957e38",
+              "title": "새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 90031340,
+              "location": "중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 2행 · 열 반, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "8b7d0be0-d691-4058-87af-850a53f3f159",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      },
+      {
+        "question": "새봄중학교 3학년 2027년 12월 고사는 언제인가요?",
+        "expectedDates": ["2027-12-15", "2027-12-16"],
+        "actualDates": ["2027-12-15", "2027-12-16"],
+        "pass": true,
+        "id": "dcd06ad0-ae50-4057-b823-ddcdc4ba66c9",
+        "ms": 9.665300000000116,
+        "answer": {
+          "status": "answered",
+          "answer": "[중3반 새봄중학교 3학년 기말고사 시험 일정] 새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선 기준 안내입니다.\n반: 중3반 / 학교: 새봄중학교 / 학년: 3학년 / 시험 일정: 기말고사 2027-12-15\n반: 중3반 / 학교: 새봄중학교 / 학년: 3학년 / 시험 일정: 기말고사 2027-12-16\n학교 공개 학사일정 기준, 확인한 날짜 2026-11-17, 학교 공지가 우선입니다.",
+          "citations": [
+            {
+              "sourceId": "school-2a065141115b93a99c99e194fdc483762351901a0654de0643e03fa456957e38:r90031340:body",
+              "documentId": "school-2a065141115b93a99c99e194fdc483762351901a0654de0643e03fa456957e38",
+              "title": "새봄중학교 3학년 기말고사 · 학교 공개 학사일정 기준 · 확인 2026-11-17 · 학교 공지가 우선",
+              "revision": 90031340,
+              "location": "중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 1행 · 열 반, 학교, 학년, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 표 1 · 2행 · 열 반, 학교, 학년, 시험 일정, 중3반 새봄중학교 3학년 기말고사 시험 일정 · 문단 1"
+            }
+          ],
+          "requestId": "8b4edaca-00a0-4602-9eb3-b538da3b37ea",
+          "operations": {
+            "studentIds": []
+          }
+        }
+      }
+    ]
+  },
+  "liveNeis": {
+    "schools": [
+      {
+        "name": "아산중학교",
+        "returned": 5,
+        "total": 64,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:55.614Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8181015&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "온양중학교",
+        "returned": 5,
+        "total": 58,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:55.694Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8181011&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "온양여자중학교",
+        "returned": 5,
+        "total": 63,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:55.774Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8181010&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "온양용화중학교",
+        "returned": 5,
+        "total": 67,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:55.865Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8181004&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "아산고등학교",
+        "returned": 5,
+        "total": 120,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:55.982Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8140096&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "온양고등학교",
+        "returned": 5,
+        "total": 48,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:56.066Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8140061&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "온양여자고등학교",
+        "returned": 5,
+        "total": 49,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:56.161Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8140062&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "설화고등학교",
+        "returned": 5,
+        "total": 63,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:56.248Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8140266&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "배방고등학교",
+        "returned": 5,
+        "total": 64,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:56.326Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8140256&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      },
+      {
+        "name": "충남외국어고등학교",
+        "returned": 5,
+        "total": 65,
+        "complete": false,
+        "examCandidates": 0,
+        "fetchedAt": "2026-11-17T10:48:56.402Z",
+        "source": "https://open.neis.go.kr/hub/SchoolSchedule?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&SD_SCHUL_CODE=8140252&AA_FROM_YMD=20260801&AA_TO_YMD=20261231"
+      }
+    ],
+    "academySearch": {
+      "total": 17,
+      "complete": false,
+      "fetchedAt": "2026-11-17T10:48:56.533Z",
+      "source": "https://open.neis.go.kr/hub/acaInsTiInfo?Type=json&pSize=5&ATPT_OFCDC_SC_CODE=N10&ADMST_ZONE_NM=%EC%95%84%EC%82%B0%EC%8B%9C&ACA_NM=%EC%82%BC%EC%84%B1"
+    },
+    "academyReturned": 5
+  },
+  "excludedFeatures": ["F2 conversation-to-knowledge: removed at user request"]
+}

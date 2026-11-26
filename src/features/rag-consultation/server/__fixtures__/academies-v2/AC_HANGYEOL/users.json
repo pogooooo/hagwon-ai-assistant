@@ -1,0 +1,90 @@
+[
+  {
+    "user_id": "HK_VISITOR",
+    "role": "visitor",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": [],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "HK_GUARDIAN_BAE",
+    "role": "guardian",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_001", "HK_STU_002"],
+    "allowed_class_ids": [],
+    "student_aliases": {
+      "HK_STU_001": ["첫째", "큰애", "딸", "누나"],
+      "HK_STU_002": ["둘째", "작은애", "막내", "아들"]
+    }
+  },
+  {
+    "user_id": "HK_GUARDIAN_LIM",
+    "role": "guardian",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_003"],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "HK_GUARDIAN_KWAK",
+    "role": "guardian",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_004"],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "HK_GUARDIAN_SHIN",
+    "role": "guardian",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_005"],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "HK_GUARDIAN_CHA",
+    "role": "guardian",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_006"],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "HK_STUDENT_SUA",
+    "role": "student",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_001"],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "HK_STUDENT_DOHYUN",
+    "role": "student",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_003"],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "HK_STUDENT_YENA",
+    "role": "student",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_005"],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "HK_TEACHER_SEO",
+    "role": "teacher",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_001", "HK_STU_003"],
+    "allowed_class_ids": ["HK_M2_A", "HK_M2_B"]
+  },
+  {
+    "user_id": "HK_TEACHER_BAEK",
+    "role": "teacher",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_002", "HK_STU_005"],
+    "allowed_class_ids": ["HK_E5_LAB", "HK_E6_LAB", "HK_GIFTED"]
+  },
+  {
+    "user_id": "HK_ADMIN",
+    "role": "admin",
+    "academy_id": "AC_HANGYEOL",
+    "allowed_student_ids": ["HK_STU_001", "HK_STU_002", "HK_STU_003", "HK_STU_004", "HK_STU_005", "HK_STU_006"],
+    "allowed_class_ids": ["HK_E5_LAB", "HK_E6_LAB", "HK_GIFTED", "HK_M1_A", "HK_M1_B", "HK_M2_A", "HK_M2_B", "HK_M3_A", "HK_M3_B", "HK_SCIHS"]
+  }
+]

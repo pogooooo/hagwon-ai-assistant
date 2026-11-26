@@ -1,0 +1,180 @@
+{
+  "rubricVersion": "1.0",
+  "tags": [
+    {
+      "tagId": "math-01",
+      "subject": "M",
+      "name": "식 정리",
+      "area": "계산",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-02",
+      "subject": "M",
+      "name": "공식·절차 수행",
+      "area": "계산",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-03",
+      "subject": "M",
+      "name": "수학적 표현 해석",
+      "area": "이해",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-04",
+      "subject": "M",
+      "name": "개념·성질 파악 및 적용",
+      "area": "이해",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-05",
+      "subject": "M",
+      "name": "수학적 표현 구성·변환",
+      "area": "이해",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-06",
+      "subject": "M",
+      "name": "규칙 발견·일반화",
+      "area": "추론",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-07",
+      "subject": "M",
+      "name": "조건에서 새 관계 도출",
+      "area": "추론",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-08",
+      "subject": "M",
+      "name": "명제 판단·증명",
+      "area": "추론",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-09",
+      "subject": "M",
+      "name": "여러 개념 연결",
+      "area": "문제 해결",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-10",
+      "subject": "M",
+      "name": "중간 목표 설정",
+      "area": "문제 해결",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "math-11",
+      "subject": "M",
+      "name": "실제 상황에 수학 적용",
+      "area": "문제 해결",
+      "referenceOnly": true
+    },
+    {
+      "tagId": "eng-01",
+      "subject": "E",
+      "name": "주제·요지·제목 찾기",
+      "area": "중심 내용 파악",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-02",
+      "subject": "E",
+      "name": "명시된 정보 확인",
+      "area": "세부 정보 파악",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-03",
+      "subject": "E",
+      "name": "표현의 숨은 뜻 추론",
+      "area": "함축적 의미 추론",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-04",
+      "subject": "E",
+      "name": "목적·의견·주장 파악",
+      "area": "맥락 파악",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-05",
+      "subject": "E",
+      "name": "심경·분위기 파악",
+      "area": "맥락 파악",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-06",
+      "subject": "E",
+      "name": "문맥으로 빈칸 내용 추론",
+      "area": "맥락 파악",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-07",
+      "subject": "E",
+      "name": "상황에 맞는 응답 선택",
+      "area": "간접 말하기",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-08",
+      "subject": "E",
+      "name": "문장 삽입",
+      "area": "간접 쓰기",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-09",
+      "subject": "E",
+      "name": "글의 순서 배열",
+      "area": "간접 쓰기",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-10",
+      "subject": "E",
+      "name": "흐름에서 벗어난 문장 찾기",
+      "area": "간접 쓰기",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-11",
+      "subject": "E",
+      "name": "문단 구성에 맞춘 요약문 완성",
+      "area": "간접 쓰기",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-12",
+      "subject": "E",
+      "name": "어법 판단",
+      "area": "언어형식·어휘",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-13",
+      "subject": "E",
+      "name": "문맥 속 어휘 판단",
+      "area": "언어형식·어휘",
+      "referenceOnly": false
+    },
+    {
+      "tagId": "eng-14",
+      "subject": "E",
+      "name": "지칭 대상 찾기",
+      "area": "언어형식·어휘",
+      "referenceOnly": false
+    }
+  ]
+}

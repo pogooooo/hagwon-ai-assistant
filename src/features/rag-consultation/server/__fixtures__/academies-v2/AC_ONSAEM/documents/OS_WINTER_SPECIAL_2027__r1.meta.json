@@ -1,0 +1,9 @@
+{
+  "document_id": "OS_WINTER_SPECIAL_2027", "revision": 1, "document_type": "schedule",
+  "title": "2026 겨울방학 특강 시간표", "status": "approved_active",
+  "visibility": "academy_public", "class_id": null, "student_id": null,
+  "valid_from": "2026-11-20T00:00:00+09:00", "valid_to": "2027-02-27T00:00:00+09:00",
+  "approved_at": "2026-11-19T17:00:00+09:00",
+  "file_name": "겨울특강시간표_스캔본.pdf",
+  "render": { "format": "pdf_scan", "layout": "single", "rotate": 0, "scan_quality": "poor" }
+}

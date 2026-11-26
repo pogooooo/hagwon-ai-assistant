@@ -1,0 +1,20 @@
+{
+  "document_id": "NR_BOARD_2026_11",
+  "revision": 1,
+  "document_type": "announcement",
+  "title": "누리코딩아카데미 학부모 게시판 모음(2026년 11월 1일~14일)",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-11-14T12:00:00+09:00",
+  "valid_to": null,
+  "approved_at": "2026-11-14T12:00:00+09:00",
+  "file_name": "학부모게시판_1101-1114.txt",
+  "render": {
+    "format": "txt",
+    "layout": "single",
+    "rotate": 0,
+    "scan_quality": null
+  }
+}

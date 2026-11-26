@@ -1,0 +1,114 @@
+[
+  {
+    "user_id": "DO_VISITOR",
+    "role": "visitor",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "DO_GUARDIAN_SONG",
+    "role": "guardian",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [
+      "DO_STU_001",
+      "DO_STU_002"
+    ],
+    "allowed_class_ids": [],
+    "student_aliases": {
+      "DO_STU_002": [
+        "첫째",
+        "큰애",
+        "큰아이"
+      ],
+      "DO_STU_001": [
+        "둘째",
+        "작은애",
+        "작은아이"
+      ]
+    }
+  },
+  {
+    "user_id": "DO_GUARDIAN_RYU",
+    "role": "guardian",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [
+      "DO_STU_003"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "DO_GUARDIAN_MOON",
+    "role": "guardian",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [
+      "DO_STU_006"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "DO_STUDENT_SOYUL",
+    "role": "student",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [
+      "DO_STU_004"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "DO_STUDENT_DAIN",
+    "role": "student",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [
+      "DO_STU_005"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "DO_TEACHER_HAN",
+    "role": "teacher",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [
+      "DO_STU_001",
+      "DO_STU_004"
+    ],
+    "allowed_class_ids": [
+      "DO_H1_MATH",
+      "DO_SP_H1_DEC"
+    ]
+  },
+  {
+    "user_id": "DO_TEACHER_JUNG",
+    "role": "teacher",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [
+      "DO_STU_002",
+      "DO_STU_003"
+    ],
+    "allowed_class_ids": [
+      "DO_H2_MATH1",
+      "DO_H3_CALC"
+    ]
+  },
+  {
+    "user_id": "DO_ADMIN",
+    "role": "admin",
+    "academy_id": "AC_DAON",
+    "allowed_student_ids": [
+      "DO_STU_001",
+      "DO_STU_002",
+      "DO_STU_003",
+      "DO_STU_004",
+      "DO_STU_005",
+      "DO_STU_006"
+    ],
+    "allowed_class_ids": [
+      "DO_H1_MATH",
+      "DO_H2_MATH1",
+      "DO_H3_CALC",
+      "DO_H1_LIT",
+      "DO_H2_READ",
+      "DO_SP_H1_DEC"
+    ]
+  }
+]

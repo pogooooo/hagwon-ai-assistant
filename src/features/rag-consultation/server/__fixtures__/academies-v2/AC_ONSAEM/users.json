@@ -1,0 +1,109 @@
+[
+  {
+    "user_id": "OS_VISITOR",
+    "role": "visitor",
+    "academy_id": "AC_ONSAEM",
+    "allowed_student_ids": [],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "OS_GUARDIAN_HAN",
+    "role": "guardian",
+    "academy_id": "AC_ONSAEM",
+    "allowed_student_ids": [
+      "OS_STU_001",
+      "OS_STU_002"
+    ],
+    "allowed_class_ids": [],
+    "student_aliases": {
+      "OS_STU_001": [
+        "첫째",
+        "큰애",
+        "언니"
+      ],
+      "OS_STU_002": [
+        "둘째",
+        "작은애",
+        "막내",
+        "동생"
+      ]
+    }
+  },
+  {
+    "user_id": "OS_GUARDIAN_OH",
+    "role": "guardian",
+    "academy_id": "AC_ONSAEM",
+    "allowed_student_ids": [
+      "OS_STU_004"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "OS_GUARDIAN_KANG",
+    "role": "guardian",
+    "academy_id": "AC_ONSAEM",
+    "allowed_student_ids": [
+      "OS_STU_006"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "OS_STUDENT_MINJUN",
+    "role": "student",
+    "academy_id": "AC_ONSAEM",
+    "allowed_student_ids": [
+      "OS_STU_003"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "OS_STUDENT_CHAEI",
+    "role": "student",
+    "academy_id": "AC_ONSAEM",
+    "allowed_student_ids": [
+      "OS_STU_005"
+    ],
+    "allowed_class_ids": []
+  },
+  {
+    "user_id": "OS_TEACHER_PARK",
+    "role": "teacher",
+    "academy_id": "AC_ONSAEM",
+    "allowed_student_ids": [
+      "OS_STU_001",
+      "OS_STU_006"
+    ],
+    "allowed_class_ids": [
+      "OS_G4_C1",
+      "OS_G4_C2"
+    ]
+  },
+  {
+    "user_id": "OS_ADMIN",
+    "role": "admin",
+    "academy_id": "AC_ONSAEM",
+    "allowed_student_ids": [
+      "OS_STU_001",
+      "OS_STU_002",
+      "OS_STU_003",
+      "OS_STU_004",
+      "OS_STU_005",
+      "OS_STU_006"
+    ],
+    "allowed_class_ids": [
+      "OS_G12_COMP",
+      "OS_G3_COMP",
+      "OS_G4_C1",
+      "OS_G4_C2",
+      "OS_G4_C3",
+      "OS_G5_C1",
+      "OS_G5_C2",
+      "OS_G6_COMP",
+      "OS_ENG_R34",
+      "OS_ENG_R56",
+      "OS_MATH_T34",
+      "OS_MATH_T56",
+      "OS_CARE"
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "sha256_cert_fingerprints": [
+        "4E:BD:06:6C:B2:28:90:E0:DE:22:80:12:8C:5E:79:AA:EF:4E:9C:77:CD:B7:B7:F4:10:D1:A4:E7:04:15:37:77"
+      ],
+      "package_name": "com.axr.academy.preview",
+      "namespace": "android_app"
+    }
+  }
+]

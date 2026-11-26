@@ -1,0 +1,20 @@
+{
+  "document_id": "NR_NOTICE_1219",
+  "revision": 1,
+  "document_type": "announcement",
+  "title": "제5회 누리 코딩 발표회 및 12월 19일(토) 수업 안내",
+  "status": "approved_active",
+  "visibility": "academy_public",
+  "class_id": null,
+  "student_id": null,
+  "valid_from": "2026-11-20T09:00:00+09:00",
+  "valid_to": "2026-12-27T00:00:00+09:00",
+  "approved_at": "2026-11-20T09:00:00+09:00",
+  "file_name": "발표회_안내문_스캔.pdf",
+  "render": {
+    "format": "pdf_scan",
+    "layout": "single",
+    "rotate": 90,
+    "scan_quality": "fair"
+  }
+}

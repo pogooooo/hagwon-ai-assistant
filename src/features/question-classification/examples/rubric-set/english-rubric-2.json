@@ -1,0 +1,66 @@
+{
+  "assignmentId": "english-rubric-2",
+  "subject": "E",
+  "items": [
+    {
+      "itemId": "english-ex-11",
+      "page": 1,
+      "displayNumber": "11",
+      "text": "Mia kept checking the clock. When her missing dog ran in, her shoulders relaxed. Mia의 심경 변화로 가장 적절한 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-12",
+      "page": 1,
+      "displayNumber": "12",
+      "text": "Mia kept checking the clock. When her missing dog ran in, her shoulders relaxed. Mia가 계속 확인한 물건은 무엇인가?"
+    },
+    {
+      "itemId": "english-ex-13",
+      "page": 1,
+      "displayNumber": "13",
+      "text": "One bee finds a flower and signals its location. Soon dozens arrive. The colony benefits because ___. 빈칸에 들어갈 말로 가장 적절한 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-14",
+      "page": 1,
+      "displayNumber": "14",
+      "text": "One bee [signal / signals] its location. 괄호 안에서 알맞은 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-15",
+      "page": 1,
+      "displayNumber": "15",
+      "text": "[듣기 대본] I missed the last train. Could I use your phone? 대화의 마지막 말에 대한 응답으로 가장 적절한 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-16",
+      "page": 1,
+      "displayNumber": "16",
+      "text": "[듣기 대본] I missed the last train. Could I use your phone? 대화를 듣고 화자가 빌리고 싶어 하는 물건을 고르시오."
+    },
+    {
+      "itemId": "english-ex-17",
+      "page": 1,
+      "displayNumber": "17",
+      "text": "A jar fell off the shelf. ( ① ) We swept up the pieces. ( ② ) 글의 흐름으로 보아 주어진 문장 ‘It shattered on the floor.’가 들어가기에 가장 적절한 곳을 고르시오."
+    },
+    {
+      "itemId": "english-ex-18",
+      "page": 1,
+      "displayNumber": "18",
+      "text": "A jar fell off the shelf. ___ We swept up the pieces. 빈칸에 들어갈 문장으로 가장 적절한 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-19",
+      "page": 1,
+      "displayNumber": "19",
+      "text": "(A) We served the soup. (B) We chopped the onions. (C) We boiled them in broth. 글의 순서로 가장 적절한 것을 고르시오."
+    },
+    {
+      "itemId": "english-ex-20",
+      "page": 1,
+      "displayNumber": "20",
+      "text": "(A) We served the soup. (B) We chopped the onions. (C) We boiled them in broth. (C)의 ‘them’이 가리키는 단어를 고르시오."
+    }
+  ]
+}

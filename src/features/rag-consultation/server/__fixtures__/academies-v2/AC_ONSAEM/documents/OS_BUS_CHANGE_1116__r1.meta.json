@@ -1,0 +1,9 @@
+{
+  "document_id": "OS_BUS_CHANGE_1116", "revision": 1, "document_type": "announcement",
+  "title": "2호차 하원 노선 임시 변경 안내 (11월 16일부터)", "status": "approved_active",
+  "visibility": "academy_public", "class_id": null, "student_id": null,
+  "valid_from": "2026-11-16T00:00:00+09:00", "valid_to": "2027-01-30T00:00:00+09:00",
+  "approved_at": "2026-11-09T11:00:00+09:00",
+  "file_name": "스캔_20261109_2호차노선변경.pdf",
+  "render": { "format": "pdf_scan", "layout": "single", "rotate": 90, "scan_quality": "fair" }
+}

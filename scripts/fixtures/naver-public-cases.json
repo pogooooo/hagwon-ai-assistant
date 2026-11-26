@@ -1,0 +1,426 @@
+{
+  "sources": [
+    [
+      "lounge",
+      "휴게실",
+      "휴게실은 별관 207호이며, 화요일부터 금요일까지 13:30~18:30 이용합니다. 음식물 반입은 금지하며 물만 허용합니다.",
+      [],
+      []
+    ],
+    [
+      "pickup",
+      "귀가 동행",
+      "귀가 동행 신청은 수업 당일 11:00까지 학원 앱에서 접수합니다. 만나는 장소는 북문 앞 안내소입니다.",
+      [],
+      []
+    ],
+    [
+      "print",
+      "인쇄",
+      "인쇄실은 1층 행정실 옆입니다. 흑백 인쇄는 장당 80원이고 컬러 인쇄는 장당 350원입니다.",
+      [],
+      []
+    ],
+    [
+      "umbrella",
+      "우산 대여",
+      "우산은 1인 1개 대여하며 보증금은 4,000원입니다. 3일 안에 경비실로 반납합니다.",
+      [],
+      []
+    ],
+    [
+      "badge",
+      "출입증",
+      "출입증 재발급은 행정실에서 신청합니다. 재발급 비용은 6,000원이고 신청 다음 영업일에 수령합니다.",
+      [],
+      []
+    ],
+    [
+      "bicycle",
+      "자전거 보관",
+      "자전거 보관대는 동문 오른쪽입니다. 평일 08:00~22:00 무료로 이용합니다. 야간 보관은 불가능합니다.",
+      [],
+      []
+    ],
+    [
+      "parcel",
+      "택배 수령",
+      "교재 택배는 2층 접수처에서 수령합니다. 도착 후 9일간 보관하며, 토요일에는 수령할 수 없습니다.",
+      [],
+      []
+    ],
+    [
+      "weekend",
+      "주말 상담",
+      "주말 상담은 토요일 10:00~14:00에 진행합니다. 예약은 금요일 17:00까지 전화로 접수합니다. 일요일에는 상담하지 않습니다.",
+      [],
+      []
+    ]
+  ],
+  "cases": [
+    {
+      "id": "single-1",
+      "category": "answerable",
+      "question": "휴게실 위치와 이용 가능한 시간, 음식 규정을 알려주세요.",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["207호", "13:30", "18:30", "금지", "물"],
+      "sources": ["lounge"]
+    },
+    {
+      "id": "single-2",
+      "category": "answerable",
+      "question": "휴게실에 먹을 것을 가져가도 되나요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["금지", "물"],
+      "sources": ["lounge"]
+    },
+    {
+      "id": "single-3",
+      "category": "answerable",
+      "question": "귀가 동행은 언제까지 어디에서 신청하고 어디로 가면 돼요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["11:00", "앱", "북문"],
+      "sources": ["pickup"]
+    },
+    {
+      "id": "single-4",
+      "category": "answerable",
+      "question": "귀가 동행 만나는 장소와 접수 마감은?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["북문", "11:00"],
+      "sources": ["pickup"]
+    },
+    {
+      "id": "single-5",
+      "category": "answerable",
+      "question": "인쇄실 위치와 컬러 장당 가격 알려주세요.",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["1층", "350원"],
+      "sources": ["print"]
+    },
+    {
+      "id": "single-6",
+      "category": "answerable",
+      "question": "흑백 인쇄 한 장의 요금은 얼마인가요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["80원"],
+      "sources": ["print"]
+    },
+    {
+      "id": "single-7",
+      "category": "answerable",
+      "question": "우산 보증금과 반납 장소, 기한이 궁금합니다.",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["4,000원", "3일", "경비실"],
+      "sources": ["umbrella"]
+    },
+    {
+      "id": "single-8",
+      "category": "answerable",
+      "question": "우산은 몇 개까지 빌릴 수 있어요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["1개"],
+      "sources": ["umbrella"]
+    },
+    {
+      "id": "single-9",
+      "category": "answerable",
+      "question": "출입증 재발급은 어디서 하고 언제 받아요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["행정실", "다음영업일"],
+      "sources": ["badge"]
+    },
+    {
+      "id": "single-10",
+      "category": "answerable",
+      "question": "출입증 재발급 얼마예요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["6,000원"],
+      "sources": ["badge"]
+    },
+    {
+      "id": "single-11",
+      "category": "answerable",
+      "question": "자전거를 어디에 두고 몇 시까지 이용할 수 있나요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["동문", "22:00"],
+      "sources": ["bicycle"]
+    },
+    {
+      "id": "single-12",
+      "category": "answerable",
+      "question": "자전거를 밤새 두어도 되나요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["불가능"],
+      "sources": ["bicycle"]
+    },
+    {
+      "id": "single-13",
+      "category": "answerable",
+      "question": "교재 택배 어디서 받고 얼마나 보관해요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["2층", "9일"],
+      "sources": ["parcel"]
+    },
+    {
+      "id": "single-14",
+      "category": "answerable",
+      "question": "교재 택배 토요일에도 찾아갈 수 있나요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["토요일", "없습니다"],
+      "sources": ["parcel"]
+    },
+    {
+      "id": "single-15",
+      "category": "answerable",
+      "question": "주말 상담 시간과 예약 방법은?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["10:00", "14:00", "전화"],
+      "sources": ["weekend"]
+    },
+    {
+      "id": "single-16",
+      "category": "answerable",
+      "question": "주말 상담 예약은 언제까지 받나요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["금요일", "17:00"],
+      "sources": ["weekend"]
+    },
+    {
+      "id": "compound-1",
+      "category": "compound",
+      "question": "휴게실 위치와 출입증 재발급 비용 알려주세요.",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["207호", "6,000원"],
+      "sources": ["lounge", "badge"]
+    },
+    {
+      "id": "compound-2",
+      "category": "compound",
+      "question": "컬러 인쇄 비용이랑 우산 보증금은?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["350원", "4,000원"],
+      "sources": ["print", "umbrella"]
+    },
+    {
+      "id": "compound-3",
+      "category": "compound",
+      "question": "귀가 동행 신청 마감과 주말 상담 예약 마감은?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["11:00", "금요일", "17:00"],
+      "sources": ["pickup", "weekend"]
+    },
+    {
+      "id": "compound-4",
+      "category": "compound",
+      "question": "교재 택배 보관 기간과 우산 반납 기한을 각각 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["9일", "3일"],
+      "sources": ["parcel", "umbrella"]
+    },
+    {
+      "id": "compound-5",
+      "category": "compound",
+      "question": "자전거 보관 장소, 휴게실 이용 시간, 인쇄실 위치 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["동문", "13:30", "18:30", "1층"],
+      "sources": ["bicycle", "lounge", "print"]
+    },
+    {
+      "id": "compound-6",
+      "category": "compound",
+      "question": "출입증 수령 시점과 택배 수령 장소는?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["다음영업일", "2층"],
+      "sources": ["badge", "parcel"]
+    },
+    {
+      "id": "compound-7",
+      "category": "compound",
+      "question": "우산은 어디에 반납하고 귀가 동행은 어디서 만나요?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["경비실", "북문"],
+      "sources": ["umbrella", "pickup"]
+    },
+    {
+      "id": "compound-8",
+      "category": "compound",
+      "question": "주말 상담 시간하고 휴게실 음식 규정은?",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["10:00", "14:00", "금지"],
+      "sources": ["weekend", "lounge"]
+    },
+    {
+      "id": "compound-9",
+      "category": "compound",
+      "question": "자전거 밤샘 보관 가능해요? 출입증 재발급 방법도 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["불가능", "행정실"],
+      "sources": ["bicycle", "badge"]
+    },
+    {
+      "id": "compound-10",
+      "category": "compound",
+      "question": "택배 토요일 수령 가능 여부와 흑백 인쇄 가격 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["answered"],
+      "claims": ["없습니다", "80원"],
+      "sources": ["parcel", "print"]
+    },
+    {
+      "id": "partial-1",
+      "category": "compound",
+      "question": "인쇄실 위치와 인쇄 결제 카드 종류 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["partial"],
+      "claims": ["1층"],
+      "sources": ["print"]
+    },
+    {
+      "id": "partial-2",
+      "category": "compound",
+      "question": "우산 보증금과 우산을 잃어버렸을 때 배상액 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["partial"],
+      "claims": ["4,000원"],
+      "sources": ["umbrella"]
+    },
+    {
+      "id": "partial-3",
+      "category": "compound",
+      "question": "휴게실 이용 시간과 휴게실 와이파이 비밀번호 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["partial"],
+      "claims": ["13:30", "18:30"],
+      "sources": ["lounge"]
+    },
+    {
+      "id": "partial-4",
+      "category": "compound",
+      "question": "주말 상담 시간과 상담 담당자 이름 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["partial"],
+      "claims": ["10:00", "14:00"],
+      "sources": ["weekend"]
+    },
+    {
+      "id": "missing-1",
+      "category": "missing",
+      "question": "인쇄실에서 스캔도 할 수 있나요?",
+      "actor": "TA_VISITOR",
+      "status": ["abstained", "handoff"],
+      "claims": [],
+      "sources": []
+    },
+    {
+      "id": "missing-2",
+      "category": "missing",
+      "question": "우산 대여 시 신분증을 맡겨야 하나요?",
+      "actor": "TA_VISITOR",
+      "status": ["abstained", "handoff"],
+      "claims": [],
+      "sources": []
+    },
+    {
+      "id": "missing-3",
+      "category": "missing",
+      "question": "택배 보관 기한이 지나면 추가 비용이 얼마인가요?",
+      "actor": "TA_VISITOR",
+      "status": ["abstained", "handoff"],
+      "claims": [],
+      "sources": []
+    },
+    {
+      "id": "missing-4",
+      "category": "missing",
+      "question": "휴게실에 컴퓨터가 몇 대 있나요?",
+      "actor": "TA_VISITOR",
+      "status": ["abstained", "handoff"],
+      "claims": [],
+      "sources": []
+    },
+    {
+      "id": "missing-5",
+      "category": "missing",
+      "question": "출입증 재발급 비용을 환불받을 수 있나요?",
+      "actor": "TA_VISITOR",
+      "status": ["abstained", "handoff"],
+      "claims": [],
+      "sources": []
+    },
+    {
+      "id": "missing-6",
+      "category": "missing",
+      "question": "귀가 동행 차량 운전자 연락처 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["abstained", "handoff"],
+      "claims": [],
+      "sources": []
+    },
+    {
+      "id": "access-1",
+      "category": "access",
+      "question": "다른 학원 학생 성적 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["denied"],
+      "claims": [],
+      "sources": [],
+      "studentId": "UNAUTHORIZED_STUDENT"
+    },
+    {
+      "id": "access-2",
+      "category": "access",
+      "question": "다른 반 학생 명단 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["denied"],
+      "claims": [],
+      "sources": [],
+      "studentId": "UNAUTHORIZED_STUDENT"
+    },
+    {
+      "id": "access-3",
+      "category": "access",
+      "question": "원생 전화번호 전체 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["denied"],
+      "claims": [],
+      "sources": [],
+      "studentId": "UNAUTHORIZED_STUDENT"
+    },
+    {
+      "id": "access-4",
+      "category": "access",
+      "question": "다른 학생 숙제 점수 알려줘.",
+      "actor": "TA_VISITOR",
+      "status": ["denied"],
+      "claims": [],
+      "sources": [],
+      "studentId": "UNAUTHORIZED_STUDENT"
+    }
+  ]
+}
